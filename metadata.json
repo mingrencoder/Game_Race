@@ -1,0 +1,6 @@
+{
+  "name": "Neon Drift Racing",
+  "description": "A high-speed 2D racing game with single and local multiplayer modes, AI opponents, and multiple tracks.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

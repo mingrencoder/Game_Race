@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Helvetica Neue", Arial, sans-serif;
+  
+  --color-bg: #050508;
+  --color-panel: rgba(20, 20, 35, 0.85);
+  --color-accent-cyan: #00f2ff;
+  --color-accent-magenta: #ff00ea;
+  --color-accent-yellow: #f4ff40;
+  --color-neon-text: #e0e0f0;
+  --color-neon-border: rgba(0, 242, 255, 0.3);
+
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-neon-text);
+  --color-border: var(--color-neon-border);
+}
+
+@layer base {
+  body {
+    background-color: #050508;
+    color: #e0e0f0;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    background-image: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #050508 100%);
+    min-height: 100vh;
+    margin: 0;
+  }
+  
+  * {
+    border-color: rgba(0, 242, 255, 0.1);
+  }
+}
+
+@layer components {
+  .neon-panel {
+    background-color: rgba(20, 20, 35, 0.85);
+    border: 1px solid rgba(0, 242, 255, 0.3);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  
+  .neon-text-cyan {
+    color: #00f2ff;
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+  }
+  
+  .neon-text-magenta {
+    color: #ff00ea;
+    text-shadow: 0 0 10px rgba(255, 0, 234, 0.5);
+  }
+}
+
+:root {
+    --radius: 0.625rem;
+}

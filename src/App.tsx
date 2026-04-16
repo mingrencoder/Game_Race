@@ -1,0 +1,405 @@
+import React, { useState } from 'react';
+import { GameSettings, CarState, AIDifficulty, GameMode } from './types';
+import { TRACKS } from './constants';
+import GameCanvas from './components/GameCanvas';
+import { Trophy } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+export default function App() {
+  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP'>('MENU');
+  const [settings, setSettings] = useState<GameSettings>({
+    mode: 'SINGLE',
+    aiCount: 1,
+    aiDifficulty: AIDifficulty.MEDIUM,
+    trackId: 'oval',
+  });
+  const [results, setResults] = useState<CarState[]>([]);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  
+  // Shop State
+  const [coins, setCoins] = useState(() => parseInt(localStorage.getItem('neon_coins') || '0'));
+  const [upgrades, setUpgrades] = useState(() => JSON.parse(localStorage.getItem('neon_upgrades') || '{"speed": 0, "grip": 0, "color": "#00f2ff"}'));
+
+  React.useEffect(() => {
+    localStorage.setItem('neon_coins', coins.toString());
+  }, [coins]);
+
+  React.useEffect(() => {
+    localStorage.setItem('neon_upgrades', JSON.stringify(upgrades));
+  }, [upgrades]);
+
+  const handleStartGame = () => {
+    setGameState('PLAYING');
+  };
+
+  const handleFinish = (finalResults: CarState[]) => {
+    setResults(finalResults);
+    
+    // Calculate points/coins (1st: 100, 2nd: 60, 3rd: 40, 4th: 20)
+    const points = [100, 60, 40, 20];
+    const newScores = { ...scores };
+    finalResults.forEach((car, index) => {
+      newScores[car.id] = (newScores[car.id] || 0) + (points[index] || 0);
+      if (car.id === 'p1') {
+        setCoins(c => c + (points[index] || 10));
+      }
+    });
+    setScores(newScores);
+
+    setGameState('RESULT');
+  };
+
+  const handleExit = () => {
+    setGameState('MENU');
+  };
+
+  return (
+    <div className="min-h-screen bg-bg text-neon-text font-sans selection:bg-accent-cyan/30">
+      <AnimatePresence mode="wait">
+        {gameState === 'MENU' && (
+          <motion.div
+            key="menu"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col h-screen overflow-hidden"
+          >
+            {/* Header */}
+            <header className="px-[60px] pt-[20px] pb-[10px] flex justify-between items-end border-bottom border-neon-border">
+              <div>
+                <h1 className="m-0 text-[48px] uppercase tracking-[4px] neon-text-cyan font-black italic">
+                  NEON VELOCITY
+                </h1>
+                <span className="text-accent-magenta uppercase tracking-[2px] text-xs font-bold">赛车竞技系统</span>
+              </div>
+              <div className="font-mono opacity-60 text-[14px]">SYS_VER: 2.0.4 // 1024x768_STABLE</div>
+            </header>
+
+            {/* Main Layout */}
+            <main className="grid grid-cols-[320px_1fr] gap-[30px] px-[60px] py-[20px] flex-1 overflow-hidden">
+              {/* Sidebar */}
+              <div className="flex flex-col gap-[25px]">
+                <div className="neon-panel p-[20px]">
+                  <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">模式选择</span>
+                  <div className="flex gap-[10px]">
+                    <button 
+                      onClick={() => setSettings(s => ({ ...s, mode: 'SINGLE' }))}
+                      className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
+                        settings.mode === 'SINGLE' 
+                        ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
+                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      单人模式
+                    </button>
+                    <button 
+                      onClick={() => setSettings(s => ({ ...s, mode: 'DOUBLE' }))}
+                      className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
+                        settings.mode === 'DOUBLE' 
+                        ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
+                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      双人竞技
+                    </button>
+                  </div>
+                </div>
+
+                <div className="neon-panel p-[20px]">
+                  <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">AI 对手设置</span>
+                  
+                  <div className="flex justify-between mb-[5px] text-[13px]">
+                    <span>AI 数量</span>
+                    <span className="text-accent-cyan">{settings.aiCount}位</span>
+                  </div>
+                  <div className="flex gap-[10px] mb-[20px]">
+                    {[0, 1, 2].map(count => (
+                      <button 
+                        key={count}
+                        onClick={() => setSettings(s => ({ ...s, aiCount: count }))}
+                        className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
+                          settings.aiCount === count 
+                          ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
+                          : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between mb-[5px] text-[13px]">
+                    <span>AI 难度</span>
+                    <span className="text-accent-magenta">
+                      {settings.aiDifficulty === 1 && '入门级'}
+                      {settings.aiDifficulty === 2 && '进阶级'}
+                      {settings.aiDifficulty === 3 && '专家级'}
+                      {settings.aiDifficulty === 4 && '专业级'} (LV {settings.aiDifficulty})
+                    </span>
+                  </div>
+                  <div className="flex gap-[5px] mt-[10px]">
+                    {[1, 2, 3, 4].map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setSettings(s => ({ ...s, aiDifficulty: level }))}
+                        className={`h-[6px] flex-1 rounded-[2px] transition-all ${
+                          settings.aiDifficulty >= level 
+                          ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
+                          : 'bg-white/10 hover:bg-white/20'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="neon-panel p-[20px]">
+                  <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">操作提示</span>
+                  <div className="text-[13px] leading-[1.8] text-zinc-400">
+                    <strong className="text-accent-cyan">玩家 1:</strong><br />
+                    ↑ : 加速 | ↓ : 刹车<br />
+                    ← / → : 转向<br />
+                    Shift : 漂移
+                    {settings.mode === 'DOUBLE' && (
+                      <div className="mt-2 pt-2 border-t border-white/5">
+                        <strong className="text-accent-magenta">玩家 2:</strong><br />
+                        W : 加速 | S : 刹车<br />
+                        A / D : 转向<br />
+                        Space : 漂移
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="flex flex-col overflow-hidden">
+                <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold shrink-0">选择赛道 (EST. 1-2 MINS)</span>
+                <div className="grid grid-cols-2 gap-[20px] overflow-y-auto pr-2 pb-4 max-h-[400px]">
+                  {TRACKS.map((track) => (
+                    <button
+                      key={track.id}
+                      onClick={() => setSettings(s => ({ ...s, trackId: track.id }))}
+                      className={`neon-panel relative overflow-hidden h-[140px] transition-all group ${
+                        settings.trackId === track.id 
+                          ? 'border-2 border-accent-yellow shadow-[0_0_20px_rgba(244,255,64,0.4)]' 
+                          : 'hover:border-white/30'
+                      }`}
+                    >
+                      <div className="w-full h-[70%] bg-black/40 flex items-center justify-center">
+                        {/* Simple SVG Track Preview */}
+                        <svg width="120" height="60" viewBox="0 0 1600 1200" className="opacity-50 group-hover:opacity-80 transition-opacity">
+                          <path 
+                            d={track.waypoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'} 
+                            fill="none" 
+                            stroke={settings.trackId === track.id ? '#f4ff40' : '#00f2ff'} 
+                            strokeWidth="80" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                      <div className="p-[8px_15px] bg-black/60 text-[14px] flex justify-between items-center absolute bottom-0 w-full">
+                        <span className="font-bold">{track.name}</span>
+                        <span className="opacity-60 text-xs">{track.laps} LAPS</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </main>
+
+            {/* Footer */}
+            <footer className="h-[80px] bg-gradient-to-t from-accent-cyan/10 to-transparent flex items-center justify-between px-[60px] relative shrink-0">
+              <div className="text-[12px] text-zinc-500 max-w-[400px] leading-[1.5] border-l-2 border-accent-magenta pl-[15px]">
+                <strong>驾驶警告：</strong>由于赛道抓地力限制，转弯速度过快将导致赛车撞击赛道边缘。物理碰撞会产生剧烈摩擦并大幅降低车速。
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setGameState('SHOP')}
+                  className="bg-accent-magenta/20 text-accent-magenta border border-accent-magenta px-[30px] py-[12px] text-[16px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-magenta/40"
+                >
+                  商店 ({coins} ⟁)
+                </button>
+                <button 
+                  onClick={handleStartGame}
+                  className="bg-accent-yellow text-black px-[50px] py-[12px] text-[20px] font-black uppercase rounded-[4px] cursor-pointer shadow-[0_0_30px_rgba(244,255,64,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                >
+                  进入比赛
+                </button>
+              </div>
+            </footer>
+          </motion.div>
+        )}
+
+        {gameState === 'SHOP' && (
+          <motion.div
+            key="shop"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex flex-col h-screen p-[60px] max-w-4xl mx-auto"
+          >
+            <header className="flex justify-between items-end mb-8 border-b border-neon-border pb-4">
+              <h1 className="text-4xl font-black italic text-accent-magenta tracking-widest">NEON GARAGE</h1>
+              <div className="text-2xl font-bold text-accent-yellow">{coins} ⟁</div>
+            </header>
+
+            <div className="grid grid-cols-2 gap-8 flex-1">
+              <div className="neon-panel p-6 flex flex-col gap-6">
+                <h2 className="text-xl font-bold text-accent-cyan border-b border-white/10 pb-2">性能升级</h2>
+                
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">引擎调校 (LV {upgrades.speed}/5)</div>
+                    <div className="text-sm text-zinc-400">提升最高速度</div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const cost = (upgrades.speed + 1) * 100;
+                      if (coins >= cost && upgrades.speed < 5) {
+                        setCoins(c => c - cost);
+                        setUpgrades(u => ({ ...u, speed: u.speed + 1 }));
+                      }
+                    }}
+                    disabled={upgrades.speed >= 5 || coins < (upgrades.speed + 1) * 100}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold"
+                  >
+                    {upgrades.speed >= 5 ? 'MAX' : `${(upgrades.speed + 1) * 100} ⟁`}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="font-bold">轮胎抓地力 (LV {upgrades.grip}/5)</div>
+                    <div className="text-sm text-zinc-400">提升转向控制</div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const cost = (upgrades.grip + 1) * 100;
+                      if (coins >= cost && upgrades.grip < 5) {
+                        setCoins(c => c - cost);
+                        setUpgrades(u => ({ ...u, grip: u.grip + 1 }));
+                      }
+                    }}
+                    disabled={upgrades.grip >= 5 || coins < (upgrades.grip + 1) * 100}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold"
+                  >
+                    {upgrades.grip >= 5 ? 'MAX' : `${(upgrades.grip + 1) * 100} ⟁`}
+                  </button>
+                </div>
+              </div>
+
+              <div className="neon-panel p-6 flex flex-col gap-6">
+                <h2 className="text-xl font-bold text-accent-magenta border-b border-white/10 pb-2">赛车涂装</h2>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  {[
+                    { name: '经典青', color: '#00f2ff' },
+                    { name: '霓虹粉', color: '#ff00ea' },
+                    { name: '赛博黄', color: '#f4ff40' },
+                    { name: '矩阵绿', color: '#00ff00' },
+                  ].map(paint => (
+                    <button
+                      key={paint.color}
+                      onClick={() => setUpgrades(u => ({ ...u, color: paint.color }))}
+                      className={`p-4 rounded border transition-all flex flex-col items-center gap-2 ${
+                        upgrades.color === paint.color 
+                        ? 'border-white bg-white/10' 
+                        : 'border-white/10 hover:border-white/30'
+                      }`}
+                    >
+                      <div className="w-12 h-6 rounded" style={{ backgroundColor: paint.color }} />
+                      <span className="text-sm">{paint.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <footer className="mt-8 flex justify-end">
+              <button 
+                onClick={() => setGameState('MENU')}
+                className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all"
+              >
+                返回菜单
+              </button>
+            </footer>
+          </motion.div>
+        )}
+
+        {gameState === 'PLAYING' && (
+          <motion.div
+            key="playing"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full h-screen"
+          >
+            <GameCanvas 
+              settings={settings} 
+              upgrades={upgrades}
+              onFinish={handleFinish} 
+              onExit={handleExit} 
+            />
+          </motion.div>
+        )}
+
+        {gameState === 'RESULT' && (
+          <motion.div
+            key="result"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen"
+          >
+            <div className="neon-panel w-full max-w-2xl p-8 text-center">
+              <Trophy className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-bounce drop-shadow-[0_0_15px_rgba(244,255,64,0.5)]" />
+              <h2 className="text-5xl font-black italic neon-text-cyan mb-2">RACE RESULTS</h2>
+              <p className="text-zinc-500 mb-8 uppercase tracking-widest">Final standings for {TRACKS.find(t => t.id === settings.trackId)?.name}</p>
+              
+              <div className="space-y-4 mb-8">
+                {results.map((car, index) => (
+                  <div 
+                    key={car.id} 
+                    className={`flex items-center justify-between p-4 rounded-lg border ${
+                      index === 0 ? 'bg-accent-yellow/10 border-accent-yellow/50' : 'bg-black/40 border-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className={`text-2xl font-black italic w-8 ${index === 0 ? 'text-accent-yellow' : 'text-zinc-600'}`}>#{index + 1}</div>
+                      <div className="w-4 h-4 rounded-full shadow-[0_0_10px_currentColor]" style={{ backgroundColor: car.color, color: car.color }} />
+                      <div className="font-bold text-lg uppercase tracking-wider">{car.id.toUpperCase()}</div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="font-mono text-xl text-accent-cyan">
+                        {(car.finishTime! / 1000).toFixed(2)}s
+                      </div>
+                      <div className="font-mono text-sm text-accent-magenta bg-accent-magenta/10 px-3 py-1 rounded-full border border-accent-magenta/30">
+                        {scores[car.id]} PTS
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={handleExit}
+                  className="flex-1 h-12 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-all"
+                >
+                  BACK TO MENU
+                </button>
+                <button 
+                  onClick={handleStartGame}
+                  className="flex-1 h-12 bg-accent-cyan text-black font-black uppercase rounded-lg shadow-[0_0_20px_rgba(0,242,255,0.4)] hover:scale-[1.02] transition-all"
+                >
+                  REMATCH
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
