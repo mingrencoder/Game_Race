@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GameSettings, CarState, Point, Track, AIDifficulty } from '../types';
-import { TRACKS, PHYSICS, AI_CONFIG, COLORS } from '../constants';
+import { GameSettings, CarState, Point, Track, AIDifficulty, GarageData } from '../types';
+import { TRACKS, PHYSICS, AI_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface GameCanvasProps {
   settings: GameSettings;
-  upgrades: { speed: number; grip: number; color: string };
+  garage: GarageData;
   onFinish: (results: CarState[]) => void;
   onExit: () => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, onExit }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onExit }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cars, setCars] = useState<CarState[]>([]);
   const [isPaused, setIsPaused] = useState(false);
@@ -41,6 +41,35 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
       };
     };
 
+    let usedColors: string[] = [];
+    const getUniqueColor = (preferred?: string) => {
+      if (preferred && !usedColors.includes(preferred) && BASIC_COLORS.includes(preferred)) {
+        usedColors.push(preferred);
+        return preferred;
+      }
+      const avail = BASIC_COLORS.filter(c => !usedColors.includes(c));
+      const color = avail.length > 0 ? avail[0] : '#ffffff';
+      usedColors.push(color);
+      return color;
+    };
+
+    // Calculate P1 Stats based on garage (Only applies in SINGLE mode)
+    const isSingle = settings.mode === 'SINGLE';
+    const p1Vehicle = isSingle ? (VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0]) : VEHICLES_DB[0];
+    let p1MaxSpeed = isSingle ? p1Vehicle.baseSpeed : VEHICLES_DB[0].baseSpeed;
+    let p1Grip = isSingle ? p1Vehicle.baseGrip : VEHICLES_DB[0].baseGrip;
+    
+    if (isSingle && garage.equippedItems.engine) {
+      p1MaxSpeed += ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.boostValue || 0;
+    }
+    if (isSingle && garage.equippedItems.tires) {
+      p1Grip += ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.boostValue || 0;
+    }
+
+    const p1LiveryData = isSingle ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined;
+    const preferredColor = isSingle ? (p1LiveryData ? undefined : garage.equippedLivery) : BASIC_COLORS[0];
+    const p1Color = p1LiveryData ? '#ffffff' : getUniqueColor(preferredColor);
+
     // Player 1
     const p1Pos = getStartPos(0);
     initialCars.push({
@@ -52,10 +81,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
       angle: startAngle,
       moveAngle: startAngle,
       speed: 0,
-      color: upgrades.color || COLORS.PLAYER1,
+      color: p1Color,
       lap: 0,
       currentWaypointIndex: 0,
       finished: false,
+      maxSpeed: p1MaxSpeed,
+      grip: p1Grip,
+      driftGrip: p1Grip * 0.2,
+      vehicleType: isSingle ? p1Vehicle.type : 'standard',
+      liveryData: p1LiveryData ? { isGradient: p1LiveryData.isGradient, colors: p1LiveryData.colors } : undefined
     });
 
     // Player 2
@@ -70,10 +104,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
         angle: startAngle,
         moveAngle: startAngle,
         speed: 0,
-        color: COLORS.PLAYER2,
+        color: getUniqueColor(BASIC_COLORS[1]),
         lap: 0,
         currentWaypointIndex: 0,
         finished: false,
+        maxSpeed: VEHICLES_DB[0].baseSpeed,
+        grip: VEHICLES_DB[0].baseGrip,
+        driftGrip: VEHICLES_DB[0].baseGrip * 0.2,
+        vehicleType: 'standard'
       });
     }
 
@@ -88,10 +126,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
         angle: startAngle,
         moveAngle: startAngle,
         speed: 0,
-        color: i === 0 ? COLORS.AI1 : COLORS.AI2,
+        color: getUniqueColor(),
         lap: 0,
         currentWaypointIndex: 0,
         finished: false,
+        maxSpeed: AI_CONFIG[settings.aiDifficulty].maxSpeed,
+        grip: 0.15,
+        driftGrip: 0.05,
+        vehicleType: 'standard'
       });
     }
 
@@ -203,14 +245,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
           drift = Math.abs(angleDiff) > 0.6 && speed > PHYSICS.MAX_SPEED * 0.6;
         }
 
-        // Apply Upgrades for Player 1
-        let currentMaxSpeed = PHYSICS.MAX_SPEED;
-        let currentGrip = drift ? PHYSICS.DRIFT_GRIP : PHYSICS.GRIP;
-        
-        if (car.id === 'p1') {
-          currentMaxSpeed += upgrades.speed * 0.5; // +0.5 max speed per level
-          currentGrip += upgrades.grip * 0.02; // +0.02 grip per level
-        }
+        // Apply state stats
+        let currentMaxSpeed = car.maxSpeed;
+        let currentGrip = drift ? car.driftGrip : car.grip;
 
         // Apply Physics
         if (accelerate) speed += PHYSICS.ACCELERATION;
@@ -400,28 +437,76 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
       ctx.save();
       ctx.translate(car.x, car.y);
       ctx.rotate(car.angle);
-      
-      // Car Body
-      ctx.fillStyle = car.color;
-      ctx.fillRect(-30, -16, 60, 32);
-      
-      // Windshield
-      ctx.fillStyle = 'rgba(255,255,255,0.5)';
-      ctx.fillRect(10, -12, 10, 24);
-      
-      // Wheels
-      ctx.fillStyle = '#000';
-      ctx.fillRect(-24, -20, 12, 8);
-      ctx.fillRect(-24, 12, 12, 8);
-      ctx.fillRect(12, -20, 12, 8);
-      ctx.fillRect(12, 12, 12, 8);
+
+      let fillStyle: string | CanvasGradient = car.color;
+      if (car.liveryData && car.liveryData.isGradient) {
+        const grad = ctx.createLinearGradient(-30, -16, 30, 16);
+        const colors = car.liveryData.colors;
+        colors.forEach((c, idx) => {
+          grad.addColorStop(idx / (colors.length - 1 || 1), c);
+        });
+        fillStyle = grad;
+      }
+
+      ctx.shadowColor = car.liveryData ? car.liveryData.colors[0] : car.color;
+      ctx.shadowBlur = 15;
+
+      const drawWheels = () => {
+        ctx.fillStyle = '#111';
+        ctx.shadowBlur = 0;
+        ctx.fillRect(-24, -20, 12, 8);
+        ctx.fillRect(12, -20, 12, 8);
+        ctx.fillRect(-24, 12, 12, 8);
+        ctx.fillRect(12, 12, 12, 8);
+      };
+
+      if (car.vehicleType === 'f1') {
+        drawWheels();
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-40, -10);
+        ctx.lineTo(-10, -10);
+        ctx.lineTo(40, -4);
+        ctx.lineTo(40, 4);
+        ctx.lineTo(-10, 10);
+        ctx.lineTo(-40, 10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, -8, 12, 16);
+      } else if (car.vehicleType === 'muscle') {
+        drawWheels();
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(-35, -14, 70, 28);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(5, -10, 20, 20);
+      } else if (car.vehicleType === 'tank') {
+        drawWheels();
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(-40, -20, 80, 40);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-15, -10, 30, 20);
+        ctx.fillRect(15, -4, 30, 8);
+      } else {
+        // Standard
+        drawWheels();
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(-30, -16, 60, 32);
+        
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(10, -12, 10, 24);
+        
+        ctx.fillStyle = fillStyle;
+        ctx.fillRect(-26, -12, 6, 24);
+      }
 
       // Label
       ctx.restore();
       ctx.fillStyle = '#fff';
       ctx.font = '20px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(car.id.toUpperCase(), car.x, car.y - 30);
+      ctx.fillText(car.id.toUpperCase(), car.x, car.y - 40);
     });
   };
 

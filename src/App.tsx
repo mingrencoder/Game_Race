@@ -1,12 +1,28 @@
 import React, { useState } from 'react';
-import { GameSettings, CarState, AIDifficulty, GameMode } from './types';
+import { GameSettings, CarState, AIDifficulty, GameMode, GarageData } from './types';
 import { TRACKS } from './constants';
 import GameCanvas from './components/GameCanvas';
+import ShopUI from './components/ShopUI';
+import GarageUI from './components/GarageUI';
 import { Trophy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+const initialGarageData: GarageData = (() => {
+  const saved = localStorage.getItem('neon_garage_v2');
+  if (saved) return JSON.parse(saved);
+  return {
+    coins: 0,
+    ownedVehicles: ['car_basic'],
+    ownedItems: [],
+    ownedLiveries: [],
+    equippedVehicle: 'car_basic',
+    equippedItems: { engine: null, tires: null },
+    equippedLivery: '#00f2ff'
+  };
+})();
+
 export default function App() {
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP'>('MENU');
+  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE'>('MENU');
   const [settings, setSettings] = useState<GameSettings>({
     mode: 'SINGLE',
     aiCount: 1,
@@ -16,17 +32,11 @@ export default function App() {
   const [results, setResults] = useState<CarState[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   
-  // Shop State
-  const [coins, setCoins] = useState(() => parseInt(localStorage.getItem('neon_coins') || '0'));
-  const [upgrades, setUpgrades] = useState(() => JSON.parse(localStorage.getItem('neon_upgrades') || '{"speed": 0, "grip": 0, "color": "#00f2ff"}'));
+  const [garage, setGarage] = useState<GarageData>(initialGarageData);
 
   React.useEffect(() => {
-    localStorage.setItem('neon_coins', coins.toString());
-  }, [coins]);
-
-  React.useEffect(() => {
-    localStorage.setItem('neon_upgrades', JSON.stringify(upgrades));
-  }, [upgrades]);
+    localStorage.setItem('neon_garage_v2', JSON.stringify(garage));
+  }, [garage]);
 
   const handleStartGame = () => {
     setGameState('PLAYING');
@@ -35,13 +45,15 @@ export default function App() {
   const handleFinish = (finalResults: CarState[]) => {
     setResults(finalResults);
     
-    // Calculate points/coins (1st: 100, 2nd: 60, 3rd: 40, 4th: 20)
-    const points = [100, 60, 40, 20];
+    // Calculate points/coins (1st: 25, 2nd: 15, 3rd: 10, 4th: 5)
+    // Less money per race to increase grind for new economy
+    const points = [25, 15, 10, 5];
     const newScores = { ...scores };
     finalResults.forEach((car, index) => {
       newScores[car.id] = (newScores[car.id] || 0) + (points[index] || 0);
       if (car.id === 'p1') {
-        setCoins(c => c + (points[index] || 10));
+        const earned = points[index] || 5;
+        setGarage(g => ({ ...g, coins: g.coins + earned }));
       }
     });
     setScores(newScores);
@@ -213,16 +225,24 @@ export default function App() {
               <div className="text-[12px] text-zinc-500 max-w-full md:max-w-[400px] leading-[1.5] border-l-2 border-accent-magenta pl-[15px]">
                 <strong>驾驶警告：</strong>由于赛道抓地力限制，转弯速度过快将导致赛车撞击赛道边缘。物理碰撞会产生剧烈摩擦并大幅降低车速。
               </div>
-              <div className="flex w-full md:w-auto gap-4">
+              <div className="flex w-full md:w-auto gap-4 flex-wrap md:flex-nowrap">
+                {settings.mode === 'SINGLE' && (
+                  <button 
+                    onClick={() => setGameState('GARAGE')}
+                    className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
+                  >
+                    我的车库
+                  </button>
+                )}
                 <button 
                   onClick={() => setGameState('SHOP')}
-                  className="flex-1 md:flex-none bg-accent-magenta/20 text-accent-magenta border border-accent-magenta px-4 md:px-[30px] py-[12px] text-[14px] md:text-[16px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-magenta/40"
+                  className="flex-1 md:flex-none bg-accent-magenta/20 text-accent-magenta border border-accent-magenta px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-magenta/40"
                 >
-                  商店 ({coins} ⟁)
+                  商店 ({garage.coins} ⟁)
                 </button>
                 <button 
                   onClick={handleStartGame}
-                  className="flex-1 md:flex-none bg-accent-yellow text-black px-4 md:px-[50px] py-[12px] text-[16px] md:text-[20px] font-black uppercase rounded-[4px] cursor-pointer shadow-[0_0_30px_rgba(244,255,64,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                  className="w-full md:w-auto bg-accent-yellow text-black px-4 md:px-[40px] py-[12px] text-[16px] md:text-[20px] font-black uppercase rounded-[4px] cursor-pointer shadow-[0_0_30px_rgba(244,255,64,0.5)] transition-all transform hover:scale-105 active:scale-95"
                 >
                   进入比赛
                 </button>
@@ -231,101 +251,8 @@ export default function App() {
           </motion.div>
         )}
 
-        {gameState === 'SHOP' && (
-          <motion.div
-            key="shop"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="flex flex-col min-h-[100dvh] p-4 md:p-[60px] max-w-4xl mx-auto overflow-y-auto"
-          >
-            <header className="flex justify-between items-end mb-8 border-b border-neon-border pb-4 mt-8 md:mt-0">
-              <h1 className="text-3xl md:text-4xl font-black italic text-accent-magenta tracking-widest">NEON GARAGE</h1>
-              <div className="text-xl md:text-2xl font-bold text-accent-yellow">{coins} ⟁</div>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1">
-              <div className="neon-panel p-6 flex flex-col gap-6">
-                <h2 className="text-xl font-bold text-accent-cyan border-b border-white/10 pb-2">性能升级</h2>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-bold">引擎调校 (LV {upgrades.speed}/5)</div>
-                    <div className="text-sm text-zinc-400">提升最高速度</div>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      const cost = (upgrades.speed + 1) * 100;
-                      if (coins >= cost && upgrades.speed < 5) {
-                        setCoins(c => c - cost);
-                        setUpgrades(u => ({ ...u, speed: u.speed + 1 }));
-                      }
-                    }}
-                    disabled={upgrades.speed >= 5 || coins < (upgrades.speed + 1) * 100}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold"
-                  >
-                    {upgrades.speed >= 5 ? 'MAX' : `${(upgrades.speed + 1) * 100} ⟁`}
-                  </button>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-bold">轮胎抓地力 (LV {upgrades.grip}/5)</div>
-                    <div className="text-sm text-zinc-400">提升转向控制</div>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      const cost = (upgrades.grip + 1) * 100;
-                      if (coins >= cost && upgrades.grip < 5) {
-                        setCoins(c => c - cost);
-                        setUpgrades(u => ({ ...u, grip: u.grip + 1 }));
-                      }
-                    }}
-                    disabled={upgrades.grip >= 5 || coins < (upgrades.grip + 1) * 100}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-bold"
-                  >
-                    {upgrades.grip >= 5 ? 'MAX' : `${(upgrades.grip + 1) * 100} ⟁`}
-                  </button>
-                </div>
-              </div>
-
-              <div className="neon-panel p-6 flex flex-col gap-6">
-                <h2 className="text-xl font-bold text-accent-magenta border-b border-white/10 pb-2">赛车涂装</h2>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { name: '经典青', color: '#00f2ff' },
-                    { name: '霓虹粉', color: '#ff00ea' },
-                    { name: '赛博黄', color: '#f4ff40' },
-                    { name: '矩阵绿', color: '#00ff00' },
-                  ].map(paint => (
-                    <button
-                      key={paint.color}
-                      onClick={() => setUpgrades(u => ({ ...u, color: paint.color }))}
-                      className={`p-4 rounded border transition-all flex flex-col items-center gap-2 ${
-                        upgrades.color === paint.color 
-                        ? 'border-white bg-white/10' 
-                        : 'border-white/10 hover:border-white/30'
-                      }`}
-                    >
-                      <div className="w-12 h-6 rounded" style={{ backgroundColor: paint.color }} />
-                      <span className="text-sm">{paint.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <footer className="mt-8 flex justify-end">
-              <button 
-                onClick={() => setGameState('MENU')}
-                className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all"
-              >
-                返回菜单
-              </button>
-            </footer>
-          </motion.div>
-        )}
+        {gameState === 'SHOP' && <ShopUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
+        {gameState === 'GARAGE' && <GarageUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'PLAYING' && (
           <motion.div
@@ -337,7 +264,7 @@ export default function App() {
           >
             <GameCanvas 
               settings={settings} 
-              upgrades={upgrades}
+              garage={garage}
               onFinish={handleFinish} 
               onExit={handleExit} 
             />

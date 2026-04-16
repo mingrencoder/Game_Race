@@ -24,6 +24,44 @@ export type GameSettings = {
   trackId: string;
 };
 
+export type Vehicle = {
+  id: string;
+  name: string;
+  type: string;
+  price: number;
+  baseSpeed: number;
+  baseGrip: number;
+};
+
+export type Item = {
+  id: string;
+  name: string;
+  type: 'engine' | 'tires';
+  price: number;
+  boostValue: number;
+};
+
+export type Livery = {
+  id: string;
+  name: string;
+  price: number;
+  isGradient: boolean;
+  colors: string[];
+};
+
+export type GarageData = {
+  coins: number;
+  ownedVehicles: string[];
+  ownedItems: string[];
+  ownedLiveries: string[];
+  equippedVehicle: string;
+  equippedItems: {
+    engine: string | null;
+    tires: string | null;
+  };
+  equippedLivery: string; 
+};
+
 export type CarState = {
   id: string;
   isAI: boolean;
@@ -38,4 +76,9 @@ export type CarState = {
   currentWaypointIndex: number;
   finished: boolean;
   finishTime?: number;
+  maxSpeed: number;
+  grip: number;
+  driftGrip: number;
+  vehicleType?: string;
+  liveryData?: { isGradient: boolean; colors: string[] };
 };
