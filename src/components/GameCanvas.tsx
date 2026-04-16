@@ -489,7 +489,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 2, opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center pointer-events-none z-30"
           >
             <span className="text-9xl font-black text-white italic drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">
               {countdown}
@@ -497,6 +497,70 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mobile Touch Controls - visible on devices that support touch (simulated with standard media queries/pointer events) */}
+      <div className="absolute bottom-8 left-4 right-4 z-20 flex lg:hidden justify-between pointer-events-none select-none">
+        
+        {/* Left Side: Steering */}
+        <div className="flex gap-4 pointer-events-auto">
+          <button 
+            className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-2xl"
+            onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowLeft'); }}
+            onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
+            onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
+            onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            ←
+          </button>
+          <button 
+            className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-2xl"
+            onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowRight'); }}
+            onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
+            onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
+            onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            →
+          </button>
+        </div>
+
+        {/* Right Side: Actions */}
+        <div className="flex gap-4 pointer-events-auto items-end">
+          <button 
+            className="w-14 h-14 sm:w-16 sm:h-16 mb-4 bg-black/40 backdrop-blur active:bg-accent-yellow/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-xs sm:text-sm font-bold"
+            onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ShiftLeft'); keysPressed.current.add('ShiftRight'); }}
+            onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
+            onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
+            onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            DRIFT
+          </button>
+          <div className="flex flex-col gap-4">
+            <button 
+              className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-sm sm:text-base"
+              onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowUp'); }}
+              onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
+              onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
+              onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              GAS
+            </button>
+            <button 
+              className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-magenta/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-sm sm:text-base"
+              onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowDown'); }}
+              onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
+              onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
+              onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              BRK
+            </button>
+          </div>
+        </div>
+      </div>
 
       {isPaused && (
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20">
