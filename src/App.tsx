@@ -54,7 +54,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-neon-text font-sans selection:bg-accent-cyan/30">
+    <div className="min-h-[100dvh] bg-bg text-neon-text font-sans selection:bg-accent-cyan/30 flex flex-col">
       <AnimatePresence mode="wait">
         {gameState === 'MENU' && (
           <motion.div
@@ -62,7 +62,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col h-screen overflow-hidden"
+            className="flex flex-col h-[100dvh] overflow-hidden"
           >
             {/* Header */}
             <header className="px-4 md:px-[60px] pt-[20px] pb-[10px] flex justify-between items-end border-bottom border-neon-border">
@@ -78,7 +78,7 @@ export default function App() {
             {/* Main Layout */}
             <main className="flex flex-col lg:grid lg:grid-cols-[320px_1fr] gap-4 md:gap-[30px] px-4 md:px-[60px] py-[20px] flex-1 overflow-x-hidden overflow-y-auto lg:overflow-hidden">
               {/* Sidebar */}
-              <div className="flex flex-col gap-[25px]">
+              <div className="flex flex-col gap-[15px] sm:gap-[25px] shrink-0">
                 <div className="neon-panel p-[20px]">
                   <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">模式选择</span>
                   <div className="flex gap-[10px]">
@@ -172,9 +172,9 @@ export default function App() {
               </div>
 
               {/* Content */}
-              <div className="flex flex-col overflow-hidden">
+              <div className="flex flex-col overflow-visible lg:overflow-hidden shrink-0 min-h-[300px] lg:min-h-0 border-t border-white/10 lg:border-t-0 pt-4 lg:pt-0">
                 <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold shrink-0">选择赛道 (EST. 1-2 MINS)</span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-[20px] overflow-y-auto pr-2 pb-4 flex-1 min-h-[200px] lg:max-h-[400px]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-[20px] overflow-visible lg:overflow-y-auto pr-2 pb-4 flex-1 content-start">
                   {TRACKS.map((track) => (
                     <button
                       key={track.id}
@@ -237,7 +237,7 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="flex flex-col h-screen p-4 md:p-[60px] max-w-4xl mx-auto overflow-y-auto"
+            className="flex flex-col min-h-[100dvh] p-4 md:p-[60px] max-w-4xl mx-auto overflow-y-auto"
           >
             <header className="flex justify-between items-end mb-8 border-b border-neon-border pb-4 mt-8 md:mt-0">
               <h1 className="text-3xl md:text-4xl font-black italic text-accent-magenta tracking-widest">NEON GARAGE</h1>
@@ -333,7 +333,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="w-full h-screen"
+            className="w-full h-[100dvh]"
           >
             <GameCanvas 
               settings={settings} 
@@ -350,7 +350,7 @@ export default function App() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 1.1 }}
-            className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-screen"
+            className="container mx-auto px-4 py-12 flex flex-col items-center justify-center min-h-[100dvh]"
           >
             <div className="neon-panel w-full max-w-2xl p-8 text-center">
               <Trophy className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-bounce drop-shadow-[0_0_15px_rgba(244,255,64,0.5)]" />

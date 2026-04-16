@@ -443,23 +443,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
   }, [countdown, isPaused, cars]);
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center bg-bg overflow-hidden">
-      <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 p-4 neon-panel backdrop-blur-md text-white font-mono text-sm">
-        <div className="text-accent-magenta font-bold uppercase tracking-wider mb-1 border-b border-white/10 pb-1">Race Telemetry</div>
-        <div className="flex justify-between gap-4">
-          <span>Track:</span>
-          <span className="text-accent-cyan">{track.name}</span>
+    <div className="relative w-full h-[100dvh] flex flex-col items-center bg-bg overflow-hidden p-0">
+      <div className="w-full 2xl:w-auto 2xl:absolute 2xl:top-4 2xl:left-4 z-10 flex flex-row 2xl:flex-col 2xl:gap-2 p-1 px-2 2xl:p-4 bg-black/50 2xl:bg-black/80 backdrop-blur-sm border-b 2xl:border border-white/10 2xl:rounded-md text-white font-mono pointer-events-none 2xl:max-w-none shadow-none opacity-80 2xl:opacity-100 shrink-0 items-center 2xl:items-start justify-between min-h-[28px]">
+        
+        <div className="flex 2xl:flex-col gap-2 2xl:gap-4 items-center 2xl:items-start shrink-0">
+          <div className="text-accent-magenta font-bold uppercase tracking-wider hidden 2xl:block border-b border-white/10 pb-1 w-full text-sm">Race Telemetry</div>
+          <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">
+            <span className="opacity-60 hidden 2xl:inline">Track:</span>
+            <span className="text-accent-cyan truncate max-w-[80px] 2xl:max-w-none">{track.name}</span>
+          </div>
+          <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">
+            <span className="opacity-60 hidden 2xl:inline">Time:</span>
+            <span className="text-accent-yellow">{(gameTime / 1000).toFixed(2)}s</span>
+          </div>
         </div>
-        <div className="flex justify-between gap-4">
-          <span>Time:</span>
-          <span className="text-accent-yellow">{(gameTime / 1000).toFixed(2)}s</span>
-        </div>
-        <div className="mt-2 space-y-1">
+        
+        <div className="flex 2xl:flex-col gap-3 2xl:gap-0 2xl:mt-2 2xl:space-y-1 overflow-x-auto 2xl:overflow-visible pr-16 2xl:pr-0 items-center w-full justify-end 2xl:justify-start">
           {cars.map(car => (
-            <div key={car.id} className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full shadow-[0_0_5px_currentColor]" style={{ backgroundColor: car.color, color: car.color }} />
-                <span className="text-[10px]">{car.id.toUpperCase()}</span>
+            <div key={car.id} className="flex items-center justify-between gap-1 2xl:gap-4 flex-shrink-0">
+              <div className="flex items-center gap-1 2xl:gap-2">
+                <div className="w-1.5 h-1.5 2xl:w-2 2xl:h-2 rounded-full shadow-[0_0_5px_currentColor]" style={{ backgroundColor: car.color, color: car.color }} />
+                <span className="text-[10px] hidden sm:inline uppercase">{car.id}</span>
               </div>
               <span className="text-[10px] opacity-60">L{car.lap + 1}/{track.laps} {car.finished ? 'FIN' : ''}</span>
             </div>
@@ -467,21 +471,24 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
         </div>
       </div>
 
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
+      <div className="absolute top-0.5 right-1 2xl:top-4 2xl:right-4 z-30 flex gap-2">
         <button 
           onClick={() => setIsPaused(!isPaused)}
-          className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg border border-white/10 transition-colors text-xs uppercase tracking-widest font-bold"
+          className="px-2 py-0.5 2xl:px-4 2xl:py-2 bg-black/60 hover:bg-black/80 text-white rounded-md border border-white/20 transition-colors text-[9px] 2xl:text-xs uppercase tracking-widest font-bold backdrop-blur pointer-events-auto"
         >
           {isPaused ? 'Resume' : 'Pause'}
         </button>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={1600}
-        height={1200}
-        className="w-full max-w-[1200px] aspect-[4/3] rounded-2xl shadow-[0_0_50px_rgba(0,242,255,0.15)] border-4 border-white/5 bg-black object-contain"
-      />
+      <div className="flex-1 w-full flex items-center justify-center p-2 2xl:p-8 min-h-0 relative">
+        <canvas
+          ref={canvasRef}
+          width={1600}
+          height={1200}
+          style={{ objectFit: 'contain' }}
+          className="w-full h-full max-w-[1200px] max-h-full aspect-[4/3] rounded-xl 2xl:rounded-2xl shadow-[0_0_50px_rgba(0,242,255,0.15)] border-2 2xl:border-4 border-white/5 bg-black"
+        />
+      </div>
 
       <AnimatePresence>
         {countdown > 0 && (
@@ -499,62 +506,57 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, upgrades, onFinish, o
       </AnimatePresence>
 
       {/* Mobile Touch Controls - visible on devices that support touch (simulated with standard media queries/pointer events) */}
-      <div className="absolute bottom-8 left-4 right-4 z-20 flex lg:hidden justify-between pointer-events-none select-none">
+      <div className="absolute bottom-2 sm:bottom-4 2xl:bottom-8 left-2 right-2 sm:left-4 sm:right-4 z-20 flex 2xl:hidden justify-between pointer-events-none select-none opacity-60 hover:opacity-100 transition-opacity">
         
         {/* Left Side: Steering */}
-        <div className="flex gap-4 pointer-events-auto">
+        <div className="flex gap-2 sm:gap-4 pointer-events-auto items-end">
           <button 
-            className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-2xl"
+            className="w-14 h-14 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-xl sm:text-2xl"
             onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowLeft'); }}
             onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
             onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
             onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowLeft'); }}
-            onContextMenu={(e) => e.preventDefault()}
           >
             ←
           </button>
           <button 
-            className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-2xl"
+            className="w-14 h-14 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-xl sm:text-2xl"
             onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowRight'); }}
             onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
             onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
             onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowRight'); }}
-            onContextMenu={(e) => e.preventDefault()}
           >
             →
           </button>
         </div>
 
         {/* Right Side: Actions */}
-        <div className="flex gap-4 pointer-events-auto items-end">
+        <div className="flex gap-2 sm:gap-4 pointer-events-auto items-end">
           <button 
-            className="w-14 h-14 sm:w-16 sm:h-16 mb-4 bg-black/40 backdrop-blur active:bg-accent-yellow/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-xs sm:text-sm font-bold"
+            className="w-12 h-12 sm:w-16 sm:h-16 mb-2 sm:mb-4 bg-black/40 backdrop-blur active:bg-accent-yellow/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none text-[10px] sm:text-sm font-bold"
             onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ShiftLeft'); keysPressed.current.add('ShiftRight'); }}
             onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
             onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
             onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ShiftLeft'); keysPressed.current.delete('ShiftRight'); }}
-            onContextMenu={(e) => e.preventDefault()}
           >
-            DRIFT
+            DRFT
           </button>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 sm:gap-4">
             <button 
-              className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-sm sm:text-base"
+              className="w-14 h-14 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-cyan/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-xs sm:text-base"
               onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowUp'); }}
               onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
               onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
               onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowUp'); }}
-              onContextMenu={(e) => e.preventDefault()}
             >
               GAS
             </button>
             <button 
-              className="w-16 h-16 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-magenta/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-sm sm:text-base"
+              className="w-14 h-14 sm:w-20 sm:h-20 bg-black/40 backdrop-blur active:bg-accent-magenta/60 rounded-full flex items-center justify-center text-white border-2 border-white/20 select-none touch-none font-bold text-xs sm:text-base"
               onPointerDown={(e) => { e.preventDefault(); keysPressed.current.add('ArrowDown'); }}
               onPointerUp={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
               onPointerCancel={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
               onPointerOut={(e) => { e.preventDefault(); keysPressed.current.delete('ArrowDown'); }}
-              onContextMenu={(e) => e.preventDefault()}
             >
               BRK
             </button>
