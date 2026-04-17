@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { GameSettings, CarState, Point, Track, AIDifficulty, GarageData } from '../types';
 import { TRACKS, PHYSICS, AI_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
+import { audioService } from '../services/audioService';
 
 interface GameCanvasProps {
   settings: GameSettings;
@@ -149,12 +150,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
       });
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      audioService.stopAll();
+    };
   }, [settings, track]);
 
   // Input handling
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => keysPressed.current.add(e.code);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      audioService.init();
+      keysPressed.current.add(e.code);
+    };
     const handleKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.code);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -250,8 +257,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         let currentGrip = drift ? car.driftGrip : car.grip;
 
         // Apply Physics
-        if (accelerate) speed += PHYSICS.ACCELERATION;
-        if (brake) speed -= PHYSICS.BRAKE;
+        if (accelerate) {
+          speed += PHYSICS.ACCELERATION;
+        }
+
+        if (brake) {
+          speed -= PHYSICS.BRAKE;
+        }
+
         speed -= PHYSICS.FRICTION;
         speed = Math.max(0, Math.min(speed, currentMaxSpeed));
 
@@ -288,8 +301,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             nextX = closestCenter.x + (dx / len) * maxDist;
             nextY = closestCenter.y + (dy / len) * maxDist;
           }
-          // Reduce speed heavily due to wall friction
-          speed *= 0.85; 
+          // Reduce speed slightly due to wall friction (prevent getting sticky)
+          speed *= 0.96; 
         }
 
         // Waypoint tracking
@@ -359,6 +372,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             const tempSpeed = c1.speed;
             c1.speed = c2.speed;
             c2.speed = tempSpeed;
+            
+            audioService.playCollision();
           }
         }
       }
@@ -370,6 +385,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
   // Check for finish condition
   useEffect(() => {
     if (cars.length > 0 && cars.every(c => c.finished)) {
+      audioService.stopAll();
+      audioService.playFinish();
       onFinish([...cars].sort((a, b) => (a.finishTime || 0) - (b.finishTime || 0)));
     }
   }, [cars, onFinish]);
@@ -556,7 +573,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         </div>
       </div>
 
-      <div className="absolute top-0.5 right-1 2xl:top-4 2xl:right-4 z-30 flex gap-2">
+      <div className="absolute top-16 right-1 2xl:top-20 2xl:right-4 z-30 flex gap-2">
         <button 
           onClick={() => setIsPaused(!isPaused)}
           className="px-2 py-0.5 2xl:px-4 2xl:py-2 bg-black/60 hover:bg-black/80 text-white rounded-md border border-white/20 transition-colors text-[9px] 2xl:text-xs uppercase tracking-widest font-bold backdrop-blur pointer-events-auto"

@@ -110,7 +110,7 @@ export const PHYSICS = {
   BRAKE: 0.3,
   FRICTION: 0.03,
   MAX_SPEED: 9,
-  STEER_SPEED: 0.04,
+  STEER_SPEED: 0.025,
   CAR_SIZE: 40, // Collision radius
   GRIP: 0.15,
   DRIFT_GRIP: 0.03,

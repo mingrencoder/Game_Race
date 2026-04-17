@@ -4,8 +4,9 @@ import { TRACKS } from './constants';
 import GameCanvas from './components/GameCanvas';
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
-import { Trophy } from 'lucide-react';
+import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { audioService } from './services/audioService';
 
 const initialGarageData: GarageData = (() => {
   const saved = localStorage.getItem('neon_garage_v2');
@@ -34,15 +35,31 @@ export default function App() {
   
   const [garage, setGarage] = useState<GarageData>(initialGarageData);
 
+  const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('neon_volume') || '0.5'));
+  const [isMuted, setIsMuted] = useState(() => localStorage.getItem('neon_muted') === 'true');
+
+  React.useEffect(() => {
+    localStorage.setItem('neon_volume', volume.toString());
+    audioService.setVolume(volume);
+  }, [volume]);
+
+  React.useEffect(() => {
+    localStorage.setItem('neon_muted', isMuted.toString());
+    audioService.setMute(isMuted);
+  }, [isMuted]);
+
   React.useEffect(() => {
     localStorage.setItem('neon_garage_v2', JSON.stringify(garage));
   }, [garage]);
 
   const handleStartGame = () => {
+    audioService.init();
+    audioService.startBGM(settings.trackId);
     setGameState('PLAYING');
   };
 
   const handleFinish = (finalResults: CarState[]) => {
+    audioService.stopBGM();
     setResults(finalResults);
     
     // Calculate points/coins (1st: 25, 2nd: 15, 3rd: 10, 4th: 5)
@@ -62,11 +79,36 @@ export default function App() {
   };
 
   const handleExit = () => {
+    audioService.stopBGM();
     setGameState('MENU');
   };
 
   return (
-    <div className="min-h-[100dvh] bg-bg text-neon-text font-sans selection:bg-accent-cyan/30 flex flex-col">
+    <div className="min-h-[100dvh] bg-bg text-neon-text font-sans selection:bg-accent-cyan/30 flex flex-col relative">
+      
+      {/* Global Volume Control */}
+      <div className="fixed top-4 right-4 z-[999] flex items-center gap-2 bg-black/50 p-1.5 sm:p-2 rounded-lg border border-white/10 backdrop-blur-md">
+        <button 
+          onClick={() => { setIsMuted(!isMuted); audioService.init(); }}
+          className="text-zinc-400 hover:text-white transition-colors flex items-center justify-center w-6 h-6 sm:w-auto sm:h-auto"
+        >
+          {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+        </button>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={volume}
+          onChange={(e) => { 
+            setVolume(parseFloat(e.target.value)); 
+            if (isMuted) setIsMuted(false); 
+            audioService.init(); 
+          }}
+          className="w-20 md:w-32 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-accent-cyan disabled:opacity-50"
+        />
+      </div>
+
       <AnimatePresence mode="wait">
         {gameState === 'MENU' && (
           <motion.div
@@ -82,9 +124,11 @@ export default function App() {
                 <h1 className="m-0 text-[32px] md:text-[48px] uppercase tracking-[4px] neon-text-cyan font-black italic leading-none">
                   NEON VELOCITY
                 </h1>
-                <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">赛车竞技系统</span>
+                <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">急速赛车竞技系统</span>
               </div>
-              <div className="font-mono opacity-60 text-[10px] md:text-[14px]">SYS_VER: 2.0.4</div>
+              <div className="flex items-center gap-2 sm:gap-4 pr-32 md:pr-48">
+                <div className="font-mono opacity-60 text-[10px] md:text-[14px] hidden sm:block">SYS_VER: 2.0.4</div>
+              </div>
             </header>
 
             {/* Main Layout */}
