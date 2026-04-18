@@ -24,6 +24,7 @@ const initialGarageData: GarageData = (() => {
 
 export default function App() {
   const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE'>('MENU');
+  const [showInstructions, setShowInstructions] = useState(false);
   const [settings, setSettings] = useState<GameSettings>({
     mode: 'SINGLE',
     aiCount: 1,
@@ -127,6 +128,12 @@ export default function App() {
                 <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">急速赛车竞技系统</span>
               </div>
               <div className="flex items-center gap-2 sm:gap-4 pr-32 md:pr-48">
+                <button
+                  onClick={() => setShowInstructions(true)}
+                  className="text-zinc-400 hover:text-white transition-colors text-xs sm:text-sm underline underline-offset-4 font-bold cursor-pointer"
+                >
+                  玩法说明
+                </button>
                 <div className="font-mono opacity-60 text-[10px] md:text-[14px] hidden sm:block">SYS_VER: 2.0.4</div>
               </div>
             </header>
@@ -368,6 +375,89 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Instructions Modal */}
+      <AnimatePresence>
+        {showInstructions && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 lg:p-10"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="neon-panel bg-[#0a0a0a] max-w-[800px] w-full max-h-[85vh] overflow-y-auto p-6 md:p-10 rounded-xl border border-white/20 shadow-2xl relative"
+            >
+              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 sticky top-0 bg-[#0a0a0a] z-10 pt-2">
+                <h2 className="text-xl md:text-2xl font-black text-accent-cyan uppercase tracking-wider">🏎️ 游戏游玩说明</h2>
+                <button 
+                  onClick={() => setShowInstructions(false)} 
+                  className="text-zinc-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors"
+                >
+                  ✕ 关闭
+                </button>
+              </div>
+              
+              <div className="space-y-6 text-zinc-300 text-sm md:text-base leading-relaxed pb-4">
+                <section>
+                  <h3 className="text-accent-yellow font-bold text-lg mb-2 flex items-center gap-2">目标</h3>
+                  <p className="opacity-90">在指定的赛道上完成固定圈数，争取获得第一名！比赛名次越高，获得的金币奖励越丰厚。使用金币可以在商店中购买更高级的赛车、强力道具和炫酷的涂装。</p>
+                </section>
+                
+                <section>
+                  <h3 className="text-accent-magenta font-bold text-lg mb-2">🎮 操作方式</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 p-4 rounded-md border border-white/5">
+                     <div>
+                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">单人模式（玩家1）：</strong>
+                       <p className="opacity-80">
+                         • 向上方向键（↑）：加速<br/>
+                         • 向下方向键（↓）：刹车 / 倒车<br/>
+                         • 左右方向键（←/→）：转向<br/>
+                         • Shift键：漂移（高速过弯微调）
+                       </p>
+                     </div>
+                     <div>
+                       <strong className="text-accent-magenta block mb-2 border-b border-accent-magenta/30 pb-1">双人模式（玩家2）：</strong>
+                       <p className="opacity-80">
+                         • W键：加速<br/>
+                         • S键：刹车 / 倒车<br/>
+                         • A/D键：转向<br/>
+                         • 空格键（Space）：漂移
+                       </p>
+                     </div>
+                  </div>
+                </section>
+                
+                <section>
+                  <h3 className="text-accent-cyan font-bold text-lg mb-3">🛠️ 进阶机制与商店系统</h3>
+                  <ul className="list-disc pl-5 space-y-3 opacity-90">
+                     <li>
+                       <strong className="text-white">漂移系统：</strong>按下漂移键后，车辆抓地力会降低，你可以进行更大角度的滑动，转向速度也会提升。这适合在急弯处点击或按住使用。但请注意：过度漂移会导致速度急剧下降！
+                     </li>
+                     <li>
+                       <strong className="text-white">购买赛车：</strong>在商店中可以解锁购买不同性能的赛车。标准车属性均衡，F1赛车极速惊人但抓地力低（容易打滑），越野拉力赛车虽然速度较慢但过弯稳定性极强。
+                     </li>
+                     <li>
+                       <strong className="text-white">道具与改装：</strong>你可以购买“引擎调校”来大幅度增加最高速度，或者购买“抓地力控制系统”来让您的赛车在弯道指哪打哪。<br/>
+                       <span className="text-accent-yellow text-sm">💡 提示：购买后请记得前往主界面的【我的车库】中进行装备才会生效！</span>
+                     </li>
+                     <li>
+                       <strong className="text-white">物理防粘设计：</strong>如果速度过快撞到赛道边缘，不仅会在物理上弹开，车速也会受到损耗下降。请依据真实的驾驶习惯，在入弯前选择性松开油门或者点按刹车。与对手碰撞也会互相推挤并影响速度。
+                     </li>
+                  </ul>
+                </section>
+                
+                <div className="bg-accent-magenta/10 border-l-4 border-accent-magenta p-4 mt-8 rounded-r-md">
+                  <strong>车库说明：</strong>【我的车库】仅在单人模式下开放，你可以在车库中自由更换当前使用的赛车、安装道具以及应用炫彩涂装，快去积攒金币打造你的最强专属赛车吧！
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
