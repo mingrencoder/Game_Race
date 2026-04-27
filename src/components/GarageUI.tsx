@@ -17,16 +17,32 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const equipItem = (id: string) => {
     const item = ITEMS_DB.find(i => i.id === id);
     if (!item) return;
-    setGarage(g => ({
-      ...g,
-      equippedItems: {
-        ...g.equippedItems,
-        [item.type]: g.equippedItems[item.type as 'engine'|'tires'] === id ? null : id // Toggle
-      }
-    }));
+    setGarage(g => {
+      const typeKey = item.type as keyof typeof g.equippedItems;
+      return {
+        ...g,
+        equippedItems: {
+          ...g.equippedItems,
+          [typeKey]: g.equippedItems[typeKey] === id ? null : id
+        }
+      };
+    });
   };
 
   const equipLivery = (val: string) => setGarage(g => ({ ...g, equippedLivery: val }));
+
+  const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
+  const engineBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.speedBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.boostValue || 0;
+  const tireBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.gripBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.boostValue || 0;
+  const launchBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.launch)?.launchBoost || 0;
+  const driftBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.drift)?.driftSpeedBoost || 0;
+  const accelBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.acceleration)?.accelerationBoost || 0;
+  
+  const currentSpeed = currentVehicleData.baseSpeed + engineBoost;
+  const currentGrip = currentVehicleData.baseGrip + tireBoost;
+  const currentLaunch = currentVehicleData.baseLaunch + launchBoost;
+  const currentDrift = currentVehicleData.baseDriftSpeed + driftBoost;
+  const currentAccel = (currentVehicleData.baseAcceleration || 0.15) + accelBoost;
 
   return (
     <motion.div
@@ -34,13 +50,50 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="flex flex-col min-h-[100dvh] p-4 md:p-[60px] max-w-5xl mx-auto overflow-y-auto"
+      className="absolute inset-0 z-50 bg-[#0d0e15] flex flex-col h-[100dvh]"
     >
-      <header className="flex justify-between items-end mb-8 border-b border-white/10 pb-4 mt-8 md:mt-0">
-        <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest">MY GARAGE</h1>
+      <header className="shrink-0 z-10 bg-[#0d0e15]/95 backdrop-blur-md border-b border-white/10 w-full relative">
+        <div className="p-4 md:px-[60px] md:pt-[60px] md:pb-4 max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-end gap-4 w-full">
+          <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest shrink-0">我的车库</h1>
+          
+          <div className="bg-black/40 border border-white/10 rounded-lg p-3 flex gap-4 mt-2 md:mt-0 text-center flex-wrap shrink-0">
+          <div>
+            <div className="text-xs text-zinc-500 uppercase">极速</div>
+            <div className="text-xl font-black text-accent-cyan">
+              {currentSpeed.toFixed(1)} <span className="text-xs text-zinc-500">{engineBoost > 0 ? `(+${engineBoost})` : ''}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-zinc-500 uppercase">抓地</div>
+            <div className="text-xl font-black text-accent-yellow">
+              {currentGrip.toFixed(2)} <span className="text-xs text-zinc-500">{tireBoost > 0 ? `(+${tireBoost.toFixed(2)})` : ''}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-zinc-500 uppercase">起步</div>
+            <div className="text-xl font-black text-green-400">
+              {currentLaunch.toFixed(1)} <span className="text-xs text-zinc-500">{launchBoost > 0 ? `(+${launchBoost.toFixed(1)})` : ''}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-zinc-500 uppercase">漂移速度</div>
+            <div className="text-xl font-black text-purple-400">
+              {currentDrift.toFixed(1)} <span className="text-xs text-zinc-500">{driftBoost > 0 ? `(+${driftBoost.toFixed(1)})` : ''}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-zinc-500 uppercase">加速</div>
+            <div className="text-xl font-black text-orange-400">
+              {currentAccel.toFixed(2)} <span className="text-xs text-zinc-500">{accelBoost > 0 ? `(+${accelBoost.toFixed(2)})` : ''}</span>
+            </div>
+          </div>
+        </div>
+        </div>
       </header>
 
-      <div className="flex gap-4 mb-6">
+      <div className="flex-1 overflow-y-auto w-full">
+        <div className="p-4 md:px-[60px] md:py-8 max-w-5xl mx-auto w-full h-full flex flex-col">
+          <div className="flex gap-4 mb-6">
         <button onClick={() => setTab('VEHICLES')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'VEHICLES' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>车辆管理</button>
         <button onClick={() => setTab('ITEMS')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'ITEMS' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>道具组装</button>
         <button onClick={() => setTab('LIVERIES')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'LIVERIES' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>喷漆与涂装</button>
@@ -72,23 +125,55 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
         )}
 
         {tab === 'ITEMS' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {garage.ownedItems.map(itemId => {
-              const item = ITEMS_DB.find(x => x.id === itemId);
-              if (!item) return null;
-              const isEquipped = garage.equippedItems[item.type] === item.id;
+          <div className="flex flex-col gap-6 w-full">
+            {(['engine', 'tires', 'acceleration', 'launch', 'drift'] as const).map(category => {
+              const categoryItems = garage.ownedItems.filter(id => {
+                const item = ITEMS_DB.find(x => x.id === id);
+                return item?.type === category;
+              });
+
+              if (categoryItems.length === 0) return null;
+
+              const categoryNames = {
+                engine: '引擎部位 (提供极速加成)',
+                tires: '轮胎部位 (提供抓地力加成)',
+                acceleration: '动力控制模块 (提供全局加速能力加成)',
+                launch: '起步部位 (提供起步加速度加成)',
+                drift: '悬挂部位 (提供漂移速度与稳定性加成)'
+              };
+
               return (
-                <div key={item.id} className={`neon-panel p-4 flex justify-between items-center ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10' : ''}`}>
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-1">{item.name}</h3>
-                    <p className="text-xs text-zinc-400">{item.type === 'engine' ? '引擎部位' : '轮胎部位'} (点击卸载/安装)</p>
+                <div key={category} className="mb-4 w-full">
+                  <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
+                  <div className="flex overflow-x-auto gap-4 pb-4 snap-x">
+                    {categoryItems.map(itemId => {
+                      const item = ITEMS_DB.find(x => x.id === itemId);
+                      if (!item) return null;
+                      const isEquipped = garage.equippedItems[category] === item.id;
+                      
+                      let boostDesc = '';
+                      if (item.speedBoost || item.boostValue && item.type === 'engine') boostDesc = `极速 +${item.speedBoost || item.boostValue}`;
+                      if (item.gripBoost || item.boostValue && item.type === 'tires') boostDesc = `抓地 +${item.gripBoost || item.boostValue}`;
+                      if (item.launchBoost) boostDesc = `起步 +${item.launchBoost}`;
+                      if (item.driftSpeedBoost) boostDesc = `漂移速度 +${item.driftSpeedBoost}`;
+                      if (item.accelerationBoost) boostDesc = `加速能力 +${item.accelerationBoost * 100}%`;
+
+                      return (
+                        <div key={item.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 w-64 shrink-0 snap-center ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.15)]' : ''}`}>
+                          <div>
+                            <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
+                            <p className="text-xs text-accent-yellow">{boostDesc}</p>
+                          </div>
+                          <button 
+                            onClick={() => equipItem(item.id)}
+                            className={`w-full py-2 rounded font-bold transition-all hover:scale-105 active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                          >
+                            {isEquipped ? '已安装' : '安装'}
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <button 
-                    onClick={() => equipItem(item.id)}
-                    className={`px-4 py-2 rounded font-bold ${isEquipped ? 'bg-white text-black' : 'bg-white/10 text-white'}`}
-                  >
-                    {isEquipped ? '已安装' : '安装'}
-                  </button>
                 </div>
               );
             })}
@@ -147,6 +232,8 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       <footer className="mt-8 flex justify-end shrink-0">
         <button onClick={onClose} className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all">返回菜单</button>
       </footer>
+        </div>
+      </div>
     </motion.div>
   );
 }

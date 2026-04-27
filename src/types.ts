@@ -15,13 +15,40 @@ export enum AIDifficulty {
   EXPERT = 4,
 }
 
-export type GameMode = 'SINGLE' | 'DOUBLE';
+export type GameMode = 'SINGLE' | 'DOUBLE' | 'TEAM';
+
+export type LapRecord = {
+  playerName: string;
+  time: number; // Represents total race time
+  vehicle: string;
+  isTeam?: boolean;
+  timestamp?: number;
+};
+
+export type AIStyle = 'OPTIMAL' | 'AGGRESSIVE' | 'CAUTIOUS' | 'DRIFTER';
+
+export type TeamSetup = {
+  id: string; // ai1, ai2, ai3, etc.
+  name: string;
+  vehicleId: string;
+  engineId: string | null;
+  tiresId: string | null;
+  liveryId: string | null;
+  style: AIStyle;
+  team: 'RED' | 'BLUE';
+};
 
 export type GameSettings = {
   mode: GameMode;
   aiCount: number;
   aiDifficulty: AIDifficulty;
   trackId: string;
+  teamRoster: TeamSetup[]; // For TEAM mode
+  laps: number;
+  teamSize: 2 | 3;
+  isEliteMode?: boolean;
+  isCupMode?: boolean;
+  cupNumTracks?: number;
 };
 
 export type Vehicle = {
@@ -31,14 +58,22 @@ export type Vehicle = {
   price: number;
   baseSpeed: number;
   baseGrip: number;
+  baseLaunch: number;
+  baseDriftSpeed: number;
+  baseAcceleration: number;
 };
 
 export type Item = {
   id: string;
   name: string;
-  type: 'engine' | 'tires';
+  type: 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
   price: number;
-  boostValue: number;
+  speedBoost?: number;
+  gripBoost?: number;
+  launchBoost?: number;
+  driftSpeedBoost?: number;
+  accelerationBoost?: number;
+  boostValue: number; // Keep for backward compatibility temporarily
 };
 
 export type Livery = {
@@ -58,12 +93,16 @@ export type GarageData = {
   equippedItems: {
     engine: string | null;
     tires: string | null;
+    launch?: string | null;
+    drift?: string | null;
+    acceleration?: string | null;
   };
   equippedLivery: string; 
 };
 
 export type CarState = {
   id: string;
+  name: string;
   isAI: boolean;
   playerIndex?: number; // 0 or 1
   x: number;
@@ -76,9 +115,21 @@ export type CarState = {
   currentWaypointIndex: number;
   finished: boolean;
   finishTime?: number;
+  dnf?: boolean;
+  stuckFrames?: number;
+  reversingFrames?: number;
+  team?: 'RED' | 'BLUE';
+  aiStyle?: AIStyle;
+  lapStartTime: number;
+  bestLapTime: number;
+  lapTimes?: number[];
   maxSpeed: number;
   grip: number;
   driftGrip: number;
+  launch: number;
+  driftSpeed: number;
+  acceleration: number;
   vehicleType?: string;
   liveryData?: { isGradient: boolean; colors: string[] };
+  isDriftingFlag?: boolean;
 };

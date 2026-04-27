@@ -142,42 +142,34 @@ class AudioService {
     }
   }
 
-  playCollision() {
+  playDrift() {
     if (!this.ctx || !this.masterGain || !this.noiseBuffer) return;
     const now = this.ctx.currentTime;
-    if (now - this.lastCollisionTime < 0.2) return;
+    if (now - this.lastCollisionTime < 0.05) return; 
     this.lastCollisionTime = now;
 
-    // Thump
-    const osc = this.ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(100, now);
-    osc.frequency.exponentialRampToValueAtTime(20, now + 0.15);
-    const oscGain = this.ctx.createGain();
-    oscGain.gain.setValueAtTime(0.5, now);
-    oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-    osc.connect(oscGain);
-    oscGain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.15);
-
-    // Crunch
+    // Much softer rumble for drifting
     const noiseSource = this.ctx.createBufferSource();
     noiseSource.buffer = this.noiseBuffer;
+    
+    // Tame the noise with a strict lowpass to create a rumble
     const noiseFilter = this.ctx.createBiquadFilter();
     noiseFilter.type = 'lowpass';
-    noiseFilter.frequency.setValueAtTime(1000, now);
-    noiseFilter.frequency.linearRampToValueAtTime(300, now + 0.2);
+    noiseFilter.frequency.setValueAtTime(400, now); // Low frequency for less harshness
+    noiseFilter.frequency.exponentialRampToValueAtTime(100, now + 0.15);
+    noiseFilter.Q.value = 0.5;
     
     const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.3, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+    // Very subtle low rumble
+    noiseGain.gain.setValueAtTime(0.08, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
     noiseSource.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(this.masterGain);
+
     noiseSource.start(now);
-    noiseSource.stop(now + 0.2);
+    noiseSource.stop(now + 0.15);
   }
 
   playFinish() {
