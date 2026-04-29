@@ -337,8 +337,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
     let pointsToCheck: number[] = [];
     if (currentIndex !== undefined) {
-      // Check previous, current, and next 2 segments strictly.
-      for(let offset = -1; offset <= 2; offset++) {
+      // Check previous 2, current, and next 4 segments to ensure robust corner coverage after tessellation.
+      for(let offset = -2; offset <= 4; offset++) {
         pointsToCheck.push((currentIndex + offset + track.waypoints.length) % track.waypoints.length);
       }
     } else {
@@ -729,8 +729,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         
         let diff = (minLineIndex - currentWaypointIndex + track.waypoints.length) % track.waypoints.length;
         
-        // If diff > 0 and <= 3, car has advanced to a new segment (allowing slight skips/cuts).
-        if (diff > 0 && diff <= 3) {
+        // If diff > 0 and <= 6, car has advanced to a new segment (allowing slight skips/cuts).
+        if (diff > 0 && diff <= 6) {
             // Did we wrap around the finish line?
             if (currentWaypointIndex + diff >= track.waypoints.length) {
               // Crossed finish line

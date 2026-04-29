@@ -1,6 +1,6 @@
 import { Track, Point } from './types';
 
-export const TRACKS: Track[] = [
+const RAW_TRACKS: Track[] = [
   {
     id: 'oval',
     name: '椭圆赛道',
@@ -242,6 +242,48 @@ export const TRACKS: Track[] = [
     ]
   }
 ];
+
+const bevelCorners = (waypoints: Point[]): Point[] => {
+  const newPts: Point[] = [];
+  for (let i = 0; i < waypoints.length; i++) {
+    // Preserve start/finish line exactly to avoid breaking the grid spawning logic
+    // The starting grid needs a long straight segment
+    if (i === 0) {
+       newPts.push(waypoints[0]);
+       continue;
+    }
+
+    const p0 = waypoints[(i - 1 + waypoints.length) % waypoints.length];
+    const p1 = waypoints[i];
+    const p2 = waypoints[(i + 1) % waypoints.length];
+
+    const d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+    const d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+
+    const cut1 = Math.min(60, d1 * 0.25);
+    const cut2 = Math.min(60, d2 * 0.25);
+
+    const q1 = {
+      x: p1.x + (p0.x - p1.x) * (cut1 / d1),
+      y: p1.y + (p0.y - p1.y) * (cut1 / d1)
+    };
+    const q2 = {
+      x: p1.x + (p2.x - p1.x) * (cut2 / d2),
+      y: p1.y + (p2.y - p1.y) * (cut2 / d2)
+    };
+
+    newPts.push(q1);
+    newPts.push(q2);
+  }
+  return newPts;
+};
+
+export const TRACKS: Track[] = RAW_TRACKS.map(t => {
+  if (t.id === 'star_breaker' || t.id === 'crossover_bridge' || t.id === 'neon_labyrinth') {
+    return { ...t, waypoints: bevelCorners(t.waypoints) };
+  }
+  return t;
+});
 
 export const PHYSICS = {
   ACCELERATION: 0.15,
