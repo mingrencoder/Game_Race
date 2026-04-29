@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GarageData } from '../types';
 import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
+import VehiclePreview from './VehiclePreview';
+import { Cpu, Wind, Zap, Gauge, CircleDot } from 'lucide-react';
 
 interface ShopProps {
   garage: GarageData;
@@ -42,6 +44,15 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
     }
   };
 
+  const getItemIcon = (type: string) => {
+    if (type === 'engine') return <Cpu size={32} className="text-[#00f2ff]" />;
+    if (type === 'tires') return <CircleDot size={32} className="text-[#ff00ea]" />;
+    if (type === 'acceleration') return <Zap size={32} className="text-[#f4ff40]" />;
+    if (type === 'launch') return <Gauge size={32} className="text-[#00ff00]" />;
+    if (type === 'drift') return <Wind size={32} className="text-[#ff2222]" />;
+    return <Cpu size={32} />;
+  };
+
   return (
     <motion.div
       key="shop"
@@ -69,6 +80,9 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
               const canAfford = garage.coins >= v.price;
               return (
                 <div key={v.id} className="neon-panel p-4 flex flex-col justify-between gap-3">
+                  <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
+                    <VehiclePreview vehicleType={v.type} width={120} height={120} color="#00f2ff" />
+                  </div>
                   <div>
                     <h3 className="text-xl font-bold text-white mb-1">{v.name}</h3>
                     <p className="text-xs text-zinc-400">极速: {v.baseSpeed} | 抓地: {v.baseGrip} | 起步: {(v.baseLaunch || 0)} | 漂移: {(v.baseDriftSpeed || 0)}</p>
@@ -121,6 +135,9 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
 
                       return (
                         <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 w-64 shrink-0 snap-center">
+                          <div className="flex justify-center items-center h-20 bg-black/40 rounded-lg border border-white/5 shadow-inner">
+                            {getItemIcon(item.type)}
+                          </div>
                           <div>
                             <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
                             <p className="text-xs text-accent-yellow">{boostDesc}</p>
@@ -155,9 +172,12 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                 <div key={l.id} className="neon-panel p-4 flex justify-between items-center">
                   <div className="flex items-center gap-4">
                     <div 
-                      className="w-12 h-12 rounded-full border border-white/20" 
+                      className="w-12 h-12 rounded-full border border-white/20 shrink-0 hidden md:block" 
                       style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
                     />
+                    <div className="bg-black/40 rounded p-1 shrink-0 border border-white/5">
+                      <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                    </div>
                     <div>
                       <h3 className="text-lg font-bold text-white leading-tight">{l.name}</h3>
                     </div>
@@ -168,7 +188,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                     <button 
                       onClick={() => buyLivery(l.id, l.price)}
                       disabled={!canAfford}
-                      className="px-4 py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30"
+                      className="px-4 py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 shrink-0 whitespace-nowrap"
                     >
                       {l.price} ⟁
                     </button>

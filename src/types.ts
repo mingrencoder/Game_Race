@@ -130,6 +130,7 @@ export type CarState = {
   driftSpeed: number;
   acceleration: number;
   vehicleType?: string;
+  vehicleName?: string;
   liveryData?: { isGradient: boolean; colors: string[] };
   isDriftingFlag?: boolean;
 };

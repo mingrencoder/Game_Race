@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { GarageData } from '../types';
 import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, BASIC_COLORS } from '../constants';
+import VehiclePreview from './VehiclePreview';
+import { Cpu, Wind, Zap, Gauge, CircleDot } from 'lucide-react';
 
 interface GarageProps {
   garage: GarageData;
@@ -30,6 +32,15 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   };
 
   const equipLivery = (val: string) => setGarage(g => ({ ...g, equippedLivery: val }));
+
+  const getItemIcon = (type: string) => {
+    if (type === 'engine') return <Cpu size={32} className="text-[#00f2ff]" />;
+    if (type === 'tires') return <CircleDot size={32} className="text-[#ff00ea]" />;
+    if (type === 'acceleration') return <Zap size={32} className="text-[#f4ff40]" />;
+    if (type === 'launch') return <Gauge size={32} className="text-[#00ff00]" />;
+    if (type === 'drift') return <Wind size={32} className="text-[#ff2222]" />;
+    return <Cpu size={32} />;
+  };
 
   const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
   const engineBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.speedBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.boostValue || 0;
@@ -107,14 +118,17 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
               if (!v) return null;
               const isEquipped = garage.equippedVehicle === v.id;
               return (
-                <div key={v.id} className={`neon-panel p-4 flex justify-between items-center transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
+                <div key={v.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
+                  <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
+                    <VehiclePreview vehicleType={v.type} width={120} height={120} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
+                  </div>
                   <div>
                     <h3 className="text-xl font-bold text-white mb-1">{v.name}</h3>
                     <p className="text-xs text-zinc-400">极速: {v.baseSpeed} | 抓地: {v.baseGrip}</p>
                   </div>
                   <button 
                     onClick={() => equipVehicle(v.id)}
-                    className={`px-4 py-2 rounded font-bold ${isEquipped ? 'bg-white text-black' : 'bg-white/10 text-white'}`}
+                    className={`w-full py-2 rounded font-bold ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                   >
                     {isEquipped ? '驾驭中' : '出战'}
                   </button>
@@ -160,6 +174,9 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
                       return (
                         <div key={item.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 w-64 shrink-0 snap-center ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.15)]' : ''}`}>
+                          <div className="flex justify-center items-center h-20 bg-black/40 rounded-lg border border-white/5 shadow-inner">
+                            {getItemIcon(item.type)}
+                          </div>
                           <div>
                             <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
                             <p className="text-xs text-accent-yellow">{boostDesc}</p>
@@ -212,11 +229,16 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                       onClick={() => equipLivery(l.id)}
                       className={`neon-panel p-4 flex flex-col items-center gap-2 transition-all ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.3)]' : 'hover:border-white/30'}`}
                     >
-                      <div 
-                        className="w-16 h-16 rounded-full border border-white/20" 
-                        style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
-                      />
-                      <span className="font-bold text-sm text-center">{l.name}</span>
+                      <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
+                        <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-4 h-4 rounded-full border border-white/20 inline-block align-middle mr-2" 
+                          style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
+                        />
+                        <span className="font-bold text-sm text-center align-middle">{l.name}</span>
+                      </div>
                     </button>
                   );
                 })}

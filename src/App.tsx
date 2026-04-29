@@ -1,25 +1,51 @@
 import React, { useState } from 'react';
 import { GameSettings, CarState, AIDifficulty, GameMode, GarageData, LapRecord, AIStyle, TeamSetup } from './types';
-import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from './constants';
+import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES } from './constants';
 import GameCanvas from './components/GameCanvas';
 
-const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): TeamSetup[] => {
+const getRandomAiName = () => AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
+
+const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2, isEliteMode?: boolean): TeamSetup[] => {
   const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
   const roster: TeamSetup[] = [];
   
   // Create AI that fits the difficulty level roughly
   const createRandomAI = (id: string, name: string, team: 'RED' | 'BLUE'): TeamSetup => {
-    const availableVehicles = VEHICLES_DB; 
+    let availableVehicles = VEHICLES_DB;
+    if (isEliteMode) {
+      availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
+    } else {
+      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
+      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= 800 && v.price <= 1500);
+      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= 1500 && v.price <= 3000);
+      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= 2000);
+    }
+    
+    if (availableVehicles.length === 0) availableVehicles = VEHICLES_DB;
+
     const v = availableVehicles[Math.floor(Math.random() * availableVehicles.length)];
     
-    // Higher probability of having upgrades at higher difficulty
-    const probUpgrade = difficulty * 0.25; 
+    const probUpgrade = isEliteMode ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
+    const isTopTierUpgrade = isEliteMode || difficulty === 4;
+
     const hasEngine = Math.random() < probUpgrade;
     const hasTires = Math.random() < probUpgrade;
     
     const hasLivery = Math.random() > 0.5;
     const engines = ITEMS_DB.filter(i => i.type === 'engine');
     const tires = ITEMS_DB.filter(i => i.type === 'tires');
+
+    const getEngine = () => {
+      if (!hasEngine) return null;
+      if (isTopTierUpgrade) return engines[engines.length - 1].id;
+      return engines[Math.floor(Math.random() * (engines.length - 1))].id;
+    }
+
+    const getTires = () => {
+      if (!hasTires) return null;
+      if (isTopTierUpgrade) return tires[tires.length - 1].id;
+      return tires[Math.floor(Math.random() * (tires.length - 1))].id;
+    }
     
     const style = styles[Math.floor(Math.random() * styles.length)];
     
@@ -27,8 +53,8 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): 
       id,
       name,
       vehicleId: v.id,
-      engineId: hasEngine ? engines[Math.floor(Math.random() * engines.length)].id : null,
-      tiresId: hasTires ? tires[Math.floor(Math.random() * tires.length)].id : null,
+      engineId: getEngine(),
+      tiresId: getTires(),
       liveryId: hasLivery ? LIVERIES_DB[Math.floor(Math.random() * LIVERIES_DB.length)].id : null,
       style,
       team,
@@ -36,15 +62,81 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): 
   };
 
   for (let i = 0; i < teamSize - 1; i++) {
-    roster.push(createRandomAI(`red_ai_${i+1}`, `R-BOT ${i+1}`, 'RED'));
+    roster.push(createRandomAI(`red_ai_${i+1}`, getRandomAiName(), 'RED'));
   }
   
   for (let i = 0; i < teamSize; i++) {
-    roster.push(createRandomAI(`blue_ai_${i+1}`, `B-BOT ${i+1}`, 'BLUE'));
+    roster.push(createRandomAI(`blue_ai_${i+1}`, getRandomAiName(), 'BLUE'));
   }
 
   return roster;
 };
+
+const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteMode?: boolean) => {
+  const seeds = [];
+  const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
+  
+  for (let i = 0; i < count; i++) {
+    let availableVehicles = VEHICLES_DB;
+    if (isEliteMode) {
+      availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
+    } else {
+      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
+      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= 800 && v.price <= 1500);
+      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= 1500 && v.price <= 3000);
+      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= 2000);
+    }
+    
+    if (availableVehicles.length === 0) availableVehicles = VEHICLES_DB;
+    
+    const randomBaseVehicle = availableVehicles[Math.floor(Math.random() * availableVehicles.length)];
+    
+    const probUpgrade = isEliteMode ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
+    const isTopTierUpgrade = isEliteMode || difficulty === 4;
+
+    const hasEngine = Math.random() < probUpgrade;
+    const hasTires = Math.random() < probUpgrade;
+
+    const engines = ITEMS_DB.filter(item => item.type === 'engine');
+    const tiresOptions = ITEMS_DB.filter(item => item.type === 'tires');
+
+    const getEngine = () => {
+      if (!hasEngine) return null;
+      if (isTopTierUpgrade) return engines[engines.length - 1];
+      return engines[Math.floor(Math.random() * (engines.length - 1))];
+    }
+
+    const getTires = () => {
+      if (!hasTires) return null;
+      if (isTopTierUpgrade) return tiresOptions[tiresOptions.length - 1];
+      return tiresOptions[Math.floor(Math.random() * (tiresOptions.length - 1))];
+    }
+
+    const randomEngine = getEngine();
+    const randomTire = getTires();
+    
+    const hasLivery = Math.random() > 0.6;
+    
+    let randomLivery: any = undefined;
+    let pColor: string;
+    
+    if (isEliteMode) {
+      randomLivery = { isGradient: true, colors: [`hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`] };
+      pColor = '#ffffff';
+    } else {
+      randomLivery = hasLivery ? LIVERIES_DB[Math.floor(Math.random() * LIVERIES_DB.length)] : undefined;
+      pColor = randomLivery ? '#ffffff' : `hsl(${Math.random()*360}, 100%, 50%)`;
+    }
+
+    const aiStyle = styles[Math.floor(Math.random() * styles.length)];
+    const speedVar = (Math.random() - 0.5) * 0.4;
+    const gripVar = (Math.random() - 0.5) * 0.02;
+    const name = getRandomAiName();
+    seeds.push({ name, randomBaseVehicle, randomEngine, randomTire, randomLivery, pColor, aiStyle, speedVar, gripVar });
+  }
+  return seeds;
+};
+
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
 import { Trophy, Volume2, VolumeX } from 'lucide-react';
@@ -97,6 +189,7 @@ export default function App() {
     aiDifficulty: AIDifficulty.MEDIUM,
     trackId: 'oval',
     teamRoster: generateTeamRoster(),
+    aiRosterSeeds: generateAiRosterSeeds(1, AIDifficulty.MEDIUM),
     laps: 2,
     teamSize: 3,
   });
@@ -169,6 +262,7 @@ export default function App() {
         return;
       } else {
         // Cup is active and we want to start the actual race
+        setNewRecordInfo(null);
         setSettings(s => ({ ...s, trackId: cupState.tracks[cupState.currentRaceIndex] }));
         audioService.startBGM(cupState.tracks[cupState.currentRaceIndex]);
         setGameState('PLAYING');
@@ -203,6 +297,7 @@ export default function App() {
         const playerName = car.id === 'p1' ? '玩家 1' : '玩家 2';
         
         if (car.finishTime < bestPreviousTime) {
+          brokeRecord = true;
           setNewRecordInfo({
              playerName,
              oldTime: bestPreviousTime,
@@ -222,7 +317,7 @@ export default function App() {
       }
     });
 
-    if (!newRecordInfo && brokeRecord === false) {
+    if (!brokeRecord) {
        setNewRecordInfo(null);
     }
 
@@ -316,6 +411,9 @@ export default function App() {
 
   const handleExit = () => {
     audioService.stopBGM();
+    setCupState(null);
+    setScores({});
+    setTeamScore(null);
     setGameState('MENU');
   };
 
@@ -397,7 +495,7 @@ export default function App() {
                   <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">模式选择</span>
                   <div className="flex gap-[10px]">
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'SINGLE' }))}
+                      onClick={() => setSettings(s => ({ ...s, mode: 'SINGLE', aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, s.isEliteMode) }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                         settings.mode === 'SINGLE' 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -407,7 +505,7 @@ export default function App() {
                       单人模式
                     </button>
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'DOUBLE', aiCount: Math.min(s.aiCount, 4) }))}
+                      onClick={() => setSettings(s => ({ ...s, mode: 'DOUBLE', aiCount: Math.min(s.aiCount, 4), aiRosterSeeds: generateAiRosterSeeds(Math.min(s.aiCount, 4), s.aiDifficulty, s.isEliteMode) }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                         settings.mode === 'DOUBLE' 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -442,7 +540,7 @@ export default function App() {
                         {Array.from({length: settings.mode === 'SINGLE' ? 6 : 5}).map((_, count) => (
                           <button 
                             key={count}
-                            onClick={() => setSettings(s => ({ ...s, aiCount: count }))}
+                            onClick={() => setSettings(s => ({ ...s, aiCount: count, aiRosterSeeds: generateAiRosterSeeds(count, s.aiDifficulty, s.isEliteMode) }))}
                             className={`flex-1 min-w-[30px] p-[5px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                               settings.aiCount === count 
                               ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -474,28 +572,68 @@ export default function App() {
                         ))}
                       </div>
 
-                      <div className="flex justify-between mb-[5px] text-[13px]">
-                        <span>AI 难度</span>
-                        <span className="text-accent-magenta">
-                          {settings.aiDifficulty === 1 && '入门级'}
-                          {settings.aiDifficulty === 2 && '进阶级'}
-                          {settings.aiDifficulty === 3 && '专家级'}
-                          {settings.aiDifficulty === 4 && '专业级'} (LV {settings.aiDifficulty})
-                        </span>
+                      <div className="flex justify-between mb-[5px] text-[13px] items-center">
+                        <div className="flex flex-col">
+                          <span>AI 难度</span>
+                          <span className="text-accent-magenta text-[10px]">
+                            {settings.aiDifficulty === 1 && '入门级'}
+                            {settings.aiDifficulty === 2 && '进阶级'}
+                            {settings.aiDifficulty === 3 && '专家级'}
+                            {settings.aiDifficulty === 4 && '专业级'} (LV {settings.aiDifficulty})
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => setSettings(s => ({ ...s, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, s.isEliteMode) }))}
+                            className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition-colors text-[11px]"
+                          >
+                            随机车手
+                          </button>
+                          <button 
+                            onClick={() => setSettings(s => ({ ...s, isEliteMode: !s.isEliteMode, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, !s.isEliteMode) }))}
+                            className={`px-3 py-1.5 rounded transition-colors text-[11px] ${settings.isEliteMode ? 'bg-accent-magenta text-white font-bold shadow-[0_0_10px_rgba(255,0,234,0.5)]' : 'bg-white/10 hover:bg-white/20'}`}
+                          >
+                            精英赛
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-[5px] mt-[10px]">
-                        {[1, 2, 3, 4].map(level => (
-                          <button
-                            key={level}
-                            onClick={() => setSettings(s => ({ ...s, aiDifficulty: level }))}
-                            className={`h-[6px] flex-1 rounded-[2px] transition-all ${
-                              settings.aiDifficulty >= level 
-                              ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
-                              : 'bg-white/10 hover:bg-white/20'
-                            }`}
-                          />
-                        ))}
-                      </div>
+                      
+                      {!settings.isEliteMode && (
+                        <div className="flex gap-[5px] mt-[10px]">
+                          {[1, 2, 3, 4].map(level => (
+                            <button
+                              key={level}
+                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, level, s.isEliteMode) }))}
+                              className={`h-[6px] flex-1 rounded-[2px] transition-all ${
+                                settings.aiDifficulty >= level 
+                                ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
+                                : 'bg-white/10 hover:bg-white/20'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {settings.aiCount > 0 && (
+                        <div className="mt-4 pt-4 border-t border-white/10 text-xs text-left">
+                          <div className="text-zinc-500 mb-2 font-bold">参赛名单预览:</div>
+                          <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1">
+                            {settings.aiRosterSeeds.map((seed: any, idx) => (
+                              <div key={idx} className="flex justify-between items-center bg-white/5 p-1.5 rounded">
+                                <span className="font-bold flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: seed.pColor }}></span>
+                                  {seed.name || `AI ${idx+1}`}
+                                </span>
+                                <span className="opacity-70 text-[10px] text-right">
+                                  {seed.randomBaseVehicle?.name}
+                                  {seed.randomEngine ? ` + ${seed.randomEngine.name.split(' ')[0]}` : ''}
+                                  {seed.randomTire ? ` + 胎` : ''}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <>
@@ -503,25 +641,25 @@ export default function App() {
                          <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta font-bold">队伍配置</span>
                          <div className="flex gap-[5px] text-[12px]">
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamSize: 2, teamRoster: generateTeamRoster(2, s.aiDifficulty) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamSize: 2, teamRoster: generateTeamRoster(2, s.aiDifficulty, s.isEliteMode) }))}
                              className={`px-2 py-1 rounded transition-colors ${settings.teamSize === 2 ? 'bg-accent-cyan text-black font-bold' : 'bg-white/10 hover:bg-white/20'}`}
                            >
                              2v2
                            </button>
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamSize: 3, teamRoster: generateTeamRoster(3, s.aiDifficulty) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamSize: 3, teamRoster: generateTeamRoster(3, s.aiDifficulty, s.isEliteMode) }))}
                              className={`px-2 py-1 rounded transition-colors ${settings.teamSize === 3 ? 'bg-accent-cyan text-black font-bold' : 'bg-white/10 hover:bg-white/20'}`}
                            >
                              3v3
                            </button>
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty, s.isEliteMode) }))}
                              className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded ml-2"
                            >
                              随机阵容
                            </button>
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, isEliteMode: !s.isEliteMode }))}
+                             onClick={() => setSettings(s => ({ ...s, isEliteMode: !s.isEliteMode, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty, !s.isEliteMode) }))}
                              className={`px-2 py-1 rounded transition-colors text-[10px] ml-2 ${settings.isEliteMode ? 'bg-accent-magenta text-white font-bold shadow-[0_0_10px_rgba(255,0,234,0.5)]' : 'bg-white/10 hover:bg-white/20'}`}
                            >
                              精英赛
@@ -561,7 +699,7 @@ export default function App() {
                           {[1, 2, 3, 4].map(level => (
                             <button
                               key={level}
-                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level, teamRoster: generateTeamRoster(s.teamSize, level) }))}
+                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level, teamRoster: generateTeamRoster(s.teamSize, level, s.isEliteMode) }))}
                               className={`h-[6px] flex-1 rounded-[2px] transition-all ${
                                 settings.aiDifficulty >= level 
                                 ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
@@ -573,22 +711,48 @@ export default function App() {
                       </>
                     )}
 
-                      <div className="space-y-4">
+                      <div className="mt-4 pt-4 border-t border-white/10 space-y-4 text-xs font-mono">
                         <div>
-                           <div className="text-red-400 font-bold mb-1 border-b border-red-500/30 pb-1 text-xs">红队 (你的队伍)</div>
-                           <div className="text-xs text-white/80">
-                              - 玩家 1 (P1)<br/>
-                              {settings.teamRoster.filter(r => r.team === 'RED').map(r => (
-                                <div key={r.id}>- {r.name} [{r.style}]</div>
-                              ))}
+                           <div className="text-[#ff0055] font-bold mb-2 border-b border-[#ff0055]/30 pb-1 text-xs">红队 (玩家阵营)</div>
+                           <div className="text-[11px] text-white/80 space-y-1">
+                              <div className="flex justify-between items-center bg-white/5 p-1 rounded">
+                                <span>- 玩家 1 (你)</span>
+                              </div>
+                                {settings.teamRoster.filter(r => r.team === 'RED').map((r, idx) => {
+                                 const v = VEHICLES_DB.find(v => v.id === r.vehicleId);
+                                 const e = ITEMS_DB.find(i => i.id === r.engineId);
+                                 const t = ITEMS_DB.find(i => i.id === r.tiresId);
+                                 return (
+                                   <div key={r.id} className="flex justify-between items-center bg-white/5 p-1 rounded">
+                                     <span>- {r.name}</span>
+                                     <span className="opacity-70 text-[10px] text-right">
+                                      {v?.name} 
+                                      {e ? ` + ${e.name.split(' ')[0]}` : ''}
+                                      {t ? ` + 胎` : ''}
+                                     </span>
+                                   </div>
+                                 );
+                               })}
                            </div>
                         </div>
                         <div>
-                           <div className="text-blue-400 font-bold mb-1 border-b border-blue-500/30 pb-1 text-xs">蓝队</div>
-                           <div className="text-xs text-white/80">
-                              {settings.teamRoster.filter(r => r.team === 'BLUE').map(r => (
-                                <div key={r.id}>- {r.name} [{r.style}]</div>
-                              ))}
+                           <div className="text-accent-cyan font-bold mb-2 border-b border-accent-cyan/30 pb-1 text-xs">蓝队 (对手阵营)</div>
+                           <div className="text-[11px] text-white/80 space-y-1">
+                               {settings.teamRoster.filter(r => r.team === 'BLUE').map((r, idx) => {
+                                 const v = VEHICLES_DB.find(v => v.id === r.vehicleId);
+                                 const e = ITEMS_DB.find(i => i.id === r.engineId);
+                                 const t = ITEMS_DB.find(i => i.id === r.tiresId);
+                                 return (
+                                   <div key={r.id} className="flex justify-between items-center bg-white/5 p-1 rounded">
+                                     <span>- {r.name}</span>
+                                     <span className="opacity-70 text-[10px] text-right">
+                                      {v?.name} 
+                                      {e ? ` + ${e.name.split(' ')[0]}` : ''}
+                                      {t ? ` + 胎` : ''}
+                                     </span>
+                                   </div>
+                                 );
+                               })}
                            </div>
                         </div>
                       </div>
@@ -810,6 +974,38 @@ export default function App() {
               </p>
               
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4 mb-6">
+                {newRecordInfo && (
+                  <motion.div 
+                    initial={{ scale: 0.5, y: -50, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    transition={{ type: 'spring', bounce: 0.6, duration: 1 }}
+                    className="mb-8 p-6 rounded-xl bg-black/80 border-4 border-accent-yellow shadow-[0_0_50px_rgba(244,255,64,0.6)] relative overflow-hidden shrink-0"
+                  >
+                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTAgMjBMMjAgMFEyMCAyMCAwIDIwWiIgZmlsbD0icmdiYSg1OSwgMTMwLCAyNDYsIDAuMSkiLz48L3N2Zz4=')] opacity-50"></div>
+                    <div className="relative z-10">
+                      <p className="text-xl font-black italic text-white mb-2 tracking-wider flex items-center justify-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
+                         <Trophy className="w-6 h-6 text-accent-yellow" />
+                         🎉 新赛道记录！ 🎉
+                      </p>
+                      <div className="flex items-center justify-center gap-4 mt-4 text-sm sm:text-base">
+                         <div className="text-zinc-400 text-center">
+                            <div className="text-[10px] uppercase font-bold tracking-widest mb-1">旧记录</div>
+                            <div className="font-mono">{newRecordInfo.oldTime === Infinity ? '--' : (newRecordInfo.oldTime / 1000).toFixed(2)}s</div>
+                         </div>
+                         <div className="text-accent-yellow scale-150 font-black">➔</div>
+                         <div className="text-white text-center">
+                            <div className="text-[10px] uppercase font-bold tracking-widest mb-1 text-accent-cyan">新纪录</div>
+                            <div className="text-xl font-mono font-black text-accent-cyan">{(newRecordInfo.newTime / 1000).toFixed(2)}s</div>
+                         </div>
+                      </div>
+                      {newRecordInfo.diff > 0 && (
+                        <div className="mt-4 text-accent-yellow font-black text-center animate-pulse text-sm">
+                           提升了 {(newRecordInfo.diff / 1000).toFixed(2)} 秒！
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
                 {settings.mode === 'TEAM' ? (() => {
                   const redScore = cupState.teamWins?.RED || 0;
                   const blueScore = cupState.teamWins?.BLUE || 0;
@@ -836,6 +1032,11 @@ export default function App() {
                      else {
                         const ai = settings.teamRoster.find(r => r.id === id);
                         if (ai) name = ai.name;
+                        else if (id.startsWith('ai')) {
+                           const idx = parseInt(id.replace('ai', ''));
+                           const seed = settings.aiRosterSeeds[idx] as any;
+                           if (seed && seed.name) name = seed.name;
+                        }
                      }
                      return { id, name, score: scores[id] };
                    }).sort((a, b) => b.score - a.score);
@@ -1053,7 +1254,10 @@ export default function App() {
                                </span>
                              )}
                           </div>
-                          {car.aiStyle && <div className="text-[10px] text-zinc-500 uppercase">{car.aiStyle}</div>}
+                          <div className="flex items-center gap-2 mt-1">
+                            {car.vehicleName && <div className="text-[10px] text-accent-magenta border border-accent-magenta/30 bg-accent-magenta/10 px-1 rounded">{car.vehicleName}</div>}
+                            {car.aiStyle && <div className="text-[10px] text-zinc-500 uppercase">{car.aiStyle}</div>}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-6">

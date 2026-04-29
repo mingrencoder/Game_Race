@@ -146,6 +146,100 @@ export const TRACKS: Track[] = [
       { x: 300, y: 1000 },
       { x: 200, y: 600 },
     ],
+  },
+  {
+    id: 'crossover_bridge',
+    name: '极速外环',
+    width: 140,
+    laps: 2,
+    waypoints: [
+      { x: 200, y: 600 },
+      { x: 300, y: 200 },
+      { x: 1300, y: 200 },
+      { x: 1400, y: 600 },
+      { x: 1300, y: 1000 },
+      { x: 300, y: 1000 },
+    ],
+  },
+  {
+    id: 'neon_labyrinth',
+    name: '霓虹回廊',
+    width: 140,
+    laps: 2,
+    waypoints: [
+      { x: 200, y: 200 },
+      { x: 1400, y: 200 },
+      { x: 1400, y: 500 },
+      { x: 400, y: 500 },
+      { x: 400, y: 800 },
+      { x: 1400, y: 800 },
+      { x: 1400, y: 1050 },
+      { x: 200, y: 1050 },
+    ]
+  },
+  {
+    id: 'star_breaker',
+    name: '尖角峡谷',
+    width: 150,
+    laps: 3,
+    waypoints: [
+      { x: 800, y: 150 },
+      { x: 1100, y: 400 },
+      { x: 1450, y: 300 },
+      { x: 1200, y: 700 },
+      { x: 1400, y: 1050 },
+      { x: 800, y: 800 },
+      { x: 200, y: 1050 },
+      { x: 400, y: 700 },
+      { x: 150, y: 300 },
+      { x: 500, y: 400 }
+    ]
+  },
+  {
+    id: 'vortex',
+    name: '深渊U谷',
+    width: 140,
+    laps: 2,
+    waypoints: [
+      { x: 200, y: 200 },
+      { x: 1400, y: 200 },
+      { x: 1400, y: 1000 },
+      { x: 1000, y: 1000 },
+      { x: 1000, y: 600 },
+      { x: 600, y: 600 },
+      { x: 600, y: 1000 },
+      { x: 200, y: 1000 },
+    ]
+  },
+  {
+    id: 'butterfly',
+    name: '云端双翼',
+    width: 140,
+    laps: 2,
+    waypoints: [
+      { x: 800, y: 400 },
+      { x: 1300, y: 200 },
+      { x: 1400, y: 600 },
+      { x: 1300, y: 1000 },
+      { x: 800, y: 800 }, 
+      { x: 300, y: 1000 },
+      { x: 200, y: 600 },
+      { x: 300, y: 200 },
+    ]
+  },
+  {
+    id: 'zenith_loop',
+    name: '天顶之环',
+    width: 150,
+    laps: 3,
+    waypoints: [
+      { x: 800, y: 1050 },
+      { x: 1400, y: 600 },
+      { x: 1100, y: 200 },
+      { x: 800, y: 500 }, 
+      { x: 500, y: 200 },
+      { x: 200, y: 600 },
+    ]
   }
 ];
 
@@ -161,11 +255,13 @@ export const PHYSICS = {
 };
 
 export const AI_CONFIG = {
-  1: { maxSpeed: 4.5, steerAccuracy: 0.1, lookAhead: 100 }, // Easy
-  2: { maxSpeed: 6.0, steerAccuracy: 0.05, lookAhead: 150 }, // Medium
-  3: { maxSpeed: 7.5, steerAccuracy: 0.02, lookAhead: 200 }, // Hard
-  4: { maxSpeed: 9.0, steerAccuracy: 0.01, lookAhead: 250 }, // Expert
+  1: { maxSpeed: 5.0, steerAccuracy: 0.1, lookAhead: 120 }, // Easy
+  2: { maxSpeed: 7.0, steerAccuracy: 0.05, lookAhead: 160 }, // Medium
+  3: { maxSpeed: 9.0, steerAccuracy: 0.02, lookAhead: 220 }, // Hard
+  4: { maxSpeed: 11.5, steerAccuracy: 0.01, lookAhead: 260 }, // Expert
 };
+
+export const AI_NAMES = ['影风', '雷霆', '闪电', '狂飙', '夜煞', '暗影', '破空', '逐风', '极光', '魅影', '战神', '飞火', '龙卷', '星火', '陨石', '白虎', '青龙', '朱雀', '玄武'];
 
 export const BASIC_COLORS = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff2222'];
 
@@ -173,7 +269,11 @@ export const VEHICLES_DB = [
   { id: 'car_basic', name: '新星-V1', type: 'standard', price: 0, baseSpeed: 9.0, baseGrip: 0.15, baseLaunch: 2.0, baseDriftSpeed: 6.0, baseAcceleration: 0.15 },
   { id: 'car_speed', name: '极速先锋', type: 'f1', price: 800, baseSpeed: 10.5, baseGrip: 0.13, baseLaunch: 2.5, baseDriftSpeed: 5.5, baseAcceleration: 0.18 },
   { id: 'car_drift', name: '漂移幽灵', type: 'muscle', price: 1000, baseSpeed: 9.5, baseGrip: 0.18, baseLaunch: 1.8, baseDriftSpeed: 8.0, baseAcceleration: 0.14 },
-  { id: 'car_tank', name: '重装铠甲', type: 'tank', price: 1200, baseSpeed: 8.5, baseGrip: 0.22, baseLaunch: 3.5, baseDriftSpeed: 5.0, baseAcceleration: 0.12 }
+  { id: 'car_tank', name: '重装铠甲', type: 'tank', price: 1200, baseSpeed: 8.5, baseGrip: 0.22, baseLaunch: 3.5, baseDriftSpeed: 5.0, baseAcceleration: 0.12 },
+  { id: 'car_ninja', name: '暗影忍者', type: 'ninja', price: 1500, baseSpeed: 11.0, baseGrip: 0.12, baseLaunch: 2.8, baseDriftSpeed: 6.5, baseAcceleration: 0.20 },
+  { id: 'car_cyber', name: '赛博狂潮', type: 'cyber', price: 2000, baseSpeed: 10.0, baseGrip: 0.17, baseLaunch: 2.2, baseDriftSpeed: 9.5, baseAcceleration: 0.16 },
+  { id: 'car_boss', name: '机械领主', type: 'boss', price: 3000, baseSpeed: 11.5, baseGrip: 0.25, baseLaunch: 4.0, baseDriftSpeed: 7.0, baseAcceleration: 0.19 },
+  { id: 'car_legend', name: '不朽传说', type: 'legend', price: 5000, baseSpeed: 13.0, baseGrip: 0.20, baseLaunch: 3.0, baseDriftSpeed: 8.5, baseAcceleration: 0.22 }
 ];
 
 export const ITEMS_DB = [

@@ -27,26 +27,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
   const track = TRACKS.find((t) => t.id === settings.trackId) || TRACKS[0];
 
-  // Persist randomized AI opponent properties across restarts within the same session
-  const aiRosterSeeds = useMemo(() => {
-    const seeds = [];
-    if (settings.mode === 'TEAM') {
-      // Using team roster, no extra random properties needed to be saved except initial variant
-      seeds.push(1);
-    } else {
-      for (let i = 0; i < settings.aiCount; i++) {
-        const randomBaseVehicle = VEHICLES_DB[Math.floor(Math.random() * VEHICLES_DB.length)];
-        const randomEngine = Math.random() > 0.5 ? ITEMS_DB.filter(item => item.type === 'engine')[Math.floor(Math.random() * 3)] : null;
-        const randomTire = Math.random() > 0.5 ? ITEMS_DB.filter(item => item.type === 'tires')[Math.floor(Math.random() * 3)] : null;
-        const hasLivery = Math.random() > 0.6;
-        const randomLivery = hasLivery ? LIVERIES_DB[Math.floor(Math.random() * LIVERIES_DB.length)] : undefined;
-        const speedVar = (Math.random() - 0.5) * 0.4;
-        const gripVar = (Math.random() - 0.5) * 0.02;
-        seeds.push({ randomBaseVehicle, randomEngine, randomTire, randomLivery, speedVar, gripVar });
-      }
-    }
-    return seeds;
-  }, [settings]);
+  // AI Roster Seeds are now passed from App.tsx via settings.aiRosterSeeds
+  const aiRosterSeeds = settings.aiRosterSeeds || [];
 
   // Initialize cars
   useEffect(() => {
@@ -93,7 +75,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
     const p1Vehicle = isSingleOrTeam ? (VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0]) : VEHICLES_DB[0];
     let p1MaxSpeed = isSingleOrTeam ? p1Vehicle.baseSpeed : VEHICLES_DB[0].baseSpeed;
     let p1Grip = isSingleOrTeam ? p1Vehicle.baseGrip : VEHICLES_DB[0].baseGrip;
-    let p1Launch = isSingleOrTeam ? p1Vehicle.baseLaunch : VEHICLES_DB[0].baseLaunch;
+    let p1Launch = 0; // Initialize launch to 0, only items add launch boost
     let p1DriftSpeed = isSingleOrTeam ? p1Vehicle.baseDriftSpeed : VEHICLES_DB[0].baseDriftSpeed;
     let p1Acceleration = isSingleOrTeam ? (p1Vehicle.baseAcceleration || PHYSICS.ACCELERATION) : PHYSICS.ACCELERATION;
     
@@ -149,13 +131,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
       driftSpeed: p1DriftSpeed,
       acceleration: p1Acceleration,
       vehicleType: isSingleOrTeam ? p1Vehicle.type : 'standard',
+      vehicleName: isSingleOrTeam ? p1Vehicle.name : VEHICLES_DB[0].name,
       liveryData: p1LiveryData ? { isGradient: p1LiveryData.isGradient, colors: p1LiveryData.colors } : undefined,
       team: settings.mode === 'TEAM' ? 'RED' : undefined,
     });
-
-    const aiNames = ['影风', '雷霆', '闪电', '狂飙', '夜煞', '暗影', '破空', '逐风', '极光', '魅影', '战神', '飞火'];
-    let aiNameIndex = 0;
-    const getAiName = () => aiNames[(aiNameIndex++) % aiNames.length];
 
     // Player 2
     if (settings.mode === 'DOUBLE') {
@@ -179,10 +158,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         maxSpeed: VEHICLES_DB[0].baseSpeed,
         grip: VEHICLES_DB[0].baseGrip,
         driftGrip: VEHICLES_DB[0].baseGrip * 0.2,
-        launch: VEHICLES_DB[0].baseLaunch,
+        launch: 0,
         driftSpeed: VEHICLES_DB[0].baseDriftSpeed,
         acceleration: VEHICLES_DB[0].baseAcceleration || PHYSICS.ACCELERATION,
-        vehicleType: 'standard'
+        vehicleType: 'standard',
+        vehicleName: VEHICLES_DB[0].name
       });
     }
 
@@ -197,18 +177,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
         let aiMaxSpeed = baseV.baseSpeed + (engine?.speedBoost || engine?.boostValue || 0);
         let aiGrip = baseV.baseGrip + (tire?.gripBoost || tire?.boostValue || 0);
-        let aiLaunch = baseV.baseLaunch;
+        let aiLaunch = baseV.baseLaunch || 0;
         let aiDriftSpeed = baseV.baseDriftSpeed;
         let aiAcceleration = baseV.baseAcceleration || PHYSICS.ACCELERATION;
         let aiLiveryData = livery ? { isGradient: livery.isGradient, colors: livery.colors } : undefined;
 
         if (settings.isEliteMode) {
-          // Elite Mode: Max out stats heavily and force optimal play style
-          aiMaxSpeed = baseV.baseSpeed + 4.5;
-          aiGrip = baseV.baseGrip + 0.20; // Extreme grip to handle the extreme speed
-          aiLaunch = baseV.baseLaunch + 4.0;
-          aiDriftSpeed = baseV.baseDriftSpeed * 2.0;
-          aiAcceleration = PHYSICS.ACCELERATION * 1.5;
           aiLiveryData = rosterAI.team === 'RED' 
             ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] }
             : { isGradient: true, colors: ['#00f0ff', '#0055ff', '#00f0ff'] };
@@ -221,7 +195,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
         initialCars.push({
           id: rosterAI.id,
-          name: rosterAI.id.startsWith('TEAM_') ? `[蓝]${getAiName()}` : `[红]${getAiName()}`,
+          name: rosterAI.team === 'BLUE' ? `[蓝]${rosterAI.name}` : `[红]${rosterAI.name}`,
           isAI: true,
           x: aiPos.x,
           y: aiPos.y,
@@ -241,6 +215,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
           driftSpeed: aiDriftSpeed,
           acceleration: aiAcceleration,
           vehicleType: baseV.type,
+          vehicleName: baseV.name,
           liveryData: aiLiveryData,
           team: rosterAI.team,
           aiStyle: rosterAI.style,
@@ -255,21 +230,38 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         const randomTire = seed.randomTire;
         const randomLivery = seed.randomLivery;
         
-        let aiMaxSpeed = Math.min(randomBaseVehicle.baseSpeed + (randomEngine?.speedBoost || randomEngine?.boostValue || 0), AI_CONFIG[settings.aiDifficulty].maxSpeed * 1.2);
-        // Ensure AI doesn't get ridiculously fast on easy mode
-        if (settings.aiDifficulty <= 2) aiMaxSpeed = AI_CONFIG[settings.aiDifficulty].maxSpeed; // clamp to standard for easy
-        
-        // Add tiny variance to prevent exactly identical performances
-        aiMaxSpeed += seed.speedVar;
+        let aiMaxSpeed = randomBaseVehicle.baseSpeed + (randomEngine?.speedBoost || randomEngine?.boostValue || 0);
         
         let aiGrip = randomBaseVehicle.baseGrip + (randomTire?.gripBoost || randomTire?.boostValue || 0);
         aiGrip += seed.gripVar;
+
+        let aiLaunch = randomBaseVehicle.baseLaunch || 0;
+        let aiDriftSpeed = randomBaseVehicle.baseDriftSpeed;
+        let aiAcceleration = randomBaseVehicle.baseAcceleration || PHYSICS.ACCELERATION;
+
+        // Ensure AI gets a base speed boost depending on difficulty level
+        if (settings.aiDifficulty === 3) aiMaxSpeed += 1.0;
+        if (settings.aiDifficulty === 4) {
+          aiMaxSpeed += 2.0;
+          aiGrip += 0.05;
+          aiAcceleration += 0.02;
+        }
+
+        // Add tiny variance to prevent exactly identical performances
+        aiMaxSpeed += seed.speedVar;
         
-        const pColor = randomLivery ? '#ffffff' : getUniqueColor();
+        if (settings.isEliteMode) {
+          aiMaxSpeed += 2.5; 
+          aiGrip += 0.05;
+          aiAcceleration += 0.05;
+          aiLaunch += 1.0;
+        }
+        
+        const pColor = seed.pColor || (randomLivery ? '#ffffff' : getUniqueColor());
 
         initialCars.push({
           id: `ai${i}`,
-          name: getAiName(),
+          name: seed.name || `AI ${i+1}`,
           isAI: true,
           x: aiPos.x,
           y: aiPos.y,
@@ -285,12 +277,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
           maxSpeed: aiMaxSpeed,
           grip: aiGrip,
           driftGrip: aiGrip * 0.2,
-          launch: randomBaseVehicle.baseLaunch,
-          driftSpeed: randomBaseVehicle.baseDriftSpeed,
-          acceleration: randomBaseVehicle.baseAcceleration || PHYSICS.ACCELERATION,
+          launch: aiLaunch,
+          driftSpeed: aiDriftSpeed,
+          acceleration: aiAcceleration,
           vehicleType: randomBaseVehicle.type,
+          vehicleName: randomBaseVehicle.name,
           liveryData: randomLivery ? { isGradient: randomLivery.isGradient, colors: randomLivery.colors } : undefined,
-          aiStyle: 'OPTIMAL'
+          aiStyle: seed.aiStyle || 'OPTIMAL'
         });
       }
     }
@@ -380,6 +373,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
     setGameTime((prev) => prev + deltaTime);
 
+    const dtScale = Math.min(4, Math.max(0.1, deltaTime / 16.666));
+
     setCars((prevCars) => {
       const newCars = prevCars.map((car) => {
         if (car.finished) return car;
@@ -389,11 +384,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         // Controls
         let accelerate = false;
         let brake = false;
+        let pureBrake = false;
         let left = false;
         let right = false;
         let drift = false;
         let currentStuckFrames = car.stuckFrames || 0;
-        let currentReversingFrames = car.reversingFrames || 0;
         let isDriftingFlag = false;
 
         if (!car.isAI) {
@@ -403,6 +398,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             left = keysPressed.current.has('ArrowLeft');
             right = keysPressed.current.has('ArrowRight');
             drift = keysPressed.current.has('ShiftLeft') || keysPressed.current.has('ShiftRight');
+            pureBrake = keysPressed.current.has('Enter') || keysPressed.current.has('Space');
             
             // Allow WASD for Player 1 if not in DOUBLE mode
             if (settings.mode !== 'DOUBLE') {
@@ -410,15 +406,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
               brake = brake || keysPressed.current.has('KeyS');
               left = left || keysPressed.current.has('KeyA');
               right = right || keysPressed.current.has('KeyD');
-              drift = drift || keysPressed.current.has('Space');
+              // Q or E or Shift for drift in WASD single
+              drift = drift || keysPressed.current.has('KeyQ') || keysPressed.current.has('KeyE');
             }
           } else {
             // Player 2 controls (WASD)
             accelerate = keysPressed.current.has('KeyW');
             brake = keysPressed.current.has('KeyS');
             left = keysPressed.current.has('KeyA');
-            right = keysPressed.current.has('KeyD');
-            drift = keysPressed.current.has('Space');
+            right = right || keysPressed.current.has('KeyD');
+            pureBrake = keysPressed.current.has('Space');
+            drift = keysPressed.current.has('KeyQ') || keysPressed.current.has('KeyE');
           }
         } else {
           // AI Logic
@@ -493,40 +491,35 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
               tY = tY * (1 - blend) + t2Y * blend;
           }
 
-          if (currentStuckFrames > 40) {
+          if (currentStuckFrames > 20) {
             // Fallback: target absolute center of track to get unstuck
             tX = p1.x;
             tY = p1.y;
+            
+            // Magic rotation and pull to help unstuck from walls
+            if (currentStuckFrames > 30) {
+               let angleDiffToTarget = Math.atan2(tY - y, tX - x) - angle;
+               while (angleDiffToTarget > Math.PI) angleDiffToTarget -= Math.PI * 2;
+               while (angleDiffToTarget < -Math.PI) angleDiffToTarget += Math.PI * 2;
+               angle += Math.sign(angleDiffToTarget) * 0.08 * dtScale;
+               
+               // Magically pull the car towards the center of the track (p1) to detach from wall
+               x += Math.cos(Math.atan2(tY - y, tX - x)) * 2 * dtScale;
+               y += Math.sin(Math.atan2(tY - y, tX - x)) * 2 * dtScale;
+            }
           }
 
-          const stuckThreshold = effDiff >= 4 ? 80 : (effDiff === 3 ? 120 : 180); 
-          
           // Complete stuck reset
-          if (currentStuckFrames > stuckThreshold * 8) {
+          if (currentStuckFrames > 120) {
             // Hard reset to the START of the current segment instead of the next one to avoid "flash" forward
             x = p0.x; 
             y = p0.y;
             angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
             speed = 0;
             currentStuckFrames = 0;
-            currentReversingFrames = 0;
-          } else if (currentStuckFrames > stuckThreshold && currentReversingFrames <= 0) {
-            // Only reverse if speed is very low and stuck frames built up
-            if (Math.abs(speed) < 1.0) {
-              currentReversingFrames = 40; 
-              currentStuckFrames = 0; 
-            }
           }
 
           let targetAngle = Math.atan2(tY - y, tX - x);
-          
-          if (currentReversingFrames > 0) {
-             currentReversingFrames -= 1;
-             accelerate = false;
-             brake = true;
-             // Important: when reversing, steer the rear of the car towards the target
-             targetAngle += Math.PI;
-          }
 
           let angleDiff = targetAngle - angle;
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
@@ -541,10 +534,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             else left = true;
           }
 
-          if (currentReversingFrames <= 0) {
-             let brakingAngle = 0.6; 
-             let driftAngle = 0.8; 
-             let driftSpeedRate = 0.6;
+          let brakingAngle = 0.6; 
+          let driftAngle = 0.8; 
+          let driftSpeedRate = 0.6;
              
              if (car.aiStyle === 'AGGRESSIVE') {
                 brakingAngle = 0.8;
@@ -566,7 +558,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
              // AI drifting based on style & difficulty
              const canDrift = effDiff >= 3 || car.aiStyle === 'DRIFTER';
-             if (canDrift && Math.abs(angleDiff) > driftAngle && speed > (car.maxSpeed * driftSpeedRate)) {
+             if (canDrift && Math.abs(angleDiff) > driftAngle && speed > (car.maxSpeed * driftSpeedRate) && distToNext < (track.width * 0.9)) {
                  drift = true;
              } else {
                  drift = false;
@@ -579,26 +571,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
              // Only brake if facing completely the wrong way OR need to slow down for sharp corner
              if (Math.abs(angleDiff) > 1.4) {
                 accelerate = false;
-                brake = true;
+                pureBrake = true;
              }
 
              // Extra braking for sharp turns when not drifting
              if (!drift && Math.abs(angleDiff) > brakingAngle && speed > 4.5) {
                 accelerate = false;
-                brake = true;
+                pureBrake = true;
              }
-          }
         }
 
         // Apply state stats
-        let currentMaxSpeed = car.maxSpeed;
-        let currentGrip = drift ? car.driftGrip : car.grip;
+        let fatigueFactor = 1.0;
 
-        const dtScale = Math.min(4, Math.max(0.1, deltaTime / 16.666));
+        let currentMaxSpeed = car.maxSpeed * fatigueFactor;
+        let currentAcceleration = car.acceleration * fatigueFactor;
+
+        // Slightly lower acceleration if starting to simulate stall/heat
+        if (car.isAI && settings.isEliteMode && gameTime > 30000) {
+           currentAcceleration *= 0.95;
+        }
+
+        let currentGrip = drift ? car.grip * 0.3 : car.grip;
 
         // Apply Physics
         if (accelerate) {
-          speed += car.acceleration * dtScale;
+          speed += currentAcceleration * dtScale;
           // Start acceleration bonus for the first 1.5 seconds
           if (gameTime < 1500) {
               speed += (car.launch * 0.05) * dtScale;
@@ -607,6 +605,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
         if (brake) {
           speed -= PHYSICS.BRAKE * dtScale;
+        }
+
+        if (pureBrake) {
+          if (speed > 0) {
+            // Brake smoothly to 0
+            const brakePower = Math.max(0.05, speed * 0.05); // Gradual slow down
+            speed = Math.max(0, speed - brakePower * dtScale);
+          } else if (speed < 0) {
+            const brakePower = Math.max(0.05, Math.abs(speed) * 0.05);
+            speed = Math.min(0, speed + brakePower * dtScale);
+          }
         }
 
         // Friction
@@ -649,35 +658,64 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         let nextY = y + Math.sin(moveAngle) * speed * dtScale;
 
         // Off-track detection & Wall Collision
-        const { distance, point: closestCenter, minLineIndex } = getClosestPointOnTrack({ x: nextX, y: nextY }, track, currentWaypointIndex);
+        const { distance: mainDist, point: mainClosestCenter, minLineIndex } = getClosestPointOnTrack({ x: nextX, y: nextY }, track, currentWaypointIndex);
         
-        let localTrackWidth = track.width;
-        // Widen start line physically
-        if (minLineIndex === 0 && Math.hypot(nextX - track.waypoints[0].x, nextY - track.waypoints[0].y) < 250) {
-           localTrackWidth += 160; 
-        }
+        const p0x = track.waypoints[0].x;
+        const p0y = track.waypoints[0].y;
+        const p1x = track.waypoints[1].x;
+        const p1y = track.waypoints[1].y;
+        const segDx = p1x - p0x;
+        const segDy = p1y - p0y;
+        const segLen = Math.hypot(segDx, segDy);
+        const wideLength = Math.min(250, segLen);
+        const endX = p0x + (segDx / segLen) * wideLength;
+        const endY = p0y + (segDy / segLen) * wideLength;
 
-        const maxDist = localTrackWidth / 2 - PHYSICS.CAR_SIZE / 2;
-        let isHittingWall = distance > maxDist;
+        const capDx = endX - p0x;
+        const capDy = endY - p0y;
+        const l2 = capDx * capDx + capDy * capDy;
+        let t = 0;
+        if (l2 > 0) {
+           t = Math.max(0, Math.min(1, ((nextX - p0x) * capDx + (nextY - p0y) * capDy) / l2));
+        }
+        const projX = p0x + t * capDx;
+        const projY = p0y + t * capDy;
+        const distToCap = Math.hypot(nextX - projX, nextY - projY);
+        
+        const capMaxDist = (track.width + 160) / 2 - PHYSICS.CAR_SIZE / 2;
+        const mainMaxDist = track.width / 2 - PHYSICS.CAR_SIZE / 2;
+
+        let isHittingWall = mainDist > mainMaxDist && distToCap > capMaxDist;
 
         if (isHittingWall) {
-          // Push back to maxDist
-          const dx = nextX - closestCenter.x;
-          const dy = nextY - closestCenter.y;
-          const len = Math.sqrt(dx * dx + dy * dy);
-          if (len > 0) {
-            nextX = closestCenter.x + (dx / len) * maxDist;
-            nextY = closestCenter.y + (dy / len) * maxDist;
+          const overflowMain = mainDist - mainMaxDist;
+          const overflowCap = distToCap - capMaxDist;
+
+          if (overflowCap < overflowMain) {
+            const dx = nextX - projX;
+            const dy = nextY - projY;
+            const len = Math.hypot(dx, dy);
+            if (len > 0) {
+               nextX = projX + (dx / len) * capMaxDist;
+               nextY = projY + (dy / len) * capMaxDist;
+            }
+          } else {
+            const dx = nextX - mainClosestCenter.x;
+            const dy = nextY - mainClosestCenter.y;
+            const len = Math.hypot(dx, dy);
+            if (len > 0) {
+              nextX = mainClosestCenter.x + (dx / len) * mainMaxDist;
+              nextY = mainClosestCenter.y + (dy / len) * mainMaxDist;
+            }
           }
-          // Reduce speed but don't drop to 0. A 0.975 multiplier balances at ~6.0 max speed
-          speed *= Math.pow(0.975, dtScale); 
+          speed *= Math.pow(0.96, dtScale); 
         }
 
         // Accurate stuck detection: Check if car actually moved
         let actualMoveDist = Math.hypot(nextX - car.x, nextY - car.y);
         if (car.isAI) {
            // Only count as stuck if we are trying to accelerate but not moving
-           if (accelerate && actualMoveDist < 0.3 && Math.abs(speed) < 1.0) {
+           if (accelerate && actualMoveDist < 0.5) {
               currentStuckFrames += 1;
            } else if (actualMoveDist > 1.0) {
               currentStuckFrames = Math.max(0, currentStuckFrames - 2); // Fast recovery
@@ -710,7 +748,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
                 if (firstFinishTimeRef.current === null) {
                   firstFinishTimeRef.current = gameTime;
                 }
-                let finalState = { ...car, x: nextX, y: nextY, speed: 0, finished: true, finishTime: gameTime, bestLapTime: newBestLapTime, lapTimes: newLapTimes, stuckFrames: currentStuckFrames, reversingFrames: currentReversingFrames };
+                let finalState = { ...car, x: nextX, y: nextY, speed: 0, finished: true, finishTime: gameTime, bestLapTime: newBestLapTime, lapTimes: newLapTimes, stuckFrames: currentStuckFrames, reversingFrames: 0 };
                 finalState.lap = settings.laps;
                 return finalState;
               }
@@ -731,7 +769,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
           bestLapTime: newBestLapTime,
           lapTimes: newLapTimes,
           stuckFrames: currentStuckFrames,
-          reversingFrames: currentReversingFrames,
+          reversingFrames: 0,
           isDriftingFlag,
         };
       });
@@ -769,23 +807,25 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
 
           if (dist < minDist && dist > 0) {
             const overlap = minDist - dist;
-            // Push apart
-            const pushFactor = (c1.isAI && c2.isAI) ? 2.2 : 1.8; // Allow AI to phase a bit more to avoid knots
-            const pushX = (dx / dist) * (overlap / pushFactor);
-            const pushY = (dy / dist) * (overlap / pushFactor);
+            // Fully separate them: each moves by half the overlap
+            const pushDirX = dx / dist;
+            const pushDirY = dy / dist;
+            const pushAmt = overlap / 2.0;
 
-            c1.x -= pushX;
-            c1.y -= pushY;
-            c2.x += pushX;
-            c2.y += pushY;
+            c1.x -= pushDirX * pushAmt;
+            c1.y -= pushDirY * pushAmt;
+            c2.x += pushDirX * pushAmt;
+            c2.y += pushDirY * pushAmt;
 
-            // Simple speed drop instead of 1D momentum exchange (which causes knots)
+            // Bounce impulse to separate quickly
+            const bounce = 0.5 * dtScale;
             c1.speed *= 0.98;
             c2.speed *= 0.98;
             
-            // Add a tiny random jitter to break alignment lock
-            c1.x += (Math.random() - 0.5) * 0.2;
-            c1.y += (Math.random() - 0.5) * 0.2;
+            // Add jitter to prevent permanent alignment
+            const jitter = 1.8;
+            c1.x += (Math.random() - 0.5) * jitter;
+            c1.y += (Math.random() - 0.5) * jitter;
           }
         }
       }
@@ -818,7 +858,37 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
     ctx.fillStyle = '#050508'; // Dark background
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Track
+    // Draw Track Edge ( kerbs / neon glow )
+    ctx.beginPath();
+    ctx.strokeStyle = '#00f2ff'; // Cyan edge
+    ctx.lineWidth = track.width + 8; // 4px border each side
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    track.waypoints.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.closePath();
+    ctx.stroke();
+
+    // Draw wide start area edge
+    ctx.beginPath();
+    const p0 = track.waypoints[0];
+    const p1_pt = track.waypoints[1];
+    const segDx = p1_pt.x - p0.x;
+    const segDy = p1_pt.y - p0.y;
+    const segLen = Math.hypot(segDx, segDy);
+    const wideLength = Math.min(250, segLen);
+    const endX = p0.x + (segDx / segLen) * wideLength;
+    const endY = p0.y + (segDy / segLen) * wideLength;
+    ctx.strokeStyle = '#00f2ff';
+    ctx.lineWidth = track.width + 160 + 8;
+    ctx.lineCap = 'round';
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    // Draw Track Body
     ctx.beginPath();
     ctx.strokeStyle = '#151623'; // Dark track
     ctx.lineWidth = track.width;
@@ -831,10 +901,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
     ctx.closePath();
     ctx.stroke();
 
-    // Draw Track Glow
+    // Draw wide start area body
     ctx.beginPath();
-    ctx.strokeStyle = 'rgba(0, 242, 255, 0.1)';
-    ctx.lineWidth = track.width + 10;
+    ctx.strokeStyle = '#151623';
+    ctx.lineWidth = track.width + 160;
+    ctx.lineCap = 'round';
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(endX, endY);
     ctx.stroke();
 
     // Draw Track Center Line (dashed)
@@ -921,6 +994,91 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         ctx.fillStyle = '#111';
         ctx.fillRect(-15, -10, 30, 20);
         ctx.fillRect(15, -4, 30, 8);
+      } else if (car.vehicleType === 'ninja') {
+        // Ninja: Sleek, stealthy, narrow
+        ctx.fillStyle = '#0a0a0a';
+        ctx.shadowBlur = 0;
+        ctx.fillRect(-22, -18, 10, 6);
+        ctx.fillRect(14, -18, 10, 6);
+        ctx.fillRect(-22, 12, 10, 6);
+        ctx.fillRect(14, 12, 10, 6);
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-35, -5);
+        ctx.lineTo(-10, -12);
+        ctx.lineTo(35, -4);
+        ctx.lineTo(45, 0); // sharp nose
+        ctx.lineTo(35, 4);
+        ctx.lineTo(-10, 12);
+        ctx.lineTo(-35, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-10, -6, 15, 12); // cockpit
+      } else if (car.vehicleType === 'cyber') {
+        // Cyber: angular, neon lines
+        drawWheels();
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-35, -16);
+        ctx.lineTo(10, -16);
+        ctx.lineTo(30, -10);
+        ctx.lineTo(35, -6);
+        ctx.lineTo(35, 6);
+        ctx.lineTo(30, 10);
+        ctx.lineTo(10, 16);
+        ctx.lineTo(-35, 16);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#0ff';
+        ctx.shadowColor = '#0ff';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(-30, -8, 15, 16);
+        ctx.shadowBlur = 0;
+      } else if (car.vehicleType === 'boss') {
+        // Boss: Huge hover/tank hybrid
+        ctx.fillStyle = '#222';
+        ctx.fillRect(-45, -25, 90, 50); // Under chassis
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-40, -15);
+        ctx.lineTo(-20, -25);
+        ctx.lineTo(20, -25);
+        ctx.lineTo(45, -10);
+        ctx.lineTo(45, 10);
+        ctx.lineTo(20, 25);
+        ctx.lineTo(-20, 25);
+        ctx.lineTo(-40, 15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowColor = car.color;
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(10, 0, 6, 0, Math.PI * 2);
+        ctx.fill(); // glowing core
+        ctx.shadowBlur = 0;
+      } else if (car.vehicleType === 'legend') {
+        // Legend: futuristic F1
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-28, -24, 14, 10);
+        ctx.fillRect(16, -22, 12, 8);
+        ctx.fillRect(-28, 14, 14, 10);
+        ctx.fillRect(16, 14, 12, 8);
+        ctx.fillStyle = fillStyle;
+        ctx.beginPath();
+        ctx.moveTo(-45, -8);
+        ctx.lineTo(-15, -8);
+        ctx.lineTo(50, -3);
+        ctx.lineTo(50, 3);
+        ctx.lineTo(-15, 8);
+        ctx.lineTo(-45, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillRect(-45, -20, 8, 40); // Rear spoiler
+        ctx.fillRect(40, -15, 6, 30); // Front wing
+        ctx.fillStyle = '#ffb700'; // gold tint cockpit
+        ctx.fillRect(-5, -6, 16, 12);
       } else {
         // Standard
         drawWheels();
