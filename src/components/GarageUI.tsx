@@ -103,40 +103,84 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       </header>
 
       <div className="flex-1 overflow-y-auto w-full">
-        <div className="p-4 md:px-[60px] md:py-8 max-w-5xl mx-auto w-full h-full flex flex-col">
-          <div className="flex gap-4 mb-6">
-        <button onClick={() => setTab('VEHICLES')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'VEHICLES' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>车辆管理</button>
-        <button onClick={() => setTab('ITEMS')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'ITEMS' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>道具组装</button>
-        <button onClick={() => setTab('LIVERIES')} className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all ${tab === 'LIVERIES' ? 'bg-accent-magenta text-white' : 'bg-white/10 text-white'}`}>喷漆与涂装</button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto pr-2">
-        {tab === 'VEHICLES' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {garage.ownedVehicles.map(vId => {
-              const v = VEHICLES_DB.find(x => x.id === vId);
-              if (!v) return null;
-              const isEquipped = garage.equippedVehicle === v.id;
-              return (
-                <div key={v.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
-                  <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
-                    <VehiclePreview vehicleType={v.type} width={120} height={120} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-1">{v.name}</h3>
-                    <p className="text-xs text-zinc-400">极速: {v.baseSpeed} | 抓地: {v.baseGrip}</p>
-                  </div>
-                  <button 
-                    onClick={() => equipVehicle(v.id)}
-                    className={`w-full py-2 rounded font-bold ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
-                  >
-                    {isEquipped ? '驾驭中' : '出战'}
-                  </button>
-                </div>
-              );
-            })}
+        <div className="p-4 md:px-[60px] md:py-8 max-w-5xl mx-auto w-full h-full flex flex-col md:flex-row gap-8">
+          
+          {/* 左侧：车辆总览与预览 */}
+          <div className="hidden md:flex flex-col gap-4 w-64 shrink-0">
+             <div className="bg-black/40 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+               <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+               <VehiclePreview 
+                 vehicleType={currentVehicleData.type} 
+                 width={200} 
+                 height={200} 
+                 color={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? '#ffffff' : garage.equippedLivery} 
+                 liveryData={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? { isGradient: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.isGradient, colors: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.colors } : undefined}
+               />
+             </div>
+             <div className="text-center font-bold text-lg text-white tracking-widest uppercase">
+               {currentVehicleData.name}
+             </div>
+             <div className="text-center text-sm text-zinc-400">
+               我的出战赛车
+             </div>
           </div>
-        )}
+
+          {/* 右侧：选项卡与列表 */}
+          <div className="flex-1 flex flex-col h-full min-w-0">
+            <div className="flex gap-4 mb-6 shrink-0 overflow-x-auto pb-2 scorllbar-hide">
+              <button 
+                onClick={() => setTab('VEHICLES')} 
+                className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all whitespace-nowrap ${tab === 'VEHICLES' ? 'bg-accent-magenta text-white shadow-[0_0_15px_rgba(255,0,234,0.3)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+              >
+                1. 车辆改装
+              </button>
+              <button 
+                onClick={() => setTab('ITEMS')} 
+                className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all whitespace-nowrap ${tab === 'ITEMS' ? 'bg-accent-magenta text-white shadow-[0_0_15px_rgba(255,0,234,0.3)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+              >
+                2. 零件强化
+              </button>
+              <button 
+                onClick={() => setTab('LIVERIES')} 
+                className={`px-4 py-2 text-sm md:text-base rounded-lg font-bold transition-all whitespace-nowrap ${tab === 'LIVERIES' ? 'bg-accent-magenta text-white shadow-[0_0_15px_rgba(255,0,234,0.3)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+              >
+                3. 外观重绘
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 pb-8">
+              {tab === 'VEHICLES' && (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {garage.ownedVehicles.map(vId => {
+                    const v = VEHICLES_DB.find(x => x.id === vId);
+                    if (!v) return null;
+                    const isEquipped = garage.equippedVehicle === v.id;
+                    return (
+                      <div key={v.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
+                        <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
+                          <VehiclePreview vehicleType={v.type} width={120} height={120} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold text-white mb-2">{v.name}</h3>
+                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 text-[10px] text-zinc-400">
+                            <span>极速: {v.baseSpeed}</span>
+                            <span>抓地: {v.baseGrip}</span>
+                            <span>起步: {v.baseLaunch || 0}</span>
+                            <span>漂移: {v.baseDriftSpeed || 0}</span>
+                            <span>加速: {v.baseAcceleration || 0.15}</span>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => equipVehicle(v.id)}
+                          className={`w-full py-2 mt-2 rounded font-bold transition-transform active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                        >
+                          {isEquipped ? '驾驭中' : '出战'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
         {tab === 'ITEMS' && (
           <div className="flex flex-col gap-6 w-full">
@@ -144,6 +188,10 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
               const categoryItems = garage.ownedItems.filter(id => {
                 const item = ITEMS_DB.find(x => x.id === id);
                 return item?.type === category;
+              }).sort((a, b) => {
+                const itemA = ITEMS_DB.find(x => x.id === a);
+                const itemB = ITEMS_DB.find(x => x.id === b);
+                return (itemA?.price || 0) - (itemB?.price || 0);
               });
 
               if (categoryItems.length === 0) return null;
@@ -203,7 +251,9 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
         {tab === 'LIVERIES' && (
           <div className="flex flex-col gap-8">
             <div>
-              <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-white">基础漆色 (免费提供)</h2>
+              <h2 className="text-xl font-bold border-b pb-2 mb-4 text-[#888888] border-[#888888]/50 drop-shadow-[0_0_8px_rgba(136,136,136,0.5)]">
+                新星启航基础漆面 (免费提供)
+              </h2>
               <div className="flex gap-4 flex-wrap">
                 {BASIC_COLORS.map(color => (
                   <button 
@@ -216,44 +266,65 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
               </div>
             </div>
 
-            <div>
-              <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-magenta">特殊涂装 (商店购买)</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {garage.ownedLiveries.map(lId => {
-                  const l = LIVERIES_DB.find(x => x.id === lId);
-                  if (!l) return null;
-                  const isEquipped = garage.equippedLivery === l.id;
-                  return (
-                    <button 
-                      key={l.id}
-                      onClick={() => equipLivery(l.id)}
-                      className={`neon-panel p-4 flex flex-col items-center gap-2 transition-all ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.3)]' : 'hover:border-white/30'}`}
-                    >
-                      <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
-                        <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-4 h-4 rounded-full border border-white/20 inline-block align-middle mr-2" 
-                          style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
-                        />
-                        <span className="font-bold text-sm text-center align-middle">{l.name}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              {garage.ownedLiveries.length === 0 && (
-                <div className="text-zinc-500 italic">尚未拥有任何特殊涂装。</div>
-              )}
-            </div>
+            {(['INTERMEDIATE', 'ADVANCED', 'ELITE'] as const).map(tier => {
+              const ownedTierLiveries = garage.ownedLiveries
+                 .map(lId => LIVERIES_DB.find(x => x.id === lId))
+                 .filter((l): l is NonNullable<typeof l> => l !== undefined && l.tier === tier);
+
+              const tierNames = {
+                'INTERMEDIATE': '锐意先锋系列改装漆面',
+                'ADVANCED': '幻影流光系列限定漆面',
+                'ELITE': '极光大师系列典藏漆面'
+              };
+              
+              const tierColors = {
+                 'INTERMEDIATE': 'text-[#ff4500] border-[#ff4500]/50 drop-shadow-[0_0_8px_rgba(255,69,0,0.5)]',
+                 'ADVANCED': 'text-accent-cyan border-accent-cyan/50 drop-shadow-[0_0_8px_rgba(0,242,255,0.5)]',
+                 'ELITE': 'text-accent-magenta border-accent-magenta/50 drop-shadow-[0_0_8px_rgba(255,0,234,0.5)]'
+              };
+
+              return (
+                <div key={tier}>
+                  <h2 className={`text-xl font-bold border-b pb-2 mb-4 ${tierColors[tier]}`}>
+                    {tierNames[tier]}
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {ownedTierLiveries.map(l => {
+                      const isEquipped = garage.equippedLivery === l.id;
+                      return (
+                        <button 
+                          key={l.id}
+                          onClick={() => equipLivery(l.id)}
+                          className={`neon-panel p-4 flex flex-col items-center gap-2 transition-all ${isEquipped ? 'border-white bg-white/10 shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'hover:border-white/30'}`}
+                        >
+                          <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
+                            <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-4 h-4 rounded-full border border-white/20 inline-block align-middle mr-2" 
+                              style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
+                            />
+                            <span className="font-bold text-sm text-center align-middle">{l.name}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {ownedTierLiveries.length === 0 && (
+                    <div className="text-zinc-500 italic">尚未拥有此类别的涂装。</div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      <footer className="mt-8 flex justify-end shrink-0">
-        <button onClick={onClose} className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all">返回菜单</button>
-      </footer>
+            <footer className="mt-8 flex justify-end shrink-0">
+              <button onClick={onClose} className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all">返回菜单</button>
+            </footer>
+          </div>
         </div>
       </div>
     </motion.div>

@@ -84,8 +84,14 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                     <VehiclePreview vehicleType={v.type} width={120} height={120} color="#00f2ff" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-1">{v.name}</h3>
-                    <p className="text-xs text-zinc-400">极速: {v.baseSpeed} | 抓地: {v.baseGrip} | 起步: {(v.baseLaunch || 0)} | 漂移: {(v.baseDriftSpeed || 0)}</p>
+                    <h3 className="text-xl font-bold text-white mb-2">{v.name}</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 text-[10px] text-zinc-400">
+                      <span>极速: {v.baseSpeed}</span>
+                      <span>抓地: {v.baseGrip}</span>
+                      <span>起步: {v.baseLaunch || 0}</span>
+                      <span>漂移: {v.baseDriftSpeed || 0}</span>
+                      <span>加速: {v.baseAcceleration || 0.15}</span>
+                    </div>
                   </div>
                   {owned ? (
                     <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded">已拥有</span>
@@ -107,7 +113,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
         {tab === 'ITEMS' && (
           <div className="flex flex-col gap-6 w-full">
             {(['engine', 'tires', 'acceleration', 'launch', 'drift'] as const).map(category => {
-              const categoryItems = ITEMS_DB.filter(i => i.type === category);
+              const categoryItems = ITEMS_DB.filter(i => i.type === category).sort((a, b) => a.price - b.price);
               if (categoryItems.length === 0) return null;
               
               const categoryNames = {
@@ -164,35 +170,61 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
         )}
 
         {tab === 'LIVERIES' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {LIVERIES_DB.map(l => {
-              const owned = garage.ownedLiveries.includes(l.id);
-              const canAfford = garage.coins >= l.price;
+          <div className="flex flex-col gap-8">
+            {(['INTERMEDIATE', 'ADVANCED', 'ELITE'] as const).map(tier => {
+              const tierLiveries = LIVERIES_DB.filter(l => l.tier === tier);
+              if (tierLiveries.length === 0) return null;
+              
+              const tierNames = {
+                'INTERMEDIATE': '锐意先锋系列改装漆面',
+                'ADVANCED': '幻影流光系列限定漆面',
+                'ELITE': '极光大师系列典藏漆面'
+              };
+              
+              const tierColors = {
+                 'INTERMEDIATE': 'text-[#ff4500] border-[#ff4500]/50 drop-shadow-[0_0_8px_rgba(255,69,0,0.5)]',
+                 'ADVANCED': 'text-accent-cyan border-accent-cyan/50 drop-shadow-[0_0_8px_rgba(0,242,255,0.5)]',
+                 'ELITE': 'text-accent-magenta border-accent-magenta/50 drop-shadow-[0_0_8px_rgba(255,0,234,0.5)]'
+              };
+
               return (
-                <div key={l.id} className="neon-panel p-4 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <div 
-                      className="w-12 h-12 rounded-full border border-white/20 shrink-0 hidden md:block" 
-                      style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
-                    />
-                    <div className="bg-black/40 rounded p-1 shrink-0 border border-white/5">
-                      <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-white leading-tight">{l.name}</h3>
-                    </div>
+                <div key={tier}>
+                  <h2 className={`text-xl font-bold border-b pb-2 mb-4 ${tierColors[tier]}`}>
+                    {tierNames[tier]}
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {tierLiveries.map(l => {
+                      const owned = garage.ownedLiveries.includes(l.id);
+                      const canAfford = garage.coins >= l.price;
+                      return (
+                        <div key={l.id} className="neon-panel p-4 flex justify-between items-center">
+                          <div className="flex items-center gap-4">
+                            <div 
+                              className="w-12 h-12 rounded-full border border-white/20 shrink-0 hidden md:block" 
+                              style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
+                            />
+                            <div className="bg-black/40 rounded p-1 shrink-0 border border-white/5">
+                              <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-white leading-tight">{l.name}</h3>
+                            </div>
+                          </div>
+                          {owned ? (
+                            <span className="text-accent-cyan font-bold">已拥有</span>
+                          ) : (
+                            <button 
+                              onClick={() => buyLivery(l.id, l.price)}
+                              disabled={!canAfford}
+                              className="px-4 py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 shrink-0 whitespace-nowrap"
+                            >
+                              {l.price} ⟁
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {owned ? (
-                    <span className="text-accent-cyan font-bold">已拥有</span>
-                  ) : (
-                    <button 
-                      onClick={() => buyLivery(l.id, l.price)}
-                      disabled={!canAfford}
-                      className="px-4 py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 shrink-0 whitespace-nowrap"
-                    >
-                      {l.price} ⟁
-                    </button>
-                  )}
                 </div>
               );
             })}

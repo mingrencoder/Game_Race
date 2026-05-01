@@ -8,11 +8,13 @@ import { audioService } from '../services/audioService';
 interface GameCanvasProps {
   settings: GameSettings;
   garage: GarageData;
+  cupState?: { isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null;
+  scores?: Record<string, number>;
   onFinish: (results: CarState[]) => void;
   onExit: () => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onExit }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, scores, onFinish, onExit }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [matchId, setMatchId] = useState(0);
   const [cars, setCars] = useState<CarState[]>([]);
@@ -310,7 +312,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       audioService.init();
-      if (e.code === 'Escape') {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
         setIsPaused(p => !p);
       }
       keysPressed.current.add(e.code);
@@ -318,7 +320,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
     const handleKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.code);
     const handleBlur = () => {
       keysPressed.current.clear();
-      setIsPaused(true);
     };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
@@ -729,8 +730,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
         
         let diff = (minLineIndex - currentWaypointIndex + track.waypoints.length) % track.waypoints.length;
         
-        // If diff > 0 and <= 6, car has advanced to a new segment (allowing slight skips/cuts).
-        if (diff > 0 && diff <= 6) {
+        // If diff > 0 and <= 2, car has advanced to a new segment (allowing slight skips/cuts).
+        if (diff > 0 && diff <= 2) {
             // Did we wrap around the finish line?
             if (currentWaypointIndex + diff >= track.waypoints.length) {
               // Crossed finish line
@@ -817,13 +818,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             c2.x += pushDirX * pushAmt;
             c2.y += pushDirY * pushAmt;
 
-            // Bounce impulse to separate quickly
-            const bounce = 0.5 * dtScale;
-            c1.speed *= 0.98;
-            c2.speed *= 0.98;
+            // Only apply a tiny speed penalty to simulate brushing against each other
+            c1.speed *= 0.999;
+            c2.speed *= 0.999;
             
             // Add jitter to prevent permanent alignment
-            const jitter = 1.8;
+            const jitter = 1.0;
             c1.x += (Math.random() - 0.5) * jitter;
             c1.y += (Math.random() - 0.5) * jitter;
           }
@@ -946,25 +946,33 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
       ctx.rotate(car.angle);
 
       let fillStyle: string | CanvasGradient = car.color;
-      if (car.liveryData && car.liveryData.isGradient) {
-        const grad = ctx.createLinearGradient(-30, -16, 30, 16);
-        const colors = car.liveryData.colors;
-        colors.forEach((c, idx) => {
-          grad.addColorStop(idx / (colors.length - 1 || 1), c);
-        });
-        fillStyle = grad;
+      if (car.liveryData) {
+        if (car.liveryData.isGradient) {
+          const grad = ctx.createLinearGradient(-30, -16, 30, 16);
+          const colors = car.liveryData.colors;
+          colors.forEach((c, idx) => {
+            grad.addColorStop(idx / (colors.length - 1 || 1), c);
+          });
+          fillStyle = grad;
+        } else if (car.liveryData.colors && car.liveryData.colors.length > 0) {
+          fillStyle = car.liveryData.colors[0];
+        }
       }
 
       ctx.shadowColor = car.liveryData ? car.liveryData.colors[0] : car.color;
       ctx.shadowBlur = 15;
 
       const drawWheels = () => {
+        const prevShadowBlur = ctx.shadowBlur;
+        const prevShadowColor = ctx.shadowColor;
         ctx.fillStyle = '#111';
         ctx.shadowBlur = 0;
         ctx.fillRect(-24, -20, 12, 8);
         ctx.fillRect(12, -20, 12, 8);
         ctx.fillRect(-24, 12, 12, 8);
         ctx.fillRect(12, 12, 12, 8);
+        ctx.shadowBlur = prevShadowBlur;
+        ctx.shadowColor = prevShadowColor;
       };
 
       if (car.vehicleType === 'f1') {
@@ -1137,6 +1145,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
             <span className="opacity-60 hidden 2xl:inline">赛道:</span>
             <span className="text-accent-cyan truncate max-w-[80px] 2xl:max-w-none">{track.name}</span>
           </div>
+          {cupState && (
+            <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm text-yellow-400 font-bold">
+              <span className="opacity-60 hidden 2xl:inline text-white">杯赛进度:</span>
+              <span className="truncate max-w-[80px] 2xl:max-w-none">{cupState.currentRaceIndex + 1} / {cupState.tracks.length} 场</span>
+            </div>
+          )}
+          <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">
+            <span className="opacity-60 hidden 2xl:inline">难度:</span>
+            <span className="text-accent-magenta font-bold">
+              {settings.isEliteMode ? '精英赛' : settings.aiDifficulty === 1 ? '入门级(LV1)' : settings.aiDifficulty === 2 ? '进阶级(LV2)' : settings.aiDifficulty === 3 ? '专家级(LV3)' : '专业级(LV4)'}
+            </span>
+          </div>
           <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">
             <span className="opacity-60 hidden 2xl:inline">时间:</span>
             <span className="text-accent-yellow">{(gameTime / 1000).toFixed(2)}s</span>
@@ -1180,6 +1200,33 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, onFinish, onE
              )}
           </div>
         ))}
+        {cupState && settings.mode === 'TEAM' && (
+          <div className="mt-2 bg-black/60 backdrop-blur-md border border-yellow-500/30 rounded p-2 text-white font-mono shadow-[0_0_10px_rgba(234,179,8,0.2)] opacity-90 min-w-[120px] 2xl:min-w-[160px]">
+             <div className="text-yellow-400 text-[10px] 2xl:text-xs mb-1 font-bold border-b border-yellow-500/20 pb-1">杯赛大比分 (红:蓝)</div>
+             <div className="text-xl 2xl:text-2xl text-center font-black">
+               <span className="text-red-500">{cupState.teamWins?.RED || 0}</span>
+               <span className="text-zinc-500 mx-2">:</span>
+               <span className="text-blue-500">{cupState.teamWins?.BLUE || 0}</span>
+             </div>
+          </div>
+        )}
+        {cupState && settings.mode !== 'TEAM' && scores && Object.keys(scores).length > 0 && (
+          <div className="mt-2 bg-black/60 backdrop-blur-md border border-yellow-500/30 rounded p-2 text-white font-mono shadow-[0_0_10px_rgba(234,179,8,0.2)] opacity-90 min-w-[120px] 2xl:min-w-[160px]">
+             <div className="text-yellow-400 text-[10px] 2xl:text-xs mb-1 font-bold border-b border-yellow-500/20 pb-1">杯赛总积分排行</div>
+             {Object.entries(scores)
+               .sort((a, b) => (b[1] as number) - (a[1] as number))
+               .map(([id, score], idx) => {
+                 const carName = cars.find(c => c.id === id)?.name || id;
+                 return (
+                   <div key={id} className={`text-[10px] 2xl:text-xs flex justify-between gap-3 ${idx < 3 ? 'text-white font-bold' : 'text-zinc-400'}`}>
+                     <span className="truncate w-16">{idx + 1}. {carName}</span>
+                     <span className="text-yellow-400">{score}分</span>
+                   </div>
+                 );
+               })
+             }
+          </div>
+        )}
       </div>
 
       <div className="absolute top-16 right-4 lg:top-20 lg:right-4 z-40 flex flex-col gap-4 pointer-events-none items-end">

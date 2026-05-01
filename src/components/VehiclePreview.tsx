@@ -35,25 +35,33 @@ export default function VehiclePreview({
     ctx.rotate(-Math.PI / 2);
 
     let fillStyle: string | CanvasGradient = color;
-    if (liveryData && liveryData.isGradient && liveryData.colors.length > 0) {
-      const grad = ctx.createLinearGradient(-30, -16, 30, 16);
-      const colors = liveryData.colors;
-      colors.forEach((c, idx) => {
-        grad.addColorStop(idx / (colors.length - 1 || 1), c);
-      });
-      fillStyle = grad;
+    if (liveryData) {
+      if (liveryData.isGradient && liveryData.colors.length > 0) {
+        const grad = ctx.createLinearGradient(-30, -16, 30, 16);
+        const colors = liveryData.colors;
+        colors.forEach((c, idx) => {
+          grad.addColorStop(idx / (colors.length - 1 || 1), c);
+        });
+        fillStyle = grad;
+      } else if (!liveryData.isGradient && liveryData.colors && liveryData.colors.length > 0) {
+        fillStyle = liveryData.colors[0];
+      }
     }
 
     ctx.shadowColor = liveryData && liveryData.colors.length > 0 ? liveryData.colors[0] : color;
     ctx.shadowBlur = 15;
 
     const drawWheels = () => {
+      const prevShadowBlur = ctx.shadowBlur;
+      const prevShadowColor = ctx.shadowColor;
       ctx.fillStyle = '#111';
       ctx.shadowBlur = 0;
       ctx.fillRect(-24, -20, 12, 8);
       ctx.fillRect(12, -20, 12, 8);
       ctx.fillRect(-24, 12, 12, 8);
       ctx.fillRect(12, 12, 12, 8);
+      ctx.shadowBlur = prevShadowBlur;
+      ctx.shadowColor = prevShadowColor;
     };
 
     if (vehicleType === 'f1') {

@@ -336,10 +336,19 @@ export const ITEMS_DB = [
   { id: 'accel_3', name: '反重力加速器', type: 'acceleration' as const, price: 1600, boostValue: 0, accelerationBoost: 0.2 }
 ];
 
-export const LIVERIES_DB = [
-  { id: 'liv_silver', name: '液态白银', price: 400, isGradient: true, colors: ['#ffffff', '#888888'] },
-  { id: 'liv_gold', name: '尊贵土豪金', price: 800, isGradient: true, colors: ['#ffdf00', '#d4af37'] },
-  { id: 'liv_magma', name: '地狱岩浆', price: 1000, isGradient: true, colors: ['#ff0000', '#ff8800', '#ffff00'] },
-  { id: 'liv_prism', name: '全息折射', price: 1500, isGradient: true, colors: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'] },
-  { id: 'liv_galaxy', name: '深邃星空', price: 2000, isGradient: true, colors: ['#0b0033', '#4b0082', '#000000'] }
+export type LiveryTier = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'ELITE';
+
+export const LIVERIES_DB: { id: string, name: string, price: number, isGradient: boolean, colors: string[], tier: LiveryTier }[] = [
+  { id: 'liv_silver', name: '液态白银', price: 400, isGradient: true, colors: ['#ffffff', '#888888'], tier: 'INTERMEDIATE' },
+  { id: 'liv_gold', name: '尊贵土豪金', price: 800, isGradient: true, colors: ['#ffdf00', '#d4af37'], tier: 'INTERMEDIATE' },
+  { id: 'liv_orange', name: '风暴赛道橙', price: 600, isGradient: false, colors: ['#ff4500'], tier: 'INTERMEDIATE' },
+  { id: 'liv_magma', name: '地狱岩浆', price: 1000, isGradient: true, colors: ['#ff0000', '#ff8800', '#ffff00'], tier: 'ADVANCED' },
+  { id: 'liv_neon_pink', name: '荧光霓虹粉', price: 1200, isGradient: false, colors: ['#ff00ff'], tier: 'ADVANCED' },
+  { id: 'liv_cyan_pulse', name: '赛博脉冲蓝', price: 1200, isGradient: false, colors: ['#00ffff'], tier: 'ADVANCED' },
+  { id: 'liv_toxic_green', name: '生化辐射绿', price: 1200, isGradient: false, colors: ['#ccff00'], tier: 'ADVANCED' },
+  { id: 'liv_prism', name: '全息折射', price: 1500, isGradient: true, colors: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'], tier: 'ELITE' },
+  { id: 'liv_flare_red', name: '烈焰猩红', price: 1800, isGradient: false, colors: ['#ff0033'], tier: 'ELITE' },
+  { id: 'liv_royal_purple', name: '皇家暗紫', price: 1800, isGradient: false, colors: ['#bf00ff'], tier: 'ELITE' },
+  { id: 'liv_neon_yellow', name: '炫彩电光黄', price: 1800, isGradient: false, colors: ['#ffff00'], tier: 'ELITE' },
+  { id: 'liv_galaxy', name: '深邃星空', price: 2000, isGradient: true, colors: ['#0b0033', '#4b0082', '#000000'], tier: 'ELITE' }
 ];

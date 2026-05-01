@@ -120,12 +120,26 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteM
     let randomLivery: any = undefined;
     let pColor: string;
     
+    // Low difficulty (normal/basic colors)
+    const basicColors = ['#aaaaaa', '#888888', '#666666', '#a0522d', '#4682b4', '#556b2f', '#8fbc8f', '#bc8f8f'];
+    // Intermediate difficulty
+    const intermediateColors = ['#ff4500', '#1e90ff', '#32cd32', '#ffd700', '#ff8c00', '#da70d6'];
+    // Advanced difficulty
+    const advancedColors = ['#ff0055', '#00ffcc', '#bf00ff', '#ff00ea', '#00f2ff', '#ffea00', '#ff0033'];
+    // Elite difficulty (bright neon)
+    const eliteColors = ['#ff00ff', '#00ffff', '#ffff00', '#ff00aa', '#00aa00', '#ff3300', '#ccff00', '#7fff00'];
+
     if (isEliteMode) {
       randomLivery = { isGradient: true, colors: [`hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`] };
-      pColor = '#ffffff';
+      pColor = eliteColors[Math.floor(Math.random() * eliteColors.length)];
     } else {
       randomLivery = hasLivery ? LIVERIES_DB[Math.floor(Math.random() * LIVERIES_DB.length)] : undefined;
-      pColor = randomLivery ? '#ffffff' : `hsl(${Math.random()*360}, 100%, 50%)`;
+      let colorPool = basicColors;
+      if (difficulty === 2) colorPool = intermediateColors;
+      else if (difficulty === 3) colorPool = advancedColors;
+      else if (difficulty >= 4) colorPool = eliteColors;
+      
+      pColor = randomLivery ? '#ffffff' : colorPool[Math.floor(Math.random() * colorPool.length)];
     }
 
     const aiStyle = styles[Math.floor(Math.random() * styles.length)];
@@ -237,6 +251,68 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const handleExportRecords = () => {
+    try {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records));
+      const downloadAnchorNode = document.createElement('a');
+      downloadAnchorNode.setAttribute("href", dataStr);
+      downloadAnchorNode.setAttribute("download", `neon_racing_records_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchorNode);
+      downloadAnchorNode.click();
+      downloadAnchorNode.remove();
+    } catch (e) {
+      console.error('Failed to export records', e);
+      alert('导出记录失败。');
+    }
+  };
+
+  const handleImportRecords = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const imported = JSON.parse(event.target?.result as string);
+          if (typeof imported === 'object' && imported !== null) {
+            setConfirmAction({
+              message: '是否合并导入的赛道记录？',
+              onConfirm: () => {
+                setRecords(prev => {
+                  const newRecords = { ...prev };
+                  Object.keys(imported).forEach(key => {
+                    const existing = newRecords[key] || [];
+                    const importedList = Array.isArray(imported[key]) ? imported[key] : [];
+                    
+                    // Merge and sort
+                    const merged = [...existing, ...importedList]
+                      .sort((a: any, b: any) => a.time - b.time)
+                      // Deduplicate by playerName and time string to avoid exact same entries
+                      .filter((v, i, a) => a.findIndex(t => (t.playerName === v.playerName && t.time === v.time)) === i)
+                      .slice(0, 10);
+                    newRecords[key] = merged;
+                  });
+                  return newRecords;
+                });
+                alert('记录导入成功！');
+              }
+            });
+          } else {
+             alert('无效的记录文件格式。');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('解析导入的文件失败。请确保它是一个有效的 JSON 记录文件。');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   const handleStartGame = () => {
     audioService.init();
 
@@ -255,6 +331,7 @@ export default function App() {
         });
         setScores({});
         setTeamScore(null);
+        setNewRecordInfo(null);
         setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
         
         // Show cup standings preview instead of jumping right in
@@ -387,7 +464,7 @@ export default function App() {
 
     if (settings.isCupMode && cupState) {
       const nextIndex = cupState.currentRaceIndex + 1;
-      const isFinished = nextIndex >= cupState.tracks.length;
+      let isFinished = nextIndex >= cupState.tracks.length;
       let newTeamWins = cupState.teamWins;
       
       if (settings.mode === 'TEAM' && newTeamWins) {
@@ -395,6 +472,11 @@ export default function App() {
           newTeamWins = { ...newTeamWins, RED: newTeamWins.RED + 1 };
         } else if (currentBlueScore > currentRedScore) {
           newTeamWins = { ...newTeamWins, BLUE: newTeamWins.BLUE + 1 };
+        }
+        
+        const requiredWins = Math.ceil(cupState.tracks.length / 2);
+        if (newTeamWins.RED >= requiredWins || newTeamWins.BLUE >= requiredWins) {
+          isFinished = true;
         }
       }
 
@@ -952,6 +1034,8 @@ export default function App() {
             <GameCanvas 
               settings={settings} 
               garage={garage}
+              cupState={cupState}
+              scores={scores}
               onFinish={handleFinish} 
               onExit={handleExit} 
             />
@@ -1348,57 +1432,61 @@ export default function App() {
                 </button>
               </div>
               
-              <div className="space-y-6 text-zinc-300 text-sm md:text-base leading-relaxed pb-4">
+              <div className="space-y-6 text-zinc-300 text-sm md:text-base leading-relaxed pb-4 pr-1 scrollbar-hide">
                 <section>
-                  <h3 className="text-accent-yellow font-bold text-lg mb-2 flex items-center gap-2">目标</h3>
-                  <p className="opacity-90">在指定的赛道上完成固定圈数，争取获得第一名！比赛名次越高，获得的金币奖励越丰厚。使用金币可以在商店中购买更高级的赛车、强力道具和炫酷的涂装。</p>
+                  <h3 className="text-accent-yellow font-bold text-lg mb-2 flex items-center gap-2">🏆 赛事目标与概览</h3>
+                  <p className="opacity-90 leading-6">
+                    在多变复杂的赛道上超越所有对手，夺取冠军！比赛名次决定金币收益，你可以使用金币在商店解锁更强赛车、高配性能零件以及炫彩涂装。<br/>
+                    本游戏包含三种主要模式：<strong className="text-accent-cyan">单车竞速(单人)</strong>、<strong className="text-accent-magenta">同屏对战(双人)</strong>、<strong className="text-red-400">红</strong><strong className="text-blue-400">蓝</strong><strong>组队对决</strong>。<br/>
+                    同时提供<strong className="text-accent-yellow">杯赛模式</strong>（多轮连续作战，支持单人积分制或组队比分制，满足提前决胜条件即可结算大奖）和<strong className="text-purple-400">精英赛</strong>（最高难度AI，部分杯赛下会锁死特殊发光外观）。
+                  </p>
                 </section>
                 
                 <section>
-                  <h3 className="text-accent-magenta font-bold text-lg mb-2">🎮 操作方式</h3>
+                  <h3 className="text-accent-magenta font-bold text-lg mb-2">🎮 操作方式与快捷键</h3>
+                  <p className="opacity-80 text-sm mb-3">支持在游戏中按 <kbd className="bg-white/20 px-1 rounded">P</kbd> 键 或 <kbd className="bg-white/20 px-1 rounded">ESC</kbd> 键快速<strong className="text-white">暂停/继续</strong>比赛。</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 p-4 rounded-md border border-white/5">
                      <div>
-                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">单人模式（玩家1）：</strong>
-                       <p className="opacity-80">
-                         • 向上方向键（↑）：加速<br/>
-                         • 向下方向键（↓）：刹车 / 倒车<br/>
-                         • 左右方向键（←/→）：转向<br/>
-                         • Shift键：漂移（高速过弯微调）
+                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">玩家一操作（单人/组队/双人）：</strong>
+                       <p className="opacity-80 leading-7">
+                         • <kbd className="bg-white/10 px-1 rounded">↑</kbd> <kbd className="bg-white/10 px-1 rounded">↓</kbd> <kbd className="bg-white/10 px-1 rounded">←</kbd> <kbd className="bg-white/10 px-1 rounded">→</kbd>：加速/刹车/转向<br/>
+                         • <kbd className="bg-white/10 px-1 rounded">Shift</kbd> 键：手刹漂移 (微调过弯)<br/>
+                         • <kbd className="bg-white/10 px-1 rounded">空格 (Space)</kbd> / <kbd className="bg-white/10 px-1 rounded">Enter</kbd>：急刹车<br/>
+                         <span className="text-[12px] text-zinc-400">* 注：在除双人对战以外的模式，也可使用 WASD 与 Q/E 控制。</span>
                        </p>
                      </div>
                      <div>
-                       <strong className="text-accent-magenta block mb-2 border-b border-accent-magenta/30 pb-1">双人模式（玩家2）：</strong>
-                       <p className="opacity-80">
-                         • W键：加速<br/>
-                         • S键：刹车 / 倒车<br/>
-                         • A/D键：转向<br/>
-                         • 空格键（Space）：漂移
+                       <strong className="text-accent-magenta block mb-2 border-b border-accent-magenta/30 pb-1">玩家二操作（仅双人模式）：</strong>
+                       <p className="opacity-80 leading-7">
+                         • <kbd className="bg-white/10 px-1 rounded">W</kbd> <kbd className="bg-white/10 px-1 rounded">S</kbd> <kbd className="bg-white/10 px-1 rounded">A</kbd> <kbd className="bg-white/10 px-1 rounded">D</kbd>：加速/刹车/转向<br/>
+                         • <kbd className="bg-white/10 px-1 rounded">Q</kbd> 或 <kbd className="bg-white/10 px-1 rounded">E</kbd>：手刹漂移<br/>
+                         • <kbd className="bg-white/10 px-1 rounded">空格 (Space)</kbd>：急刹车
                        </p>
                      </div>
                   </div>
                 </section>
                 
                 <section>
-                  <h3 className="text-accent-cyan font-bold text-lg mb-3">🛠️ 进阶机制与商店系统</h3>
-                  <ul className="list-disc pl-5 space-y-3 opacity-90">
+                  <h3 className="text-accent-cyan font-bold text-lg mb-3">🛠️ 进阶系统与物理机制</h3>
+                  <ul className="list-disc pl-5 space-y-3 opacity-90 leading-6">
                      <li>
-                       <strong className="text-white">漂移系统：</strong>按下漂移键后，车辆抓地力会降低，你可以进行更大角度的滑动，转向速度也会提升。这适合在急弯处点击或按住使用。但请注意：过度漂移会导致速度急剧下降！
+                       <strong className="text-white">物理驱动与防粘连设计：</strong>游戏拥有拟真的惯性系统，极速入弯可能导致冲出赛道并严重减速。玩家间碰撞会导致失速与互相推挤，请合理运用走线或提前减速入弯。
                      </li>
                      <li>
-                       <strong className="text-white">购买赛车：</strong>在商店中可以解锁购买不同性能的赛车。标准车属性均衡，F1赛车极速惊人但抓地力低（容易打滑），越野拉力赛车虽然速度较慢但过弯稳定性极强。
+                       <strong className="text-white">漂移过弯：</strong>长按或点按“手刹漂移键”会使抓地力暂时下降从而进行滑移，大幅增加转向角度，适合U型或V型急弯。过度漂移会导致速度急剧折损。
                      </li>
                      <li>
-                       <strong className="text-white">道具与改装：</strong>你可以购买“引擎调校”来大幅度增加最高速度，或者购买“抓地力控制系统”来让您的赛车在弯道指哪打哪。<br/>
-                       <span className="text-accent-yellow text-sm">💡 提示：购买后请记得前往主界面的【我的车库】中进行装备才会生效！</span>
+                       <strong className="text-white">差异化赛车与改装零部件：</strong>在商店可以购买多种不同底盘的赛车（极速型如F1、稳如磐石如拉力越野车）。配合涡轮引擎、热熔轮胎等零件，打造出完美契合你驾驶习惯的座驾。组队模式中，你强力的赛车和装备甚至能够成为队伍胜利的决定性因素！
                      </li>
                      <li>
-                       <strong className="text-white">物理防粘设计：</strong>如果速度过快撞到赛道边缘，不仅会在物理上弹开，车速也会受到损耗下降。请依据真实的驾驶习惯，在入弯前选择性松开油门或者点按刹车。与对手碰撞也会互相推挤并影响速度。
+                       <strong className="text-accent-yellow">极速起步 (Launch)：</strong>部分高规格轮胎和零件会提供“起步”加成。拥有起步优势的赛车，读秒结束时会获得明显的爆发初速度。
                      </li>
                   </ul>
                 </section>
                 
                 <div className="bg-accent-magenta/10 border-l-4 border-accent-magenta p-4 mt-8 rounded-r-md">
-                  <strong>车库说明：</strong>【我的车库】仅在单人模式下开放，你可以在车库中自由更换当前使用的赛车、安装道具以及应用炫彩涂装，快去积攒金币打造你的最强专属赛车吧！
+                  <strong>车库规则说明：</strong>你所购买的赛车、外观涂装和改装强化件，必需进入主界面的【我的车库】大厅完成装配才会生效。<br/>
+                  <span className="text-sm opacity-80 mt-1 block">提示：目前的自定装备（车库系统）在“单人竞速”与“组队杯赛”等模式开放使用；在“双人同屏黑客”模式下为了保证相对公平配置，暂时自动禁用自定车辆。</span>
                 </div>
               </div>
             </motion.div>
@@ -1462,7 +1550,19 @@ export default function App() {
             >
               <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-4 mb-6 border-b border-white/10 pb-4 pt-2 sticky top-0 bg-[#0a0a0a] z-10 w-full shrink-0">
                 <h2 className="text-xl md:text-2xl font-black text-accent-yellow uppercase tracking-wider">🏆 赛道排行榜</h2>
-                <div className="flex gap-2 text-sm md:text-base w-full sm:w-auto">
+                <div className="flex flex-wrap gap-2 text-sm md:text-base w-full sm:w-auto">
+                  <button 
+                    onClick={handleExportRecords}
+                    className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
+                  >
+                    ⬇️ 导出
+                  </button>
+                  <button 
+                    onClick={handleImportRecords}
+                    className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
+                  >
+                    ⬆️ 导入
+                  </button>
                   <button 
                     onClick={(e) => {
                         e.stopPropagation();
