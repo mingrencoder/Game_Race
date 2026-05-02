@@ -1,4 +1,4 @@
-import io from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { RoomState, OnlinePlayer } from '../types';
 
 class SocketService {
@@ -9,7 +9,7 @@ class SocketService {
 
   connect() {
     if (!this.socket) {
-      this.socket = io(window.location.origin);
+      this.socket = io({ transports: ['websocket'], upgrade: false });
       
       this.socket.on('connect', () => {
         this.playerId = this.socket!.id!;
@@ -35,7 +35,9 @@ class SocketService {
         this.room = null;
         this.notify();
       });
-    } else if (this.socket.connected) {
+    } else if (!this.socket.connected) {
+      this.socket.connect();
+    } else {
       this.playerId = this.socket.id!;
     }
   }
@@ -50,6 +52,9 @@ class SocketService {
   }
 
   createRoom(playerName: string, passwordSettings: { enabled: boolean; password?: string }, callback: (res: any) => void) {
+    if (!this.socket || !this.socket.connected) {
+      return callback({ success: false, error: '与服务器的连接断开，请刷新页面重试。' });
+    }
     this.socket?.emit('createRoom', { playerName, passwordSettings }, (res: any) => {
       if (res.success) {
         this.room = res.room;
