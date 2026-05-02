@@ -310,7 +310,7 @@ export default function App() {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records));
       const downloadAnchorNode = document.createElement('a');
       downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", `neon_racing_records_${new Date().toISOString().split('T')[0]}.json`);
+      downloadAnchorNode.setAttribute("download", `paopao_racing_records_${new Date().toISOString().split('T')[0]}.json`);
       document.body.appendChild(downloadAnchorNode);
       downloadAnchorNode.click();
       downloadAnchorNode.remove();
@@ -643,9 +643,9 @@ export default function App() {
             <header className="px-4 md:px-[60px] pt-[20px] pb-[10px] flex justify-between items-end border-bottom border-neon-border">
               <div>
                 <h1 className="m-0 text-[32px] md:text-[48px] uppercase tracking-[4px] neon-text-cyan font-black italic leading-none">
-                  NEON VELOCITY
+                  跑跑赛车
                 </h1>
-                <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">急速赛车竞技系统</span>
+                <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">PAOPAO RACING</span>
               </div>
               <div className="flex items-center gap-2 sm:gap-4 pr-32 md:pr-48">
                 <button
@@ -692,16 +692,6 @@ export default function App() {
                       单人模式
                     </button>
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'ONLINE' }))}
-                      className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
-                        settings.mode === 'ONLINE' 
-                        ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
-                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
-                      }`}
-                    >
-                      在线对战
-                    </button>
-                    <button 
                       onClick={() => setSettings(s => ({ ...s, mode: 'TEAM', cupNumTracks: s.isCupMode && s.cupNumTracks && s.cupNumTracks % 2 === 0 ? s.cupNumTracks + 1 : s.cupNumTracks }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                         (settings.mode === 'TEAM' || settings.isTeamMode) 
@@ -710,6 +700,16 @@ export default function App() {
                       }`}
                     >
                       组队对抗
+                    </button>
+                    <button 
+                      onClick={() => setSettings(s => ({ ...s, mode: 'ONLINE' }))}
+                      className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
+                        settings.mode === 'ONLINE' 
+                        ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
+                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      在线对战
                     </button>
                   </div>
                 </div>

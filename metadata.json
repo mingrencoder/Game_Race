@@ -1,6 +1,6 @@
 {
-  "name": "【游戏】急速赛车",
-  "description": "A high-speed 2D racing game with single and local multiplayer modes, AI opponents, and multiple tracks.",
+  "name": "跑跑赛车",
+  "description": "跑跑赛车是一款极具速度感的 2D 赛车竞技游戏，支持单人挑战、多人在线对战以及团队协作模式。",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
