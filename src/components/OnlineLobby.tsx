@@ -11,6 +11,7 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
   const [passwordEnabled, setPasswordEnabled] = useState(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
 
   const [adminDestroyRoomId, setAdminDestroyRoomId] = useState<string | null>(null);
   const [adminPassword, setAdminPassword] = useState('');
@@ -31,9 +32,25 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
 
   useEffect(() => {
     socketService.connect();
+    
+    // Check initial connection state
+    if (socketService.socket?.connected) {
+      setIsConnected(true);
+    }
+    
+    // Setup listeners for connection changes
+    socketService.socket?.on('connect', () => setIsConnected(true));
+    socketService.socket?.on('disconnect', () => setIsConnected(false));
+    socketService.socket?.on('connect_error', () => setIsConnected(false));
+
     fetchRooms();
     const iv = setInterval(fetchRooms, 3000);
-    return () => clearInterval(iv);
+    return () => {
+      clearInterval(iv);
+      socketService.socket?.off('connect');
+      socketService.socket?.off('disconnect');
+      socketService.socket?.off('connect_error');
+    };
   }, []);
 
   const handleCreate = () => {
@@ -119,6 +136,14 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
         <div className="flex-1">
           <h2 className="text-3xl font-black text-accent-cyan uppercase mb-6 tracking-widest text-left">在线对战</h2>
           
+          {!isConnected && (
+            <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded text-red-300 text-sm leading-relaxed">
+              <strong>⚠ 无法连接到对战服务器</strong><br/>
+              如果您的网站部署在 Netlify 等纯静态托管平台上，在线游戏功能将无法运行（它们不支持长期的 WebSocket 和 Node.js 环境）。<br/>
+              请考虑部署到 <strong>Render, Railway, Heroku,</strong> 等支持 Node.js 的平台。
+            </div>
+          )}
+
           {error && <div className="text-red-500 mb-4 bg-red-500/10 p-2 rounded">{error}</div>}
           
           <div className="space-y-4 mb-8">
@@ -132,7 +157,11 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
               />
             </div>
             <div>
-               <button onClick={handleCreate} className="w-full py-4 bg-accent-magenta text-white font-black rounded hover:opacity-90 transition-opacity">
+               <button 
+                 onClick={handleCreate} 
+                 disabled={!isConnected}
+                 className={`w-full py-4 text-white font-black rounded transition-opacity ${isConnected ? 'bg-accent-magenta hover:opacity-90' : 'bg-zinc-600 cursor-not-allowed opacity-50'}`}
+               >
                  创建新房间
                </button>
                <div className="mt-2 flex items-center gap-3">
@@ -166,7 +195,11 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
                   placeholder="输入密码在此快速加入"
                   className="flex-1 bg-black/40 border border-white/20 rounded p-3 text-white focus:border-accent-cyan outline-none"
                 />
-                <button onClick={() => handleJoin()} className="px-6 bg-accent-cyan text-black font-black rounded hover:shadow-[0_0_15px_rgba(0,242,255,0.4)] transition-all">
+                <button 
+                  onClick={() => handleJoin()} 
+                  disabled={!isConnected}
+                  className={`px-6 font-black rounded transition-all ${isConnected ? 'bg-accent-cyan text-black hover:shadow-[0_0_15px_rgba(0,242,255,0.4)]' : 'bg-zinc-600 cursor-not-allowed opacity-50'}`}
+                >
                   快速加入
                 </button>
               </div>
