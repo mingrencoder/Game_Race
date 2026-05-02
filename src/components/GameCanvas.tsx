@@ -31,6 +31,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
   const remoteInputs = useRef<Record<string, Set<string>>>({});
   const firstFinishTimeRef = useRef<number | null>(null);
   const hasCalledFinishRef = useRef<boolean>(false);
+  const lastTickId = useRef<number>(-1);
+  const previousStatusRef = useRef<string>('LOBBY');
 
   // Sync state to refs for the animate loop
   carsRef.current = cars;
@@ -62,105 +64,109 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         remoteInputs.current[playerId] = new Set(inputs);
       };
       
-      const handleCarsUpdate = (payload: any) => {
-        if (!payload) return;
+      const handleCarsUpdate = (packet: any) => {
+        if (!packet) return;
 
-        if (payload.status) {
-          setStatus(payload.status);
-          if (payload.status === 'FINISHED' && !hasCalledFinishRef.current) {
-             // Backup: if we haven't seen gameFinished yet, handle it here
-             handleGameFinished(payload.cars || carsRef.current);
+        // 1. 拦截发车瞬间，由本地强制打上纯本地时间的锚点！
+        if (packet.status === 'PLAYING' && previousStatusRef.current === 'STARTING') {
+            setCars(prev => {
+                const newCars = [...prev];
+                const myCar = newCars.find(c => c.id === socketService.socket?.id);
+                if (myCar) {
+                    myCar.lapStartTime = packet.gameTime || 0; // 【修复】使用与 gameTime 同步的偏移量，防止出现巨大负数
+                    myCar.lap = 0;
+                    myCar.currentWaypointIndex = 1;
+                    myCar.lapTimes = [];
+                }
+                return newCars;
+            });
+        }
+        previousStatusRef.current = packet.status || previousStatusRef.current;
+
+        // Tick validation (Anti-reversal)
+        if (packet.tickId !== undefined) {
+          if (packet.tickId <= lastTickId.current) return;
+          lastTickId.current = packet.tickId;
+        }
+
+        if (packet.status) {
+          setStatus(packet.status);
+          if (packet.status === 'FINISHED' && !hasCalledFinishRef.current) {
+             handleGameFinished(packet.cars || carsRef.current);
           }
         }
 
-        if (payload.inputs) {
-            Object.keys(payload.inputs).forEach(id => {
-               remoteInputs.current[id] = new Set(payload.inputs[id]);
+        if (packet.gameTime !== undefined) {
+           setGameTime(packet.gameTime);
+           gameTimeRef.current = packet.gameTime;
+        }
+
+        if (packet.countdown !== undefined) {
+           setCountdown(packet.countdown);
+           if (packet.countdown > 0) setStatus('STARTING');
+        }
+
+        if (packet.finishCountdown !== undefined) {
+          setFinishCountdown(packet.finishCountdown);
+        }
+
+        if (packet.inputs) {
+            Object.keys(packet.inputs).forEach(id => {
+               remoteInputs.current[id] = new Set(packet.inputs[id]);
             });
         }
 
-        if (payload.cars) {
-            const updatedCars = payload.cars.map((serverCar: any) => {
-               const localCar = carsRef.current.find(c => c.id === serverCar.id);
-               
-               // PREDICTION for my own car
-               if (serverCar.id === socketService.playerId) {
-                  if (!localCar) return serverCar;
-                  
-                  // For race metadata, always sync with server
-                  localCar.lap = serverCar.lap;
-                  localCar.currentWaypointIndex = serverCar.currentWaypointIndex;
-                  localCar.finished = serverCar.finished;
-                  localCar.finishTime = serverCar.finishTime;
-
-                  // FOR LOCAL PLAYER: Authoritative client prediction with large-threshold reconciliation
-                  // We ONLY snap or pull if the error is significant to prevent jitter from latency
-                  const distErr = Math.hypot(serverCar.x - localCar.x, serverCar.y - localCar.y);
-                  
-                  // If deviation is massive (> 250px), snap to server
-                  if (distErr > 250) {
-                    localCar.x = serverCar.x;
-                    localCar.y = serverCar.y;
-                    localCar.angle = serverCar.angle;
-                    localCar.speed = serverCar.speed;
-                  } 
-                  // If moderate deviation, gently assist (but very slowly to avoid visual stutter)
-                  else if (distErr > 40) {
-                    localCar.x += (serverCar.x - localCar.x) * 0.02;
-                    localCar.y += (serverCar.y - localCar.y) * 0.02;
-                  }
-                  
-                  // Always sync critical status like lap and finish
-                  localCar.lap = serverCar.lap;
-                  localCar.currentWaypointIndex = serverCar.currentWaypointIndex;
-                  localCar.finished = serverCar.finished;
-                  localCar.finishTime = serverCar.finishTime;
-
-                  return localCar;
-               }
-               
-               // FOR OTHER CARS (Interpolation)
-               if (!localCar) return serverCar;
-               
-               // Use a simple but effective blending towards server state
-               // Rotation needs careful wrapping to avoid spin-around jitter
-               let angleErr = serverCar.angle - localCar.angle;
-               while (angleErr > Math.PI) angleErr -= Math.PI * 2;
-               while (angleErr < -Math.PI) angleErr += Math.PI * 2;
-
-               return {
-                 ...serverCar,
-                 x: localCar.x + (serverCar.x - localCar.x) * 0.15,
-                 y: localCar.y + (serverCar.y - localCar.y) * 0.15,
-                 angle: localCar.angle + angleErr * 0.15,
-                 speed: localCar.speed + (serverCar.speed - localCar.speed) * 0.2
-               };
+        if (packet.cars) {
+            // 2. 更新收到的网络车辆状态
+            setCars(prevCars => {
+                const newCars = [...prevCars];
+                packet.cars.forEach((serverCar: any) => {
+                    const localCar = newCars.find(c => c.id === serverCar.id);
+                    if (localCar) {
+                        if (serverCar.id === socketService.socket?.id) {
+                            // 【本地权威保护】PLAYING 期间直接跳过，严禁服务端数据污染本地物理与时间！
+                            if (packet.status === 'STARTING') {
+                                localCar.x = serverCar.x;
+                                localCar.y = serverCar.y;
+                                localCar.angle = serverCar.angle;
+                            }
+                        } else {
+                            // 非本地玩家正常更新 target，用于插值渲染
+                            if (!localCar.isAI || settings.mode === 'ONLINE') {
+                                localCar.targetX = serverCar.x;
+                                localCar.targetY = serverCar.y;
+                                localCar.targetAngle = serverCar.angle;
+                                localCar.speed = serverCar.speed;
+                                localCar.lap = serverCar.lap;
+                                localCar.lapTimes = serverCar.lapTimes || [];
+                                localCar.bestLapTime = serverCar.bestLapTime || Infinity;
+                                localCar.finished = serverCar.finished;
+                            }
+                        }
+                    } else {
+                        // 新车辆加入
+                        newCars.push({
+                            ...serverCar,
+                            targetX: serverCar.x,
+                            targetY: serverCar.y,
+                            targetAngle: serverCar.angle
+                        });
+                    }
+                });
+                return newCars;
             });
-
-            carsRef.current = updatedCars;
-            setCars(updatedCars);
             
             // Sync UI states for the local player
-            const myCar = payload.cars.find((c: any) => c.id === socketService.playerId);
+            const myCar = packet.cars.find((c: any) => c.id === socketService.socket?.id);
             if (myCar) {
-               setLap(myCar.lap);
-               setCheckpoint(myCar.currentWaypointIndex + myCar.lap * (track?.waypoints?.length || 1));
+               // 仅在非 PLAYING 状态或已完成时同步 UI 圈数，PLAYING 期间 UI 圈数由 App.tsx 内部逻辑计算
+               if (packet.status !== 'PLAYING' || myCar.finished) {
+                   setLap(myCar.lap);
+               }
                if (myCar.finished && !finished) {
                  setFinished(true);
                }
             }
-        }
-
-        if (payload.gameTime !== undefined) {
-            gameTimeRef.current = payload.gameTime;
-            setGameTime(payload.gameTime);
-        }
-        if (payload.countdown !== undefined) {
-            setCountdown(payload.countdown);
-            if (payload.countdown > 0) setStatus('STARTING');
-        }
-        if (payload.finishCountdown !== undefined) {
-            setFinishCountdown(payload.finishCountdown);
         }
       };
 
@@ -339,6 +345,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           aiStyle: p.style as any || 'OPTIMAL',
           team: socketService.room?.settings.isTeamMode ? (p.team || 'BLUE') : undefined
         });
+        
+        // Final check for NaN
+        const lastCar = initialCars[initialCars.length - 1];
+        lastCar.maxSpeed = isNaN(lastCar.maxSpeed) ? 10 : lastCar.maxSpeed;
+        lastCar.grip = isNaN(lastCar.grip) ? 0.15 : lastCar.grip;
+        lastCar.driftGrip = isNaN(lastCar.driftGrip) ? 0.03 : lastCar.driftGrip;
+        lastCar.launch = isNaN(lastCar.launch) ? 0 : lastCar.launch;
+        lastCar.driftSpeed = isNaN(lastCar.driftSpeed) ? 7 : lastCar.driftSpeed;
+        lastCar.acceleration = isNaN(lastCar.acceleration) ? 0.15 : lastCar.acceleration;
       });
     } else {
       // Player 1
@@ -618,14 +633,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
 
     setCars((prevCars) => {
       const newCars = prevCars.map((car) => {
-        // In online mode, we predict ALL cars to keep them smooth between network updates
+        // CLIENT AUTHORITY: In online mode, we ONLY handle physics for our OWN car.
         if (settings.mode === 'ONLINE') {
-           // If we are in STARTING (countdown), don't move
+           if (car.id !== socketService.playerId) return car;
            if (status === 'STARTING') return car;
         }
 
         if (car.finished) {
-           return car;
+           return { ...car, speed: car.speed * 0.95 };
         }
 
         let { x, y, angle, moveAngle, speed, currentWaypointIndex, lap } = car;
@@ -990,24 +1005,42 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         // If diff > 0 and <= 2, car has advanced to a new segment (allowing slight skips/cuts).
         if (diff > 0 && diff <= 2) {
             // Did we wrap around the finish line?
-            if (currentWaypointIndex + diff >= track.waypoints.length) {
+            // GUARD: To cross the line, you must be coming from at least 70% of the track to avoid jitter-cheating
+            if (currentWaypointIndex + diff >= track.waypoints.length && currentWaypointIndex > track.waypoints.length * 0.7) {
               // Crossed finish line
-              if (lap > 0) {
-                const currentLapTime = gameTimeRef.current - car.lapStartTime;
-                newLapTimes.push(currentLapTime);
-                if (currentLapTime < car.bestLapTime) {
-                  newBestLapTime = currentLapTime;
-                }
+              const currentLapTime = gameTimeRef.current - car.lapStartTime;
+              newLapTimes.push(currentLapTime);
+              if (currentLapTime < car.bestLapTime) {
+                newBestLapTime = currentLapTime;
               }
               newLapStartTime = gameTimeRef.current;
               
               lap += 1;
-              if (lap >= settings.laps && settings.mode !== 'ONLINE') {
+              const targetLaps = Number(settings.laps) || 2;
+              if (lap >= targetLaps) {
                 if (firstFinishTimeRef.current === null) {
                   firstFinishTimeRef.current = gameTimeRef.current;
                 }
-                let finalState = { ...car, x: nextX, y: nextY, speed: 0, finished: true, finishTime: gameTimeRef.current, bestLapTime: newBestLapTime, lapTimes: newLapTimes, stuckFrames: currentStuckFrames, reversingFrames: 0 };
-                finalState.lap = settings.laps;
+                
+                let finalState = { 
+                  ...car, 
+                  x: nextX, 
+                  y: nextY, 
+                  speed: 0, 
+                  finished: true, 
+                  finishTime: gameTimeRef.current, 
+                  bestLapTime: newBestLapTime, 
+                  lapTimes: newLapTimes, 
+                  stuckFrames: currentStuckFrames, 
+                  reversingFrames: 0 
+                };
+                finalState.lap = targetLaps;
+                
+                // If we are authority, tell the server we finished
+                if (settings.mode === 'ONLINE' && car.id === socketService.playerId) {
+                   socketService.syncLocalCar(finalState);
+                }
+                
                 return finalState;
               }
             }
@@ -1102,7 +1135,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         hasCalledFinishRef.current = true;
         audioService.stopAll();
         audioService.playFinish();
-        const results = [...carsRef.current].sort((a, b) => (a.finishTime || Infinity) - (b.finishTime || Infinity));
+        const results = [...carsRef.current].sort((a, b) => {
+          const aFinished = a.finished && !a.dnf;
+          const bFinished = b.finished && !b.dnf;
+          if (aFinished && bFinished) return (a.finishTime || 0) - (b.finishTime || 0);
+          if (aFinished && !bFinished) return -1;
+          if (!aFinished && bFinished) return 1;
+          if (!a.isAI && b.isAI) return -1;
+          if (a.isAI && !b.isAI) return 1;
+          if (a.lap !== b.lap) return b.lap - a.lap;
+          if (a.currentWaypointIndex !== b.currentWaypointIndex) return b.currentWaypointIndex - a.currentWaypointIndex;
+          return 0;
+        });
         onFinishRef.current(results);
       }
     }
@@ -1139,7 +1183,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       });
       carsRef.current = finalCars;
 
-      const results = [...finalCars].sort((a, b) => (a.finishTime || Infinity) - (b.finishTime || Infinity));
+      const results = [...finalCars].sort((a, b) => {
+        const aFinished = a.finished && !a.dnf;
+        const bFinished = b.finished && !b.dnf;
+        if (aFinished && bFinished) return (a.finishTime || 0) - (b.finishTime || 0);
+        if (aFinished && !bFinished) return -1;
+        if (!aFinished && bFinished) return 1;
+        if (!a.isAI && b.isAI) return -1;
+        if (a.isAI && !b.isAI) return 1;
+        if (a.lap !== b.lap) return b.lap - a.lap;
+        if (a.currentWaypointIndex !== b.currentWaypointIndex) return b.currentWaypointIndex - a.currentWaypointIndex;
+        return 0;
+      });
       onFinishRef.current(results);
     }
   }, [finishCountdown, settings.mode]);
@@ -1429,15 +1484,52 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
   }, [isPaused]);
 
   const lastInputSyncRef = useRef(0);
+  const lastCoordSyncRef = useRef(0);
   const animate = (time: number) => {
     try {
       if (lastTimeRef.current !== 0 && lastTimeRef.current !== undefined) {
         let deltaTime = time - lastTimeRef.current;
         
-        // Periodic input sync to server (every ~30ms to avoid flooding)
-        if (settings.mode === 'ONLINE' && time - lastInputSyncRef.current > 30) {
-           socketService.socket?.emit('sendInputs', Array.from(keysPressed.current));
-           lastInputSyncRef.current = time;
+        if (settings.mode === 'ONLINE') {
+           // 1. Broadcast local state to server for other players to see
+           if (true) { // ~30Hz sync
+              const myCar = carsRef.current.find(c => c.id === socketService.playerId);
+              if (myCar) {
+                 socketService.syncLocalCar({
+                    x: myCar.x,
+                    y: myCar.y,
+                    angle: myCar.angle,
+                    speed: myCar.speed,
+                    lap: myCar.lap,
+                    currentWaypointIndex: myCar.currentWaypointIndex,
+                    finished: myCar.finished,
+                    finishTime: myCar.finishTime,
+                    isDriftingFlag: myCar.isDriftingFlag
+                 });
+                 lastCoordSyncRef.current = time;
+              }
+           }
+
+           // 2. Input backup (optional, but keep for legacy server event if any)
+           if (time - lastInputSyncRef.current > 32) {
+              socketService.socket?.emit('sendInputs', Array.from(keysPressed.current));
+              lastInputSyncRef.current = time;
+           }
+
+           // 3. Entity Interpolation for OTHER cars
+           const LERP_SPEED = 0.3;
+           carsRef.current.forEach(car => {
+              if (car.id === socketService.playerId) return;
+              if (car.targetX !== undefined) {
+                 car.x += (car.targetX - car.x) * LERP_SPEED;
+                 car.y += (car.targetY - car.y) * LERP_SPEED;
+                 
+                 let angleErr = (car.targetAngle || 0) - car.angle;
+                 while (angleErr > Math.PI) angleErr -= Math.PI * 2;
+                 while (angleErr < -Math.PI) angleErr += Math.PI * 2;
+                 car.angle += angleErr * LERP_SPEED;
+              }
+           });
         }
 
         if (settings.mode === 'ONLINE' && socketService.playerId !== socketService.room?.hostId) {
@@ -1582,7 +1674,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         >
           {isPaused ? <Play size={28} className="translate-x-0.5 group-hover:scale-110 transition-transform" /> : <Pause size={28} className="group-hover:scale-110 transition-transform" />}
         </button>
-        {finishCountdown !== null && finishCountdown > 0 && !hasCalledFinishRef.current && (
+        {finishCountdown !== null && finishCountdown > 0 && (
           <div className="bg-black/90 backdrop-blur-md border border-red-600/50 rounded-xl p-4 text-center shadow-[0_0_25px_rgba(220,38,38,0.4)] animate-pulse min-w-[140px] 2xl:min-w-[180px] mb-2 pointer-events-none">
              <div className="text-lg text-red-500 font-black uppercase tracking-widest mb-1 italic">即将结束</div>
              <div className="text-4xl text-red-600 font-black drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]">{finishCountdown}s</div>

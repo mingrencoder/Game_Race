@@ -21,6 +21,11 @@ class SocketService {
         this.notify();
       });
 
+      this.socket.on('returnedToLobby', (room: RoomState) => {
+        this.room = room;
+        this.notify();
+      });
+
       this.socket.on('gameStarted', (room: RoomState) => {
         this.room = room;
         this.notify();
@@ -44,8 +49,8 @@ class SocketService {
     return () => this.listeners.delete(listener);
   }
 
-  createRoom(playerName: string, callback: (res: any) => void) {
-    this.socket?.emit('createRoom', playerName, (res: any) => {
+  createRoom(playerName: string, passwordSettings: { enabled: boolean; password?: string }, callback: (res: any) => void) {
+    this.socket?.emit('createRoom', { playerName, passwordSettings }, (res: any) => {
       if (res.success) {
         this.room = res.room;
         this.notify();
@@ -54,13 +59,13 @@ class SocketService {
     });
   }
 
-  joinRoom(roomId: string, playerName: string, callback: (res: any) => void) {
-    this.socket?.emit('joinRoom', { roomId, playerName }, (res: any) => {
+  joinRoom(roomId: string, playerName: string, password?: string, callback?: (res: any) => void) {
+    this.socket?.emit('joinRoom', { roomId, playerName, password }, (res: any) => {
       if (res.success) {
         this.room = res.room;
         this.notify();
       }
-      callback(res);
+      if (callback) callback(res);
     });
   }
 
@@ -114,6 +119,10 @@ class SocketService {
 
   startGame() {
     this.socket?.emit('startGame');
+  }
+
+  syncLocalCar(carState: any) {
+    this.socket?.emit('syncLocalCar', carState);
   }
 
   syncCars(payload: any) {

@@ -28,6 +28,29 @@ async function startServer() {
     return id;
   };
 
+  const sortRaceResults = (cars: any[]) => {
+    return [...cars].sort((a, b) => {
+      const aFinished = a.finished && !a.dnf;
+      const bFinished = b.finished && !b.dnf;
+
+      if (aFinished && bFinished) {
+        return (a.finishTime || 0) - (b.finishTime || 0);
+      }
+      if (aFinished && !bFinished) return -1;
+      if (!aFinished && bFinished) return 1;
+
+      // DNF Priority: Human > AI
+      if (!a.isAI && b.isAI) return -1;
+      if (a.isAI && !b.isAI) return 1;
+
+      // Same type DNF: Sort by progress
+      if (a.lap !== b.lap) return b.lap - a.lap;
+      if (a.currentWaypointIndex !== b.currentWaypointIndex) return b.currentWaypointIndex - a.currentWaypointIndex;
+
+      return 0;
+    });
+  };
+
   const startGameLoop = (roomId: string) => {
     if (gameIntervals.has(roomId)) return;
 
@@ -38,6 +61,7 @@ async function startServer() {
 
     // Send initial countdown sync
     io.to(roomId).emit('carsUpdate', {
+      tickId: room.currentTick++,
       cars: room.gameData.cars,
       gameTime: 0,
       countdown: countdown,
@@ -58,54 +82,41 @@ async function startServer() {
       const dtScale = deltaTime / 16.666;
       
       const track = TRACKS.find(t => t.id === room.settings.trackId) || TRACKS[0];
+      const totalLaps = Number(room.settings.laps) || 2; 
 
       if (room.status === 'STARTING') {
         countdown -= (deltaTime / 1000); 
         if (countdown <= 0) {
           room.status = 'PLAYING';
           room.gameData.startTime = Date.now();
+          // Initialize car lap start times relative to race start
+          room.gameData.cars.forEach(c => {
+            c.lapStartTime = 0;
+            c.lap = 0;
+            c.finished = false;
+            c.currentWaypointIndex = 0;
+            c.lapTimes = [];
+          });
           countdown = 0;
         }
         io.to(roomId).emit('carsUpdate', {
+          tickId: room.currentTick++,
           cars: room.gameData.cars,
           gameTime: 0,
           countdown: Math.max(0, Math.ceil(countdown)),
-          status: room.status
+          status: room.status,
+          finishCountdown: null
         });
         return;
       }
 
-      // Update all cars
-      room.gameData.cars = room.gameData.cars.map((car: CarState) => {
-        // If car already finished, just stop
-        if (car.finished) {
-           return { ...car, speed: 0 };
-        }
+      // Handle finish countdown
+      const anyFinished = room.gameData.cars.some(c => c.finished);
+      if (anyFinished && room.status === 'PLAYING') {
+        room.status = 'FINISHING';
+        room.gameData.finishCountdown = 10; 
+      }
 
-        let inputs = new Set<string>();
-        if (car.isAI) {
-          inputs = updateAICar(car, track, room.settings.aiDifficulty || 2, deltaTime, dtScale);
-        } else {
-          inputs = room.gameData.playerInputs[car.id] || new Set<string>();
-        }
-
-        const nextState = updateCarPhysics(car, inputs, track, deltaTime, room.gameData.cars, dtScale);
-        
-        // Handle race finish
-        const totalLaps = Math.max(1, room.settings.laps || track.laps || 3);
-        if (nextState.lap >= totalLaps && !car.finished) {
-          nextState.finished = true;
-          nextState.finishTime = Date.now() - (room.gameData.startTime || Date.now());
-          
-          if (room.status === 'PLAYING') {
-            room.status = 'FINISHING';
-            room.gameData.finishCountdown = 10;
-          }
-        }
-        return nextState;
-      });
-
-      // Handle finish logic
       if (room.status === 'FINISHING' && room.gameData.finishCountdown !== undefined) {
         room.gameData.finishCountdown -= (deltaTime / 1000);
         if (room.gameData.finishCountdown <= 0) {
@@ -114,24 +125,52 @@ async function startServer() {
       }
 
       const hasCars = room.gameData.cars && room.gameData.cars.length > 0;
-      const everyoneFinished = hasCars && room.gameData.cars.every((c: CarState) => c.finished); 
+      const everyoneFinished = hasCars && room.gameData.cars.every((c: any) => c.finished); 
       if (hasCars && everyoneFinished && (room.status === 'PLAYING' || room.status === 'FINISHING')) {
         room.status = 'FINISHED';
       }
 
+      // Update all cars
+      room.gameData.cars = room.gameData.cars.map((car: any) => {
+        if (room.status === 'FINISHED') {
+            return { ...car, speed: 0 };
+        }
+
+        // 【关键修改】真人玩家直接跳过物理模拟，完全同步客户端坐标
+        if (!car.isAI) {
+            // 真人玩家的完成状态完全由 syncLocalCar 更新决定，服务端不干预。
+            // 仅做全体状态检查。
+            return car; 
+        }
+
+        let inputs = updateAICar(car, track, room.settings.aiDifficulty || 2, deltaTime, dtScale);
+        const gameTime = Date.now() - (room.gameData.startTime || Date.now());
+        const nextState = updateCarPhysics(car, inputs, track, deltaTime, room.gameData.cars, dtScale, gameTime);
+        
+        // Handle race finish for AI
+        const totalLaps = Number(room.settings.laps) || 2;
+        if (nextState.lap >= totalLaps && !car.finished) {
+          nextState.finished = true;
+          nextState.finishTime = Date.now() - (room.gameData.startTime || Date.now());
+        }
+
+        return nextState;
+      });
+
       if (room.status === 'FINISHED') {
+        const sortedResults = sortRaceResults(room.gameData.cars);
         io.to(roomId).emit('carsUpdate', {
-          cars: room.gameData.cars,
+          tickId: room.currentTick++,
+          cars: sortedResults,
           gameTime: Date.now() - (room.gameData.startTime || Date.now()),
           countdown: 0,
           finishCountdown: 0,
           status: 'FINISHED'
         });
-        io.to(roomId).emit('gameFinished', room.gameData.cars);
+        io.to(roomId).emit('gameFinished', sortedResults);
         clearInterval(interval);
         gameIntervals.delete(roomId);
       } else {
-        // Convert input Sets to Arrays for JSON serialization
         const serializedInputs: Record<string, string[]> = {};
         if (room.gameData.playerInputs) {
           for (const [id, inputSet] of Object.entries(room.gameData.playerInputs)) {
@@ -140,6 +179,7 @@ async function startServer() {
         }
 
         io.to(roomId).emit('carsUpdate', {
+          tickId: room.currentTick++,
           cars: room.gameData.cars,
           inputs: serializedInputs,
           gameTime: Date.now() - (room.gameData.startTime || Date.now()),
@@ -156,7 +196,7 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    socket.on('createRoom', (playerName, callback) => {
+    socket.on('createRoom', ({ playerName, passwordSettings }, callback) => {
       // Check for duplicate player name across all rooms
       for (const r of rooms.values()) {
         if (r.players.some((p: any) => p.name === playerName)) {
@@ -168,6 +208,7 @@ async function startServer() {
       const newRoom = {
         roomId,
         hostId: socket.id,
+        currentTick: 0,
         players: [{
           id: socket.id,
           name: playerName,
@@ -176,28 +217,81 @@ async function startServer() {
           isAI: false,
           vehicleId: 'car_basic',
           liveryId: 'liv_silver',
+          score: 0,
+          lastFinishTime: 0
         }],
         status: 'LOBBY',
         settings: {
           trackId: 'oval',
-          laps: 3,
+          laps: 2,
           aiDifficulty: 2,
           isCupMode: false,
           cupNumTracks: 4,
-          isTeamMode: false
+          isTeamMode: false,
+          roomName: `${playerName} 的房间`,
+          passwordEnabled: !!passwordSettings?.enabled,
+          password: passwordSettings?.password || ''
         }
       };
       rooms.set(roomId, newRoom);
       socket.join(roomId);
       socket.data.roomId = roomId;
-      callback({ success: true, roomId, room: newRoom });
+
+      // Broadcast update but hide password for non-hosts
+      const sanitizedRoom = sanitizeRoomForPlayer(newRoom, socket.id);
+      callback({ success: true, roomId, room: sanitizedRoom });
     });
 
-    socket.on('joinRoom', ({ roomId, playerName }, callback) => {
+    const sanitizeRoomForPlayer = (room: any, playerId: string) => {
+      const isHost = room.hostId === playerId;
+      return {
+        ...room,
+        password: isHost ? room.settings.password : undefined,
+        hasPassword: room.settings.passwordEnabled && !!room.settings.password,
+        settings: {
+          ...room.settings,
+          password: isHost ? room.settings.password : (room.settings.passwordEnabled ? '********' : ''),
+          roomName: room.settings.roomName // Ensure roomName is always sent
+        }
+      };
+    };
+
+    const broadcastRoomUpdate = (roomId: string) => {
       const room = rooms.get(roomId);
+      if (!room) return;
+
+      const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
+      if (socketsInRoom) {
+        for (const socketId of socketsInRoom) {
+          const s = io.sockets.sockets.get(socketId);
+          if (s) {
+            s.emit('roomUpdate', sanitizeRoomForPlayer(room, socketId));
+          }
+        }
+      }
+    };
+
+    socket.on('joinRoom', ({ roomId, playerName, password }, callback) => {
+      // Find room by ID or by matching name/password (if ID is hidden, we might need a way to find it)
+      let room = rooms.get(roomId);
+      let foundByPassword = false;
+      
+      // Fallback: If roomId looks like a password, try to find room by password
+      if (!room) {
+        for (const r of rooms.values()) {
+          if (r.settings.passwordEnabled && r.settings.password && r.settings.password === roomId) {
+             room = r;
+             foundByPassword = true;
+             break;
+          }
+        }
+      }
+
       if (!room) {
         return callback({ success: false, error: '房间不存在' });
       }
+      
+      const actualRoomId = room.roomId;
       if (room.status !== 'LOBBY') {
         return callback({ success: false, error: '比赛已经开始' });
       }
@@ -206,6 +300,14 @@ async function startServer() {
       }
       if (room.players.some((p: any) => p.name === playerName)) {
         return callback({ success: false, error: '此名称太受欢迎了，换一个吧' });
+      }
+
+      // Password check
+      if (room.settings.passwordEnabled && room.settings.password) {
+        // If we found the room by its password (quick join), we treat it as authenticated
+        if (!foundByPassword && password !== room.settings.password) {
+          return callback({ success: false, error: '房间密码不正确', needsPassword: true });
+        }
       }
       
       const newPlayer = {
@@ -216,22 +318,26 @@ async function startServer() {
         isAI: false,
         vehicleId: 'car_basic',
         liveryId: 'liv_silver',
+        score: 0,
+        lastFinishTime: 0
       };
       
       room.players.push(newPlayer);
-      socket.join(roomId);
-      socket.data.roomId = roomId;
+      socket.join(actualRoomId);
+      socket.data.roomId = actualRoomId;
       
-      io.to(roomId).emit('roomUpdate', room);
-      callback({ success: true, room });
+      broadcastRoomUpdate(actualRoomId);
+      callback({ success: true, room: sanitizeRoomForPlayer(room, socket.id) });
     });
 
     socket.on('getRooms', (callback) => {
       const roomList = Array.from(rooms.values()).map((r: any) => ({
         roomId: r.roomId,
+        roomName: r.settings.roomName || `${r.players.find((p: any) => p.isHost)?.name || 'Unknown'} 的房间`,
         hostName: r.players.find((p: any) => p.isHost)?.name || 'Unknown',
         playersCount: r.players.length,
         status: r.status,
+        hasPassword: r.settings.passwordEnabled && !!r.settings.password,
       }));
       callback({ success: true, rooms: roomList });
     });
@@ -307,7 +413,7 @@ async function startServer() {
           room.players.find((p: any) => p.id === socket.id).isHost = false;
           targetPlayer.isHost = true;
           room.hostId = targetPlayer.id;
-          io.to(roomId).emit('roomUpdate', room);
+          broadcastRoomUpdate(roomId);
         }
       }
     });
@@ -319,7 +425,7 @@ async function startServer() {
         const p = room.players.find((p: any) => p.id === socket.id);
         if (p) {
           Object.assign(p, playerData);
-          io.to(roomId).emit('roomUpdate', room);
+          broadcastRoomUpdate(roomId);
         }
       }
     });
@@ -329,7 +435,7 @@ async function startServer() {
        const room = rooms.get(roomId);
        if (room && room.hostId === socket.id) {
          room.settings = { ...room.settings, ...settings };
-         io.to(roomId).emit('roomUpdate', room);
+         broadcastRoomUpdate(roomId);
        }
     });
 
@@ -340,7 +446,7 @@ async function startServer() {
          const p = room.players.find((p: any) => p.id === socket.id);
          if (p) {
            p.isReady = isReady;
-           io.to(roomId).emit('roomUpdate', room);
+           broadcastRoomUpdate(roomId);
          }
        }
     });
@@ -352,7 +458,7 @@ async function startServer() {
          const p = room.players.find((p: any) => p.id === playerId);
          if (p && !p.isHost) {
            Object.assign(p, updates);
-           io.to(roomId).emit('roomUpdate', room);
+           broadcastRoomUpdate(roomId);
          }
        }
     });
@@ -377,7 +483,7 @@ async function startServer() {
            accelerationId: aiData?.accelerationId,
            style: aiData?.style
          });
-         io.to(roomId).emit('roomUpdate', room);
+         broadcastRoomUpdate(roomId);
       }
     });
 
@@ -386,7 +492,7 @@ async function startServer() {
        const room = rooms.get(roomId);
        if (room && room.hostId === socket.id) {
          room.players = room.players.filter((p: any) => p.id !== aiId);
-         io.to(roomId).emit('roomUpdate', room);
+         broadcastRoomUpdate(roomId);
        }
     });
 
@@ -418,11 +524,11 @@ async function startServer() {
            const perpAngle = startAngle + Math.PI / 2;
 
            const initialCars: CarState[] = room.players.map((p: any, i: number) => {
-             const spacing = 40;
-             const startPerpOffset = -((room.players.length - 1) * spacing) / 2;
-             const perpOffset = startPerpOffset + i * spacing;
-             
-             const baseV = VEHICLES_DB.find(v => v.id === p.vehicleId) || VEHICLES_DB[0];
+              const spacing = 40;
+              const startPerpOffset = -((room.players.length - 1) * spacing) / 2;
+              const perpOffset = startPerpOffset + i * spacing;
+              
+              const baseV = VEHICLES_DB.find(v => v.id === p.vehicleId) || VEHICLES_DB[0];
              const livery = LIVERIES_DB.find(l => l.id === p.liveryId);
              const engine = ITEMS_DB.find(ti => ti.id === p.engineId);
              const tires = ITEMS_DB.find(ti => ti.id === p.tiresId);
@@ -432,6 +538,14 @@ async function startServer() {
 
              const colors = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff2222'];
              const carColor = livery ? '#ffffff' : colors[i % colors.length];
+
+             const stats = {
+               maxSpeed: (baseV?.baseSpeed || 10) + (engine?.speedBoost || engine?.boostValue || 0) + (tires?.speedBoost || 0),
+               grip: (baseV?.baseGrip || 0.15) + (engine?.gripBoost || engine?.boostValue || 0) + (tires?.gripBoost || 0),
+               launch: (baseV?.baseLaunch || 0) + (engine?.launchBoost || 0) + (tires?.launchBoost || 0) + (launchItem?.launchBoost || 0),
+               driftSpeed: (baseV?.baseDriftSpeed || 7) + (engine?.driftSpeedBoost || 0) + (tires?.driftSpeedBoost || 0) + (driftItem?.driftSpeedBoost || 0),
+               acceleration: ((baseV?.baseAcceleration || PHYSICS.ACCELERATION) + (engine?.accelerationBoost || 0) + (tires?.accelerationBoost || 0)) * (1 + (accelItem?.accelerationBoost || 0)),
+             };
 
              return {
                id: p.id,
@@ -446,21 +560,26 @@ async function startServer() {
                lap: 0,
                currentWaypointIndex: 0,
                finished: false,
-               lapStartTime: Date.now(),
+               lapStartTime: 0,
+               lapTimes: [],
                bestLapTime: Infinity,
-               maxSpeed: baseV.baseSpeed + (engine?.speedBoost || 0) + (tires?.speedBoost || 0),
-               grip: baseV.baseGrip + (engine?.gripBoost || 0) + (tires?.gripBoost || 0),
-               driftGrip: (baseV.baseGrip + (engine?.gripBoost || 0) + (tires?.gripBoost || 0)) * 0.2,
-               launch: (baseV.baseLaunch || 0) + (engine?.launchBoost || 0) + (tires?.launchBoost || 0) + (launchItem?.launchBoost || 0),
-               driftSpeed: baseV.baseDriftSpeed + (engine?.driftSpeedBoost || 0) + (tires?.driftSpeedBoost || 0) + (driftItem?.driftSpeedBoost || 0),
-               acceleration: ((baseV.baseAcceleration || PHYSICS.ACCELERATION) + (engine?.accelerationBoost || 0) + (tires?.accelerationBoost || 0)) * (1 + (accelItem?.accelerationBoost || 0)),
-               vehicleType: baseV.type,
-               vehicleName: baseV.name,
+               maxSpeed: isNaN(stats.maxSpeed) ? 10 : stats.maxSpeed,
+               grip: isNaN(stats.grip) ? 0.15 : stats.grip,
+               driftGrip: (isNaN(stats.grip) ? 0.15 : stats.grip) * 0.2,
+               launch: isNaN(stats.launch) ? 0 : stats.launch,
+               driftSpeed: isNaN(stats.driftSpeed) ? 7 : stats.driftSpeed,
+               acceleration: isNaN(stats.acceleration) ? 0.15 : stats.acceleration,
+               vehicleType: baseV?.type || 'standard',
+               vehicleName: baseV?.name || 'Basic',
                liveryData: livery ? { isGradient: livery.isGradient, colors: livery.colors } : undefined,
                aiStyle: p.style || 'OPTIMAL',
                team: p.team
              } as CarState;
            });
+
+
+
+
 
            room.gameData = {
              cars: initialCars,
@@ -474,29 +593,63 @@ async function startServer() {
        }
     });
     
-    // In-game Sync (Obsolete now, but kept for non-breaking sync if needed temporarily)
+    socket.on('syncLocalCar', (carData: any) => {
+      const roomId = socket.data.roomId;
+      if (!roomId) return;
+      const room = rooms.get(roomId);
+      if (!room || !room.gameData || (room.status !== 'STARTED' && room.status !== 'PLAYING' && room.status !== 'FINISHING')) return;
+
+      const car = room.gameData.cars.find((c: any) => c.id === socket.id && !c.isAI);
+      if (car) {
+        // 直接无脑信任客户端传来的数据
+        car.x = carData.x;
+        car.y = carData.y;
+        car.angle = carData.angle;
+        car.speed = carData.speed;
+        car.lap = carData.lap;
+        car.currentWaypointIndex = carData.currentWaypointIndex;
+        if (carData.finished) {
+          car.finished = carData.finished;
+          car.finishTime = carData.finishTime;
+          
+          if (room.status === 'PLAYING') {
+            room.status = 'FINISHING';
+            room.gameData.finishCountdown = 10;
+          }
+        }
+      }
+    });
+
     socket.on('syncCars', (cars) => {
        // NOOP in authoritative mode
     });
 
     socket.on('sendInputs', (inputs) => {
-       const roomId = socket.data.roomId;
-       const room = rooms.get(roomId);
-       if (room && room.gameData) {
-          room.gameData.playerInputs[socket.id] = new Set(inputs);
-       }
+       // CLIENT AUTHORITY: Ignored in favor of direct coordinate sync via syncLocalCar
     });
     
-    socket.on('gameFinished', (results) => {
+    socket.on('gameFinished', (unsortedResults) => {
        const roomId = socket.data.roomId;
        const room = rooms.get(roomId);
        if (room && room.hostId === socket.id) {
+          const results = sortRaceResults(unsortedResults);
+          // Update scores and last finish times for players in the room
+          results.forEach((res: any, index: number) => {
+            const player = room.players.find((p: any) => p.id === res.id);
+            if (player) {
+              player.lastFinishTime = res.dnf ? 999999 : res.finishTime;
+              const pointsTable = [100, 80, 60, 50, 40, 30]; 
+              player.score = (player.score || 0) + (res.dnf ? 0 : (pointsTable[index] || 10));
+            }
+          });
           io.to(roomId).emit('gameFinished', results);
+          broadcastRoomUpdate(roomId);
        }
     });
 
     socket.on('returnToLobby', () => {
        const roomId = socket.data.roomId;
+       if (!roomId) return;
        const room = rooms.get(roomId);
        if (room && room.hostId === socket.id) {
           room.status = 'LOBBY';
@@ -507,9 +660,11 @@ async function startServer() {
             gameIntervals.delete(roomId);
           }
 
-          room.players.forEach((p: any) => !p.isAI && (p.isReady = false));
-          io.to(roomId).emit('returnedToLobby', room);
-          io.to(roomId).emit('roomUpdate', room);
+          room.players.forEach((p: any) => {
+            if (!p.isAI) p.isReady = false;
+          });
+          broadcastRoomUpdate(roomId);
+          io.to(roomId).emit('returnedToLobby'); // Signal to client without full room state if possible, or just use roomUpdate
        }
     });
 
@@ -539,7 +694,7 @@ async function startServer() {
         }
         
         if (rooms.has(roomId)) {
-           io.to(roomId).emit('roomUpdate', room);   
+           broadcastRoomUpdate(roomId);   
         }
       }
     };

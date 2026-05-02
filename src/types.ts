@@ -33,6 +33,8 @@ export type OnlinePlayer = {
   aiDifficulty?: number;
   team?: 'RED' | 'BLUE';
   style?: string; // for AI configs
+  score?: number; // Total score in current room
+  lastFinishTime?: number; // Finish time of the last race
 };
 
 export type RoomState = {
@@ -40,11 +42,16 @@ export type RoomState = {
   hostId: string;
   players: OnlinePlayer[];
   status: 'LOBBY' | 'PLAYING';
+  password?: string; // Real password for host, undefined or empty for others
+  hasPassword?: boolean; // To let everyone know if password is required
   settings: {
     trackId: string;
     aiDifficulty: number; // For AI added by host
     isTeamMode: boolean;
     laps: number;
+    passwordEnabled?: boolean;
+    password?: string;
+    roomName?: string;
   };
 };
 
@@ -166,4 +173,8 @@ export type CarState = {
   vehicleName?: string;
   liveryData?: { isGradient: boolean; colors: string[] };
   isDriftingFlag?: boolean;
+  // Interpolation targets for network sync
+  targetX?: number;
+  targetY?: number;
+  targetAngle?: number;
 };

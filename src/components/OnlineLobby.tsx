@@ -7,6 +7,8 @@ import VehiclePreview from './VehiclePreview';
 export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onStartLobby: () => void }) => {
   const [playerName, setPlayerName] = useState('车手_' + Math.floor(Math.random() * 1000));
   const [roomIdInput, setRoomIdInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordEnabled, setPasswordEnabled] = useState(false);
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState<any[]>([]);
 
@@ -17,6 +19,7 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
   const [targetJoinRoomId, setTargetJoinRoomId] = useState<string | null>(null);
   const [joinInputId, setJoinInputId] = useState('');
   const [joinModalError, setJoinModalError] = useState('');
+  const [needsPassword, setNeedsPassword] = useState(false);
 
   const fetchRooms = () => {
     socketService.getRooms((res) => {
@@ -35,7 +38,7 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
 
   const handleCreate = () => {
     if (!playerName.trim()) return setError('请输入昵称');
-    socketService.createRoom(playerName, (res) => {
+    socketService.createRoom(playerName.trim(), { enabled: passwordEnabled, password: passwordInput.trim() }, (res) => {
       if (res.success) {
         onStartLobby();
       } else {
@@ -44,41 +47,50 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
     });
   };
 
-  const handleJoin = (directRoomId?: string) => {
-    const idToJoin = directRoomId || roomIdInput;
+  const handleJoin = (directRoomId?: string, attemptPassword?: string) => {
+    const idToJoin = (directRoomId || roomIdInput).trim();
+    const finalPassword = attemptPassword?.trim();
     if (!playerName.trim()) {
-      if (directRoomId && targetJoinRoomId) setJoinModalError('请输入昵称');
+      if (targetJoinRoomId) setJoinModalError('请输入昵称');
       else setError('请输入昵称');
       return;
     }
-    if (!idToJoin.trim()) {
-      if (directRoomId && targetJoinRoomId) setJoinModalError('请输入房间号');
-      else setError('请输入房间号');
+    if (!idToJoin) {
+      if (targetJoinRoomId) setJoinModalError(needsPassword ? '请输入房间密码' : '无效的房间');
+      else setError('请输入房间密码');
       return;
     }
-    socketService.joinRoom(idToJoin.toUpperCase(), playerName, (res) => {
+    socketService.joinRoom(idToJoin, playerName.trim(), finalPassword, (res) => {
       if (res.success) {
+        setTargetJoinRoomId(null);
+        setJoinInputId('');
         onStartLobby();
       } else {
-        if (directRoomId && targetJoinRoomId) {
-           setJoinModalError('加入失败: ' + (res.error || '房间号错误'));
+        if (res.needsPassword) {
+          setNeedsPassword(true);
+          setTargetJoinRoomId(idToJoin);
+          setJoinModalError(res.error || '该房间设有密码');
         } else {
-           setError(res.error || '加入失败');
+          if (targetJoinRoomId) {
+             setJoinModalError('加入失败: ' + (res.error || '房间不存在或密码错误'));
+          } else {
+             setError(res.error || '加入失败');
+          }
         }
       }
     });
   };
 
   const executeJoinWithInput = () => {
-    if (!targetJoinRoomId || !joinInputId) {
-       setJoinModalError('请输入房间号');
+    if (!targetJoinRoomId) {
+       setJoinModalError('参数错误');
        return;
     }
-    if (joinInputId.toUpperCase() !== targetJoinRoomId.toUpperCase()) {
-      setJoinModalError('输入的房间号不正确，无法加入该房间。');
-      return;
+    if (needsPassword && !joinInputId) {
+       setJoinModalError('请输入房间密码');
+       return;
     }
-    handleJoin(joinInputId);
+    handleJoin(targetJoinRoomId, joinInputId);
   };
 
   const executeAdminDestroy = () => {
@@ -123,6 +135,21 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
                <button onClick={handleCreate} className="w-full py-4 bg-accent-magenta text-white font-black rounded hover:opacity-90 transition-opacity">
                  创建新房间
                </button>
+               <div className="mt-2 flex items-center gap-3">
+                 <label className="flex items-center gap-2 text-[10px] text-zinc-400 cursor-pointer">
+                    <input type="checkbox" checked={passwordEnabled} onChange={e => setPasswordEnabled(e.target.checked)} className="accent-accent-magenta" />
+                    设置房间密码
+                 </label>
+                 {passwordEnabled && (
+                   <input 
+                     type="text" 
+                     value={passwordInput} 
+                     onChange={e => setPasswordInput(e.target.value)} 
+                     placeholder="输入密码"
+                     className="flex-1 bg-black/40 border border-white/20 rounded px-2 py-1 text-xs text-white focus:border-accent-magenta outline-none"
+                   />
+                 )}
+               </div>
             </div>
             <div className="flex items-center gap-2 py-2">
               <div className="flex-1 h-px bg-white/10" />
@@ -130,17 +157,17 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
               <div className="flex-1 h-px bg-white/10" />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-wider text-zinc-500 mb-2">输入房间号加入</label>
+              <label className="block text-xs uppercase tracking-wider text-zinc-500 mb-2">输入房间密码加入</label>
               <div className="flex gap-2">
                 <input 
                   type="text" 
                   value={roomIdInput} 
                   onChange={e => setRoomIdInput(e.target.value)}
-                  placeholder="例如: AB12C"
-                  className="flex-1 bg-black/40 border border-white/20 rounded p-3 text-white focus:border-accent-cyan outline-none uppercase"
+                  placeholder="输入密码在此快速加入"
+                  className="flex-1 bg-black/40 border border-white/20 rounded p-3 text-white focus:border-accent-cyan outline-none"
                 />
-                <button onClick={() => handleJoin()} className="px-6 bg-accent-cyan text-black font-black rounded hover:opacity-90">
-                  加入
+                <button onClick={() => handleJoin()} className="px-6 bg-accent-cyan text-black font-black rounded hover:shadow-[0_0_15px_rgba(0,242,255,0.4)] transition-all">
+                  快速加入
                 </button>
               </div>
             </div>
@@ -166,16 +193,29 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
                   <div key={r.roomId} className="flex flex-col bg-white/5 p-3 rounded border border-white/5 hover:border-accent-cyan/50 transition-colors group">
                     <div className="flex justify-between items-start mb-2">
                       <div className="min-w-0 pr-2">
-                        <div className="text-accent-cyan font-bold truncate">{r.hostName} 的房间</div>
+                        <div className="text-accent-cyan font-bold truncate flex items-center gap-1">
+                          {r.hasPassword && <span title="需要密码">🔒</span>}
+                          {r.roomName || `${r.hostName} 的房间`}
+                        </div>
                         <div className="text-xs text-zinc-500 truncate">人数: {r.playersCount}/6 | 状态: {r.status === 'LOBBY' ? '大厅中' : '比赛中'}</div>
                       </div>
                       <div className="flex flex-col gap-1 shrink-0">
                         <button 
-                          onClick={() => { setTargetJoinRoomId(r.roomId); setJoinInputId(''); setError(''); }} 
-                          className="px-3 py-1 bg-accent-cyan/20 text-accent-cyan text-xs rounded hover:bg-accent-cyan/40 font-bold"
+                          onClick={() => { 
+                            if (!r.hasPassword) {
+                              handleJoin(r.roomId);
+                            } else {
+                              setTargetJoinRoomId(r.roomId); 
+                              setJoinInputId(''); 
+                              setError(''); 
+                              setJoinModalError('');
+                              setNeedsPassword(r.hasPassword);
+                            }
+                          }} 
+                          className="px-3 py-1 bg-accent-cyan/20 text-accent-cyan text-xs rounded hover:bg-accent-cyan/40 font-bold transition-all"
                           disabled={r.status !== 'LOBBY'}
                         >
-                          {r.status === 'LOBBY' ? '加入' : '比赛中'}
+                          {r.status === 'LOBBY' ? '确认加入' : '比赛中'}
                         </button>
                         <button
                           onClick={() => setAdminDestroyRoomId(r.roomId)}
@@ -197,15 +237,18 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
       {targetJoinRoomId && (
         <div className="absolute inset-0 z-[200] bg-black/80 backdrop-blur flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-accent-cyan/50 p-6 rounded-lg max-w-sm w-full shadow-[0_0_30px_rgba(0,242,255,0.3)]">
-            <h3 className="text-xl font-bold text-accent-cyan mb-4">加入房间</h3>
-            <p className="text-white/70 text-sm mb-4">请输入该房间的房间号以确认加入：</p>
-            <input 
-              type="text" 
-              value={joinInputId}
-              onChange={(e) => { setJoinInputId(e.target.value); setJoinModalError(''); }}
-              className="w-full bg-black/50 border border-white/20 rounded p-2 text-white mb-2 outline-none focus:border-accent-cyan uppercase"
-              placeholder="例如: AB12C"
-            />
+            <h3 className="text-xl font-bold text-accent-cyan mb-4">{needsPassword ? '房间已加密' : '确认加入'}</h3>
+            <p className="text-white/70 text-sm mb-4">{needsPassword ? '该房间设有访问限制，请输入房间密码：' : '确定要加入该房间吗？'}</p>
+            {needsPassword && (
+              <input 
+                type="text" 
+                value={joinInputId}
+                onChange={(e) => { setJoinInputId(e.target.value); setJoinModalError(''); }}
+                className="w-full bg-black/50 border border-white/20 rounded p-2 text-white mb-2 outline-none focus:border-accent-cyan"
+                placeholder="请输入密码"
+                autoFocus
+              />
+            )}
             {joinModalError && <div className="text-red-500 text-sm mb-4">{joinModalError}</div>}
             <div className="flex gap-4">
               <button 
@@ -223,7 +266,7 @@ export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onSta
                 onClick={executeJoinWithInput}
                 className="flex-1 py-2 bg-accent-cyan text-black font-bold rounded hover:bg-accent-cyan/80"
               >
-                确认加入
+                {needsPassword ? '确认' : '加入'}
               </button>
             </div>
           </div>
@@ -287,8 +330,11 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
     });
 
     // Auto update status if returning to LOBBY
-    socketService.socket?.on('returnedToLobby', () => {
-      setRoom({ ...socketService.room } as any);
+    socketService.socket?.on('returnedToLobby', (r: any) => {
+      if (r) {
+        socketService.room = r;
+        setRoom({ ...r } as any);
+      }
     });
 
     socketService.socket?.on('kicked', () => {
@@ -497,12 +543,12 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
                    <h3 className="text-xs text-zinc-500">当前比赛地图</h3>
                    {isHost ? (
                      <div className="flex gap-2 text-xs">
-                       <button onClick={() => socketService.updateSettings({ laps: Math.max(1, (room.settings.laps || 3) - 1) })} className="px-1 hover:text-white">-</button>
-                       <span className="text-accent-cyan font-bold block bg-white/10 px-2 rounded">{room.settings.laps || 3} 圈</span>
-                       <button onClick={() => socketService.updateSettings({ laps: Math.min(10, (room.settings.laps || 3) + 1) })} className="px-1 hover:text-white">+</button>
+                       <button onClick={() => socketService.updateSettings({ laps: Math.max(1, (room.settings.laps || 2) - 1) })} className="px-1 hover:text-white">-</button>
+                       <span className="text-accent-cyan font-bold block bg-white/10 px-2 rounded">{room.settings.laps || 2} 圈</span>
+                       <button onClick={() => socketService.updateSettings({ laps: Math.min(10, (room.settings.laps || 2) + 1) })} className="px-1 hover:text-white">+</button>
                      </div>
                    ) : (
-                     <span className="text-accent-cyan font-bold text-xs">{room.settings.laps || 3} 圈</span>
+                     <span className="text-accent-cyan font-bold text-xs">{room.settings.laps || 2} 圈</span>
                    )}
                  </div>
                  <button 
@@ -562,9 +608,19 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
          {/* Right Side: Room Info & Players */}
          <div className="flex-1 flex flex-col">
             <div className="flex justify-between items-center mb-6 bg-black/40 p-4 border border-white/10 rounded">
-               <div>
-                 <span className="text-zinc-500 text-xs">房间号:</span>
-                 <p className="text-2xl font-mono text-accent-yellow">{room.roomId}</p>
+               <div className="flex-1 mr-4">
+                 <span className="text-zinc-500 text-xs lowercase tracking-wider opacity-60">房间名称:</span>
+                 {isHost ? (
+                   <input 
+                     type="text" 
+                     value={room.settings.roomName || ''} 
+                     onChange={e => socketService.updateSettings({ roomName: e.target.value })}
+                     className="w-full bg-transparent text-xl font-bold text-accent-yellow outline-none border-b border-white/10 focus:border-accent-yellow transition-colors pb-1"
+                     placeholder="输入房间名称"
+                   />
+                 ) : (
+                   <p className="text-xl font-bold text-accent-yellow truncate">{room.settings.roomName || `${room.hostName} 的房间`}</p>
+                 )}
                </div>
                {isHost ? (
                   <button onClick={() => { socketService.disbandRoom(); onBack(); }} className="px-4 py-2 bg-red-500/20 text-red-500 rounded border border-red-500/50 hover:bg-red-500/50 hover:text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)]">
@@ -591,7 +647,7 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
             </div>
 
             <div className="flex-1 space-y-2 overflow-y-auto mb-4 custom-scrollbar">
-               {room.players.map(p => (
+               {[...room.players].sort((a,b)=>((b.score||0)-(a.score||0))).map(p => (
                  <div key={p.id} className={`flex items-center justify-between p-3 rounded border ${p.isReady || p.isAI ? 'border-accent-cyan/30 bg-accent-cyan/10' : 'border-white/10 bg-white/5'}`}>
                     <div className="flex items-center gap-3">
                        <VehiclePreview vehicleType={VEHICLES_DB.find(v => v.id === p.vehicleId)?.type || 'standard'} width={40} height={40} color="#fff" liveryData={LIVERIES_DB.find(l => l.id === p.liveryId)!} />
@@ -659,6 +715,26 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
                     >
                       组队模式: {room.settings.isTeamMode ? '已开启' : '关闭'}
                     </button>
+                    
+                    <div className="flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded">
+                      <span className="text-zinc-400">房间加密:</span>
+                      <input 
+                        type="checkbox" 
+                        checked={room.settings.passwordEnabled} 
+                        onChange={e => socketService.updateSettings({ passwordEnabled: e.target.checked })}
+                        className="accent-accent-magenta"
+                      />
+                      {room.settings.passwordEnabled && (
+                        <input 
+                          type="text" 
+                          value={room.settings.password || ''} 
+                          onChange={e => socketService.updateSettings({ password: e.target.value })}
+                          placeholder="设置新密码"
+                          className="bg-black/50 border border-white/10 rounded px-2 py-0.5 text-accent-magenta w-20 outline-none focus:border-accent-magenta"
+                        />
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded">
                       <span className="text-zinc-400">AI 难度:</span>
                       <button onClick={() => {

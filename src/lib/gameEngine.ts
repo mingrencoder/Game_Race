@@ -7,7 +7,8 @@ export const updateCarPhysics = (
   track: Track,
   deltaTime: number,
   allCars: CarState[],
-  dtScale: number
+  dtScale: number,
+  currentTimeOverride?: number
 ): CarState => {
   if (car.finished) return car;
 
@@ -120,19 +121,29 @@ export const updateCarPhysics = (
   }
 
   // Progression logic (Matching client's logic more closely)
-  let nextWaypointIndex = car.currentWaypointIndex;
-  let nextLap = car.lap;
-
-  const diff = (minLineIndex - car.currentWaypointIndex + track.waypoints.length) % track.waypoints.length;
+  const currentTime = currentTimeOverride || Date.now();
+  const waypointsCount = track.waypoints.length;
+  // Increase allowed skip to 5 for high-speed AI
+  const diff = (minLineIndex - car.currentWaypointIndex + waypointsCount) % waypointsCount;
   
-  // If car advanced significantly, update waypoint. Allow skips up to 1/3 of track
-  if (diff > 0 && diff < track.waypoints.length / 3) {
-      if (car.currentWaypointIndex + diff >= track.waypoints.length) {
-          nextLap++;
+  // If car advanced significantly, update waypoint.
+  if (diff > 0 && diff <= 5) {
+      // Did we wrap around the finish line?
+      if (car.currentWaypointIndex + diff >= waypointsCount && car.currentWaypointIndex > waypointsCount * 0.7) {
+          // Crossed finish line
+          if (currentTime - (car.lapStartTime || 0) > 3000) { 
+              car.lap += 1;
+              const lapTime = currentTime - (car.lapStartTime || currentTime);
+              if (!car.lapTimes) car.lapTimes = [];
+              car.lapTimes.push(lapTime);
+              
+              if (lapTime < car.bestLapTime) {
+                car.bestLapTime = lapTime;
+              }
+              car.lapStartTime = currentTime;
+          }
       }
-      nextWaypointIndex = minLineIndex;
-  } else if (diff > track.waypoints.length * 0.7) {
-      // Allow going backwards slightly without resetting lap/waypoint too aggressively
+      car.currentWaypointIndex = minLineIndex;
   }
 
   return {
@@ -142,8 +153,11 @@ export const updateCarPhysics = (
     angle,
     moveAngle,
     speed,
-    currentWaypointIndex: nextWaypointIndex,
-    lap: nextLap,
+    currentWaypointIndex: car.currentWaypointIndex,
+    lap: car.lap,
+    lapTimes: car.lapTimes ? [...car.lapTimes] : [],
+    lapStartTime: car.lapStartTime,
+    bestLapTime: car.bestLapTime,
     stuckFrames,
     isDriftingFlag
   };
@@ -157,7 +171,9 @@ export const updateAICar = (
   dtScale: number
 ): Set<string> => {
   const inputs = new Set<string>();
-  const aiCfg = AI_CONFIG[difficulty as keyof typeof AI_CONFIG];
+  // Use Math.min/Math.max to bound difficulty to valid AI_CONFIG keys
+  const safeDiff = Math.max(1, Math.min(5, Math.floor(difficulty))) as keyof typeof AI_CONFIG;
+  const aiCfg = AI_CONFIG[safeDiff];
   
   const targetIdx = (car.currentWaypointIndex + 1) % track.waypoints.length;
   const p1 = track.waypoints[targetIdx];

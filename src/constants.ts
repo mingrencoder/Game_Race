@@ -301,6 +301,7 @@ export const AI_CONFIG = {
   2: { maxSpeed: 7.0, steerAccuracy: 0.05, lookAhead: 160 }, // Medium
   3: { maxSpeed: 9.0, steerAccuracy: 0.02, lookAhead: 220 }, // Hard
   4: { maxSpeed: 11.5, steerAccuracy: 0.01, lookAhead: 260 }, // Expert
+  5: { maxSpeed: 13.5, steerAccuracy: 0.005, lookAhead: 300 }, // Elite
 };
 
 export const AI_NAMES = ['影风', '雷霆', '闪电', '狂飙', '夜煞', '暗影', '破空', '逐风', '极光', '魅影', '战神', '飞火', '龙卷', '星火', '陨石', '白虎', '青龙', '朱雀', '玄武'];

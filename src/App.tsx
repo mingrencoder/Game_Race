@@ -261,7 +261,8 @@ export default function App() {
     import('./services/socketService').then(({ socketService }) => {
       const checkAndSetup = setInterval(() => {
         if (socketService.socket) {
-          socketService.socket.off('returnedToLobby').on('returnedToLobby', () => {
+          socketService.socket.off('returnedToLobby').on('returnedToLobby', (r: any) => {
+             if (r) socketService.room = r;
              setGameState(prev => prev === 'PLAYING' ? 'ONLINE_LOBBY' : prev);
           });
           socketService.socket.off('roomDestroyed').on('roomDestroyed', () => {
@@ -425,7 +426,34 @@ export default function App() {
 
   const handleFinish = (finalResults: CarState[]) => {
     audioService.stopBGM();
-    setResults(finalResults);
+
+    // Sort results according to requirements:
+    // 1. Finished players/AI sorted by finishTime
+    // 2. DNF players
+    // 3. DNF AI
+    const sortedResults = [...finalResults].sort((a, b) => {
+      const aFinished = a.finished && !a.dnf;
+      const bFinished = b.finished && !b.dnf;
+
+      if (aFinished && bFinished) {
+        return (a.finishTime || 0) - (b.finishTime || 0);
+      }
+      if (aFinished && !bFinished) return -1;
+      if (!aFinished && bFinished) return 1;
+
+      // Both are DNF or not finished
+      // Priority: Human Player > AI
+      if (!a.isAI && b.isAI) return -1;
+      if (a.isAI && !b.isAI) return 1;
+
+      // If both same type, sort by progress (lap, then waypoint)
+      if (a.lap !== b.lap) return b.lap - a.lap;
+      if (a.currentWaypointIndex !== b.currentWaypointIndex) return b.currentWaypointIndex - a.currentWaypointIndex;
+
+      return 0;
+    });
+
+    setResults(sortedResults);
     
     // Save records
     const newRecords = { ...records };
@@ -433,9 +461,8 @@ export default function App() {
     let trackRecords = newRecords[recordKey] || [];
     let bestPreviousTime = trackRecords.length > 0 ? trackRecords[0].time : Infinity;
     let brokeRecord = false;
-    let breakerName = '';
     
-    finalResults.forEach((car) => {
+    sortedResults.forEach((car) => {
       if (!car.dnf && car.finishTime && !car.isAI) {
         // Only save human player records for leaderboard
         const playerName = settings.mode === 'ONLINE' ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
@@ -503,7 +530,8 @@ export default function App() {
         if (car.team === 'BLUE') currentBlueScore += earned;
       }
 
-      if (car.id === 'p1') {
+      const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
+      if (isLocalPlayer && settings.mode !== 'ONLINE') {
         let moneyEarned = earned;
         setGarage(g => ({ ...g, coins: g.coins + moneyEarned }));
       }
@@ -520,7 +548,7 @@ export default function App() {
         teamBonus += 50; // Flawless victory bonus
         setFlawlessVictoryMessage(`🔥 完胜！ 红队全员完赛并包揽前 ${finalResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +50！`);
       }
-      if (teamBonus > 0) {
+      if (teamBonus > 0 && settings.mode !== 'ONLINE') {
         setGarage(g => ({ ...g, coins: g.coins + teamBonus }));
       }
     } else {
@@ -1197,7 +1225,8 @@ export default function App() {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                  } else {
                     const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                    isWin = entries.length > 0 && (entries[0].id === 'p1' || entries[0].id === 'p2');
+                    const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1' || id === 'p2');
+                    isWin = entries.length > 0 && isLocal(entries[0].id);
                  }
                  const reward = isWin ? (settings.cupNumTracks || 4) * 150 : (settings.cupNumTracks || 4) * 40;
 
@@ -1222,7 +1251,8 @@ export default function App() {
                           isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                        } else {
                           const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                          isWin = entries.length > 0 && (entries[0].id === 'p1' || entries[0].id === 'p2');
+                          const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1' || id === 'p2');
+                          isWin = entries.length > 0 && isLocal(entries[0].id);
                        }
                        const reward = isWin ? (settings.cupNumTracks || 4) * 150 : (settings.cupNumTracks || 4) * 40;
 
@@ -1366,11 +1396,14 @@ export default function App() {
               <div className="space-y-4 mb-8">
                 {results.map((car, index) => {
                   const earned = car.dnf ? 0 : (points[index] || 0);
+                  const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
                   return (
                     <div 
                       key={car.id} 
-                      className={`flex items-center justify-between p-4 rounded-lg border ${
-                        index === 0 ? 'bg-accent-yellow/10 border-accent-yellow/50' : 'bg-black/40 border-white/10'
+                      className={`flex items-center justify-between p-4 rounded-lg border transition-all duration-300 ${
+                        isLocalPlayer 
+                          ? 'bg-accent-yellow/15 border-accent-yellow shadow-[0_0_15px_rgba(244,255,64,0.3)] scale-[1.02]' 
+                          : (index === 0 ? 'bg-black/60 border-accent-yellow/50' : 'bg-black/40 border-white/10')
                       }`}
                     >
                       <div className="flex items-center gap-4">
@@ -1395,7 +1428,7 @@ export default function App() {
                         <div className="font-mono text-xl text-accent-cyan">
                           {car.dnf ? <span className="text-red-500 text-sm">DNF</span> : `${(car.finishTime! / 1000).toFixed(2)}s`}
                         </div>
-                        {car.id === 'p1' && !car.dnf && (
+                        {isLocalPlayer && !car.dnf && settings.mode !== 'ONLINE' && (
                           <div className="font-mono text-sm text-accent-yellow bg-accent-yellow/10 px-3 py-1 rounded-full border border-accent-yellow/30 flex items-center gap-1">
                              奖励 💰 +{(settings.mode === 'TEAM' || settings.isTeamMode) ? (earned + ((teamScore?.RED! > teamScore?.BLUE! && car.team === 'RED') || (teamScore?.BLUE! > teamScore?.RED! && car.team === 'BLUE') ? 20 : 0) + (isFlawlessResult && car.team === 'RED' ? 50 : 0)) : earned}
                           </div>
