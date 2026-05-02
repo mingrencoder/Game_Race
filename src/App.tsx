@@ -400,7 +400,7 @@ export default function App() {
         setScores({});
         setTeamScore(null);
         setNewRecordInfo(null);
-        setSettings(s => ({ ...s, trackId: selectedTracks[0], ...socketService.room?.settings }));
+        setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
         
         // Show cup standings preview instead of jumping right in
         setGameState('CUP_STANDINGS');
@@ -408,7 +408,7 @@ export default function App() {
       } else {
         // Cup is active and we want to start the actual race
         setNewRecordInfo(null);
-        setSettings(s => ({ ...s, trackId: cupState.tracks[cupState.currentRaceIndex], ...socketService.room?.settings }));
+        setSettings(s => ({ ...s, trackId: cupState.tracks[cupState.currentRaceIndex] }));
         audioService.startBGM(cupState.tracks[cupState.currentRaceIndex]);
         setGameState('PLAYING');
         return;
@@ -907,7 +907,7 @@ export default function App() {
                               <div className="flex justify-between items-center bg-white/5 p-1 rounded">
                                 <span>- 玩家 1 (你)</span>
                               </div>
-                                {settings.teamRoster.filter(r => r.team === 'RED').map((r, idx) => {
+                                {settings.teamRoster?.filter(r => r.team === 'RED').map((r, idx) => {
                                  const v = VEHICLES_DB.find(v => v.id === r.vehicleId);
                                  const e = ITEMS_DB.find(i => i.id === r.engineId);
                                  const t = ITEMS_DB.find(i => i.id === r.tiresId);
@@ -927,7 +927,7 @@ export default function App() {
                         <div>
                            <div className="text-accent-cyan font-bold mb-2 border-b border-accent-cyan/30 pb-1 text-xs">蓝队 (对手阵营)</div>
                            <div className="text-[11px] text-white/80 space-y-1">
-                               {settings.teamRoster.filter(r => r.team === 'BLUE').map((r, idx) => {
+                               {settings.teamRoster?.filter(r => r.team === 'BLUE').map((r, idx) => {
                                  const v = VEHICLES_DB.find(v => v.id === r.vehicleId);
                                  const e = ITEMS_DB.find(i => i.id === r.engineId);
                                  const t = ITEMS_DB.find(i => i.id === r.tiresId);
@@ -1189,7 +1189,7 @@ export default function App() {
                      if (id === 'p1') name = '玩家 1';
                      else if (id === 'p2') name = '玩家 2';
                      else {
-                        const ai = settings.teamRoster.find(r => r.id === id);
+                        const ai = settings.teamRoster?.find(r => r.id === id);
                         if (ai) name = ai.name;
                         else if (id.startsWith('ai')) {
                            const idx = parseInt(id.replace('ai', ''));

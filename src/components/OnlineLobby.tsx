@@ -355,7 +355,9 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
   useEffect(() => {
     setRoom(socketService.room);
     const unsub = socketService.subscribe(() => {
-      setRoom({ ...socketService.room } as any);
+      if (socketService.room) {
+        setRoom({ ...socketService.room });
+      }
     });
 
     socketService.socket?.on('gameStarted', () => {

@@ -1,4 +1,4 @@
-import { io } from 'socket.io-client';
+import io, { Socket } from 'socket.io-client';
 import { RoomState, OnlinePlayer } from '../types';
 
 class SocketService {
@@ -32,6 +32,16 @@ class SocketService {
       });
 
       this.socket.on('disconnect', () => {
+        this.room = null;
+        this.notify();
+      });
+
+      this.socket.on('kicked', () => {
+        this.room = null;
+        this.notify();
+      });
+
+      this.socket.on('roomDestroyed', () => {
         this.room = null;
         this.notify();
       });
@@ -84,10 +94,14 @@ class SocketService {
 
   disbandRoom(callback?: (res: any) => void) {
     this.socket?.emit('disbandRoom', callback);
+    this.room = null;
+    this.notify();
   }
 
   leaveRoom() {
     this.socket?.emit('leaveRoom');
+    this.room = null;
+    this.notify();
   }
 
   updatePlayer(playerData: Partial<OnlinePlayer>) {
