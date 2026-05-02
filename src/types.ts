@@ -15,7 +15,39 @@ export enum AIDifficulty {
   EXPERT = 4,
 }
 
-export type GameMode = 'SINGLE' | 'DOUBLE' | 'TEAM';
+export type GameMode = 'SINGLE' | 'ONLINE' | 'TEAM';
+
+export type OnlinePlayer = {
+  id: string; // socket id or 'ai...'
+  name: string;
+  isHost: boolean;
+  isReady: boolean;
+  isAI: boolean;
+  vehicleId: string;
+  liveryId: string;
+  engineId?: string;
+  tiresId?: string;
+  launchId?: string;
+  driftId?: string;
+  accelerationId?: string;
+  aiDifficulty?: number;
+  team?: 'RED' | 'BLUE';
+  style?: string; // for AI configs
+};
+
+export type RoomState = {
+  roomId: string;
+  hostId: string;
+  players: OnlinePlayer[];
+  status: 'LOBBY' | 'PLAYING';
+  settings: {
+    trackId: string;
+    aiDifficulty: number; // For AI added by host
+    isTeamMode: boolean;
+    laps: number;
+  };
+};
+
 
 export type LapRecord = {
   playerName: string;
@@ -49,6 +81,7 @@ export type GameSettings = {
   isEliteMode?: boolean;
   isCupMode?: boolean;
   cupNumTracks?: number;
+  isTeamMode?: boolean;
 };
 
 export type Vehicle = {

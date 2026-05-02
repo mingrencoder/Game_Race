@@ -33,13 +33,13 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
   const equipLivery = (val: string) => setGarage(g => ({ ...g, equippedLivery: val }));
 
-  const getItemIcon = (type: string) => {
-    if (type === 'engine') return <Cpu size={32} className="text-[#00f2ff]" />;
-    if (type === 'tires') return <CircleDot size={32} className="text-[#ff00ea]" />;
-    if (type === 'acceleration') return <Zap size={32} className="text-[#f4ff40]" />;
-    if (type === 'launch') return <Gauge size={32} className="text-[#00ff00]" />;
-    if (type === 'drift') return <Wind size={32} className="text-[#ff2222]" />;
-    return <Cpu size={32} />;
+  const getItemIcon = (type: string, size: number = 32) => {
+    if (type === 'engine') return <Cpu size={size} className="text-[#00f2ff]" />;
+    if (type === 'tires') return <CircleDot size={size} className="text-[#ff00ea]" />;
+    if (type === 'acceleration') return <Zap size={size} className="text-[#f4ff40]" />;
+    if (type === 'launch') return <Gauge size={size} className="text-[#00ff00]" />;
+    if (type === 'drift') return <Wind size={size} className="text-[#ff2222]" />;
+    return <Cpu size={size} />;
   };
 
   const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
@@ -102,8 +102,8 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto w-full">
-        <div className="p-4 md:px-[60px] md:py-8 max-w-5xl mx-auto w-full h-full flex flex-col md:flex-row gap-8">
+      <div className="flex-1 overflow-y-auto w-full px-4">
+        <div className="py-4 md:py-8 w-full max-w-7xl mx-auto h-full flex flex-col md:flex-row gap-8">
           
           {/* 左侧：车辆总览与预览 */}
           <div className="hidden md:flex flex-col gap-4 w-64 shrink-0">
@@ -150,29 +150,28 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
             <div className="flex-1 overflow-y-auto pr-2 pb-8">
               {tab === 'VEHICLES' && (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                   {garage.ownedVehicles.map(vId => {
                     const v = VEHICLES_DB.find(x => x.id === vId);
                     if (!v) return null;
                     const isEquipped = garage.equippedVehicle === v.id;
                     return (
-                      <div key={v.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
-                        <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
-                          <VehiclePreview vehicleType={v.type} width={120} height={120} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
+                      <div key={v.id} className={`neon-panel p-2.5 flex flex-col justify-between gap-2 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
+                        <div className="flex justify-center items-center bg-black/40 rounded-lg py-1.5 border border-white/5 shadow-inner min-h-[70px]">
+                          <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
                         </div>
-                        <div>
-                          <h3 className="text-xl font-bold text-white mb-2">{v.name}</h3>
-                          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 text-[10px] text-zinc-400">
-                            <span>极速: {v.baseSpeed}</span>
-                            <span>抓地: {v.baseGrip}</span>
-                            <span>起步: {v.baseLaunch || 0}</span>
-                            <span>漂移: {v.baseDriftSpeed || 0}</span>
-                            <span>加速: {v.baseAcceleration || 0.15}</span>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-bold text-white mb-0.5 leading-tight truncate">{v.name}</h3>
+                          <div className="grid grid-cols-2 gap-x-1 text-[8px] text-zinc-400">
+                            <span className="truncate">极速:{v.baseSpeed}</span>
+                            <span className="truncate">抓地:{v.baseGrip}</span>
+                            <span className="truncate">起步:{v.baseLaunch || 0}</span>
+                            <span className="truncate">漂移:{v.baseDriftSpeed || 0}</span>
                           </div>
                         </div>
                         <button 
                           onClick={() => equipVehicle(v.id)}
-                          className={`w-full py-2 mt-2 rounded font-bold transition-transform active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                          className={`w-full py-1 rounded text-[11px] font-bold transition-transform active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                         >
                           {isEquipped ? '驾驭中' : '出战'}
                         </button>
@@ -206,8 +205,8 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
               return (
                 <div key={category} className="mb-4 w-full">
-                  <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
-                  <div className="flex overflow-x-auto gap-4 pb-4 snap-x">
+                  <h2 className="text-lg font-bold border-b border-white/10 pb-1.5 mb-3 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 pb-2">
                     {categoryItems.map(itemId => {
                       const item = ITEMS_DB.find(x => x.id === itemId);
                       if (!item) return null;
@@ -221,17 +220,17 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                       if (item.accelerationBoost) boostDesc = `加速能力 +${item.accelerationBoost * 100}%`;
 
                       return (
-                        <div key={item.id} className={`neon-panel p-4 flex flex-col justify-between gap-3 w-64 shrink-0 snap-center ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.15)]' : ''}`}>
-                          <div className="flex justify-center items-center h-20 bg-black/40 rounded-lg border border-white/5 shadow-inner">
-                            {getItemIcon(item.type)}
+                        <div key={item.id} className={`neon-panel p-3 flex flex-col justify-between gap-2 ${isEquipped ? 'border-accent-magenta bg-accent-magenta/10 shadow-[0_0_15px_rgba(255,0,234,0.15)]' : ''}`}>
+                          <div className="flex justify-center items-center h-16 bg-black/40 rounded-lg border border-white/5 shadow-inner">
+                            {getItemIcon(item.type, 28)}
                           </div>
-                          <div>
-                            <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
-                            <p className="text-xs text-accent-yellow">{boostDesc}</p>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-bold text-white mb-0.5 truncate">{item.name}</h3>
+                            <p className="text-[10px] text-accent-yellow truncate">{boostDesc}</p>
                           </div>
                           <button 
                             onClick={() => equipItem(item.id)}
-                            className={`w-full py-2 rounded font-bold transition-all hover:scale-105 active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                            className={`w-full py-1.5 rounded text-xs font-bold transition-all hover:scale-105 active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                           >
                             {isEquipped ? '已安装' : '安装'}
                           </button>
@@ -288,24 +287,24 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                   <h2 className={`text-xl font-bold border-b pb-2 mb-4 ${tierColors[tier]}`}>
                     {tierNames[tier]}
                   </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                     {ownedTierLiveries.map(l => {
                       const isEquipped = garage.equippedLivery === l.id;
                       return (
                         <button 
                           key={l.id}
                           onClick={() => equipLivery(l.id)}
-                          className={`neon-panel p-4 flex flex-col items-center gap-2 transition-all ${isEquipped ? 'border-white bg-white/10 shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'hover:border-white/30'}`}
+                          className={`neon-panel p-3 flex flex-col items-center gap-1.5 transition-all ${isEquipped ? 'border-white bg-white/10 shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'hover:border-white/30'}`}
                         >
-                          <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
-                            <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                          <div className="bg-black/40 rounded p-1 mb-1 w-full flex justify-center border border-white/5">
+                            <VehiclePreview vehicleType="standard" width={50} height={50} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <div 
-                              className="w-4 h-4 rounded-full border border-white/20 inline-block align-middle mr-2" 
+                              className="w-3.5 h-3.5 rounded-full border border-white/20 inline-block align-middle mr-1.5" 
                               style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
                             />
-                            <span className="font-bold text-sm text-center align-middle">{l.name}</span>
+                            <span className="font-bold text-xs text-center align-middle truncate max-w-[80px]">{l.name}</span>
                           </div>
                         </button>
                       );

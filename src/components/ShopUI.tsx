@@ -59,7 +59,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="flex flex-col min-h-[100dvh] p-4 md:p-[60px] max-w-5xl mx-auto overflow-y-auto"
+      className="flex flex-col min-h-[100dvh] p-4 md:p-[60px] max-w-7xl mx-auto overflow-y-auto w-full"
     >
       <header className="flex justify-between items-end mb-8 border-b border-white/10 pb-4 mt-8 md:mt-0">
         <h1 className="text-3xl md:text-4xl font-black italic text-accent-magenta tracking-widest">补给站</h1>
@@ -74,7 +74,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
 
       <div className="flex-1 overflow-y-auto pr-2">
         {tab === 'VEHICLES' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {VEHICLES_DB.map(v => {
               const owned = garage.ownedVehicles.includes(v.id);
               const canAfford = garage.coins >= v.price;
@@ -127,7 +127,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
               return (
                 <div key={category} className="mb-4 w-full">
                   <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
-                  <div className="flex overflow-x-auto gap-4 pb-4 snap-x">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                     {categoryItems.map(item => {
                       const owned = garage.ownedItems.includes(item.id);
                       const canAfford = garage.coins >= item.price;
@@ -140,7 +140,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                       if (item.accelerationBoost) boostDesc = `加速能力 +${item.accelerationBoost * 100}%`;
 
                       return (
-                        <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 w-64 shrink-0 snap-center">
+                        <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 min-w-[200px]">
                           <div className="flex justify-center items-center h-20 bg-black/40 rounded-lg border border-white/5 shadow-inner">
                             {getItemIcon(item.type)}
                           </div>
@@ -192,33 +192,31 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   <h2 className={`text-xl font-bold border-b pb-2 mb-4 ${tierColors[tier]}`}>
                     {tierNames[tier]}
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {tierLiveries.map(l => {
                       const owned = garage.ownedLiveries.includes(l.id);
                       const canAfford = garage.coins >= l.price;
                       return (
-                        <div key={l.id} className="neon-panel p-4 flex justify-between items-center">
-                          <div className="flex items-center gap-4">
+                        <div key={l.id} className="neon-panel p-4 flex flex-col justify-between items-center gap-3">
+                          <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
+                            <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
+                          </div>
+                          <div className="flex items-center gap-2">
                             <div 
-                              className="w-12 h-12 rounded-full border border-white/20 shrink-0 hidden md:block" 
+                              className="w-4 h-4 rounded-full border border-white/20 shrink-0" 
                               style={{ background: l.isGradient ? `linear-gradient(135deg, ${l.colors.join(', ')})` : l.colors[0] }} 
                             />
-                            <div className="bg-black/40 rounded p-1 shrink-0 border border-white/5">
-                              <VehiclePreview vehicleType="standard" width={60} height={60} color="#fff" liveryData={{ isGradient: l.isGradient, colors: l.colors }} />
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-bold text-white leading-tight">{l.name}</h3>
-                            </div>
+                            <h3 className="text-sm font-bold text-white text-center leading-tight">{l.name}</h3>
                           </div>
                           {owned ? (
-                            <span className="text-accent-cyan font-bold">已拥有</span>
+                            <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded">已拥有</span>
                           ) : (
                             <button 
                               onClick={() => buyLivery(l.id, l.price)}
                               disabled={!canAfford}
-                              className="px-4 py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 shrink-0 whitespace-nowrap"
+                              className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 whitespace-nowrap transition-all hover:brightness-110 active:scale-95"
                             >
-                              {l.price} ⟁
+                              购买: {l.price} ⟁
                             </button>
                           )}
                         </div>

@@ -4,6 +4,7 @@ import { GameSettings, CarState, Point, Track, AIDifficulty, GarageData } from '
 import { TRACKS, PHYSICS, AI_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from '../services/audioService';
+import { socketService } from '../services/socketService';
 
 interface GameCanvasProps {
   settings: GameSettings;
@@ -23,14 +24,205 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
   const [gameTime, setGameTime] = useState(0);
   const requestRef = useRef<number>(null);
   const lastTimeRef = useRef<number>(0);
+  const carsRef = useRef<CarState[]>([]);
+  const gameTimeRef = useRef<number>(0);
+  const countdownRef = useRef<number>(3);
   const keysPressed = useRef<Set<string>>(new Set());
+  const remoteInputs = useRef<Record<string, Set<string>>>({});
   const firstFinishTimeRef = useRef<number | null>(null);
   const hasCalledFinishRef = useRef<boolean>(false);
+
+  // Sync state to refs for the animate loop
+  carsRef.current = cars;
+  gameTimeRef.current = gameTime;
+  countdownRef.current = countdown;
 
   const track = TRACKS.find((t) => t.id === settings.trackId) || TRACKS[0];
 
   // AI Roster Seeds are now passed from App.tsx via settings.aiRosterSeeds
   const aiRosterSeeds = settings.aiRosterSeeds || [];
+
+  const onFinishRef = useRef(onFinish);
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  }, [onFinish]);
+
+  const [lap, setLap] = useState(0);
+  const [checkpoint, setCheckpoint] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [finishCountdown, setFinishCountdown] = useState<number | null>(null);
+  const [rankings, setRankings] = useState<CarState[]>([]);
+  const [status, setStatus] = useState<'IDLE'|'STARTING'|'PLAYING'|'FINISHING'|'FINISHED'>('IDLE');
+
+  // Network effects
+  const lastUIRenderTime = useRef(0);
+  useEffect(() => {
+    if (settings.mode === 'ONLINE' && socketService.socket) {
+      const handleInputs = ({ playerId, inputs }: { playerId: string, inputs: string[] }) => {
+        remoteInputs.current[playerId] = new Set(inputs);
+      };
+      
+      const handleCarsUpdate = (payload: any) => {
+        if (!payload) return;
+
+        if (payload.status) {
+          setStatus(payload.status);
+          if (payload.status === 'FINISHED' && !hasCalledFinishRef.current) {
+             // Backup: if we haven't seen gameFinished yet, handle it here
+             handleGameFinished(payload.cars || carsRef.current);
+          }
+        }
+
+        if (payload.inputs) {
+            Object.keys(payload.inputs).forEach(id => {
+               remoteInputs.current[id] = new Set(payload.inputs[id]);
+            });
+        }
+
+        if (payload.cars) {
+            const updatedCars = payload.cars.map((serverCar: any) => {
+               const localCar = carsRef.current.find(c => c.id === serverCar.id);
+               
+               // PREDICTION for my own car
+               if (serverCar.id === socketService.playerId) {
+                  if (!localCar) return serverCar;
+                  
+                  // For race metadata, always sync with server
+                  localCar.lap = serverCar.lap;
+                  localCar.currentWaypointIndex = serverCar.currentWaypointIndex;
+                  localCar.finished = serverCar.finished;
+                  localCar.finishTime = serverCar.finishTime;
+
+                  // FOR LOCAL PLAYER: Authoritative client prediction with large-threshold reconciliation
+                  // We ONLY snap or pull if the error is significant to prevent jitter from latency
+                  const distErr = Math.hypot(serverCar.x - localCar.x, serverCar.y - localCar.y);
+                  
+                  // If deviation is massive (> 250px), snap to server
+                  if (distErr > 250) {
+                    localCar.x = serverCar.x;
+                    localCar.y = serverCar.y;
+                    localCar.angle = serverCar.angle;
+                    localCar.speed = serverCar.speed;
+                  } 
+                  // If moderate deviation, gently assist (but very slowly to avoid visual stutter)
+                  else if (distErr > 40) {
+                    localCar.x += (serverCar.x - localCar.x) * 0.02;
+                    localCar.y += (serverCar.y - localCar.y) * 0.02;
+                  }
+                  
+                  // Always sync critical status like lap and finish
+                  localCar.lap = serverCar.lap;
+                  localCar.currentWaypointIndex = serverCar.currentWaypointIndex;
+                  localCar.finished = serverCar.finished;
+                  localCar.finishTime = serverCar.finishTime;
+
+                  return localCar;
+               }
+               
+               // FOR OTHER CARS (Interpolation)
+               if (!localCar) return serverCar;
+               
+               // Use a simple but effective blending towards server state
+               // Rotation needs careful wrapping to avoid spin-around jitter
+               let angleErr = serverCar.angle - localCar.angle;
+               while (angleErr > Math.PI) angleErr -= Math.PI * 2;
+               while (angleErr < -Math.PI) angleErr += Math.PI * 2;
+
+               return {
+                 ...serverCar,
+                 x: localCar.x + (serverCar.x - localCar.x) * 0.15,
+                 y: localCar.y + (serverCar.y - localCar.y) * 0.15,
+                 angle: localCar.angle + angleErr * 0.15,
+                 speed: localCar.speed + (serverCar.speed - localCar.speed) * 0.2
+               };
+            });
+
+            carsRef.current = updatedCars;
+            setCars(updatedCars);
+            
+            // Sync UI states for the local player
+            const myCar = payload.cars.find((c: any) => c.id === socketService.playerId);
+            if (myCar) {
+               setLap(myCar.lap);
+               setCheckpoint(myCar.currentWaypointIndex + myCar.lap * (track?.waypoints?.length || 1));
+               if (myCar.finished && !finished) {
+                 setFinished(true);
+               }
+            }
+        }
+
+        if (payload.gameTime !== undefined) {
+            gameTimeRef.current = payload.gameTime;
+            setGameTime(payload.gameTime);
+        }
+        if (payload.countdown !== undefined) {
+            setCountdown(payload.countdown);
+            if (payload.countdown > 0) setStatus('STARTING');
+        }
+        if (payload.finishCountdown !== undefined) {
+            setFinishCountdown(payload.finishCountdown);
+        }
+      };
+
+      const handleGameStarted = (room: any) => {
+        console.log('Online Game Started - Resetting State');
+        // FULL RESET of UI and Game State
+        setCars([]);
+        carsRef.current = [];
+        setLap(0);
+        setCheckpoint(0);
+        setGameTime(0);
+        setCountdown(3);
+        setFinishCountdown(null);
+        setFinished(false);
+        setRankings([]);
+        setStatus('STARTING');
+        hasCalledFinishRef.current = false;
+        
+        if (room.gameData && room.gameData.cars) {
+          carsRef.current = room.gameData.cars;
+          setCars(room.gameData.cars);
+        }
+      };
+
+      const handleGameFinished = (results: any) => {
+        if (!hasCalledFinishRef.current) {
+           hasCalledFinishRef.current = true;
+           audioService.stopAll();
+           audioService.playFinish();
+           setRankings(results);
+           setFinished(true);
+           onFinishRef.current(results);
+        }
+      };
+
+      const handleKicked = () => {
+        audioService.stopBGM();
+        onExit();
+      };
+
+    socketService.socket.on('playerInputs', handleInputs);
+    socketService.socket.on('carsUpdate', handleCarsUpdate);
+    socketService.socket.on('gameStarted', handleGameStarted);
+    socketService.socket.on('gameFinished', handleGameFinished);
+    socketService.socket.on('kicked', handleKicked);
+
+      // Periodic broadcast of state handled by server now
+      // Interval for inputs remains
+      const inputInterval = setInterval(() => {
+         if (socketService.playerId) {
+            socketService.sendInputs(Array.from(keysPressed.current));
+         }
+      }, 30);
+
+      return () => {
+        socketService.socket?.off('playerInputs', handleInputs);
+        socketService.socket?.off('carsUpdate', handleCarsUpdate);
+        socketService.socket?.off('gameFinished', handleGameFinished);
+        clearInterval(inputInterval);
+      };
+    }
+  }, [settings.mode]);
 
   // Initialize cars
   useEffect(() => {
@@ -73,7 +265,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     };
 
     // Calculate P1 Stats based on garage (Only applies in SINGLE/TEAM mode)
-    const isSingleOrTeam = settings.mode === 'SINGLE' || settings.mode === 'TEAM';
+    const isSingleOrTeam = settings.mode === 'SINGLE' || ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode);
     const p1Vehicle = isSingleOrTeam ? (VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0]) : VEHICLES_DB[0];
     let p1MaxSpeed = isSingleOrTeam ? p1Vehicle.baseSpeed : VEHICLES_DB[0].baseSpeed;
     let p1Grip = isSingleOrTeam ? p1Vehicle.baseGrip : VEHICLES_DB[0].baseGrip;
@@ -98,18 +290,59 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       p1Acceleration += p1Acceleration * (ITEMS_DB.find(i => i.id === garage.equippedItems.acceleration)?.accelerationBoost || 0);
     }
 
-    const p1LiveryData = (settings.mode === 'TEAM' && settings.isEliteMode) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined);
+    const p1LiveryData = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.isEliteMode) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined);
     const preferredColor = isSingleOrTeam ? (p1LiveryData ? undefined : garage.equippedLivery) : BASIC_COLORS[0];
     const p1Color = p1LiveryData ? '#ffffff' : getUniqueColor(preferredColor);
 
     // Total cars calculation
     let totalCars = 1;
-    if (settings.mode === 'DOUBLE') totalCars = 2 + settings.aiCount;
-    else if (settings.mode === 'TEAM') totalCars = settings.teamRoster.length + 1; // P1 + roster
+    if (settings.mode === 'ONLINE' && socketService.room) totalCars = socketService.room.players.length;
+    else if ((settings.mode === 'TEAM' || settings.isTeamMode)) totalCars = settings.teamRoster.length + 1; // P1 + roster
     else totalCars = 1 + settings.aiCount;
 
-    // Player 1
-    const p1Pos = getStartPos(0, totalCars);
+    if (settings.mode === 'ONLINE' && socketService.room) {
+      // Setup online cars from socketService.room.players
+      socketService.room.players.forEach((p, i) => {
+        const pos = getStartPos(i, totalCars);
+        const baseV = VEHICLES_DB.find(v => v.id === p.vehicleId) || VEHICLES_DB[0];
+        const livery = LIVERIES_DB.find(l => l.id === p.liveryId);
+        const engine = ITEMS_DB.find(ti => ti.id === p.engineId);
+        const tires = ITEMS_DB.find(ti => ti.id === p.tiresId);
+        const launchItem = ITEMS_DB.find(ti => ti.id === p.launchId);
+        const driftItem = ITEMS_DB.find(ti => ti.id === p.driftId);
+        const accelItem = ITEMS_DB.find(ti => ti.id === p.accelerationId);
+        
+        initialCars.push({
+          id: p.id,
+          name: p.name,
+          isAI: p.isAI,
+          x: pos.x,
+          y: pos.y,
+          angle: startAngle,
+          moveAngle: startAngle,
+          speed: 0,
+          color: livery ? '#ffffff' : getUniqueColor(),
+          lap: 0,
+          currentWaypointIndex: 0,
+          finished: false,
+          lapStartTime: 0,
+          bestLapTime: Infinity,
+          maxSpeed: baseV.baseSpeed + (engine?.speedBoost || 0) + (tires?.speedBoost || 0),
+          grip: baseV.baseGrip + (engine?.gripBoost || 0) + (tires?.gripBoost || 0),
+          driftGrip: (baseV.baseGrip + (engine?.gripBoost || 0) + (tires?.gripBoost || 0)) * 0.2,
+          launch: (baseV.baseLaunch || 0) + (engine?.launchBoost || 0) + (tires?.launchBoost || 0) + (launchItem?.launchBoost || 0),
+          driftSpeed: baseV.baseDriftSpeed + (engine?.driftSpeedBoost || 0) + (tires?.driftSpeedBoost || 0) + (driftItem?.driftSpeedBoost || 0),
+          acceleration: ((baseV.baseAcceleration || PHYSICS.ACCELERATION) + (engine?.accelerationBoost || 0) + (tires?.accelerationBoost || 0)) * (1 + (accelItem?.accelerationBoost || 0)),
+          vehicleType: baseV.type,
+          vehicleName: baseV.name,
+          liveryData: livery ? { isGradient: livery.isGradient, colors: livery.colors } : undefined,
+          aiStyle: p.style as any || 'OPTIMAL',
+          team: socketService.room?.settings.isTeamMode ? (p.team || 'BLUE') : undefined
+        });
+      });
+    } else {
+      // Player 1
+      const p1Pos = getStartPos(0, totalCars);
     initialCars.push({
       id: 'p1',
       name: '玩家1',
@@ -135,7 +368,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       vehicleType: isSingleOrTeam ? p1Vehicle.type : 'standard',
       vehicleName: isSingleOrTeam ? p1Vehicle.name : VEHICLES_DB[0].name,
       liveryData: p1LiveryData ? { isGradient: p1LiveryData.isGradient, colors: p1LiveryData.colors } : undefined,
-      team: settings.mode === 'TEAM' ? 'RED' : undefined,
+      team: (settings.mode === 'TEAM' || settings.isTeamMode) ? 'RED' : undefined,
     });
 
     // Player 2
@@ -169,7 +402,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     }
 
     // AI Opponents
-    if (settings.mode === 'TEAM') {
+    if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       settings.teamRoster.forEach((rosterAI, i) => {
         const aiPos = getStartPos(1 + i, totalCars);
         const baseV = VEHICLES_DB.find(v => v.id === rosterAI.vehicleId) || VEHICLES_DB[0];
@@ -223,9 +456,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           aiStyle: rosterAI.style,
         });
       });
-    } else {
+    } else if (settings.mode !== 'ONLINE') {
       for (let i = 0; i < settings.aiCount; i++) {
-        const aiPos = getStartPos(settings.mode === 'DOUBLE' ? i + 2 : i + 1, totalCars);
+        const aiPos = getStartPos(i + 1, totalCars);
         const seed = aiRosterSeeds[i] as any;
         const randomBaseVehicle = seed.randomBaseVehicle;
         const randomEngine = seed.randomEngine;
@@ -288,7 +521,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           aiStyle: seed.aiStyle || 'OPTIMAL'
         });
       }
-    }
+    } // End of AI blocks
+
+    } // End of else block (Non-ONLINE mode)
 
     setCars(initialCars);
 
@@ -308,7 +543,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     };
   }, [settings, track, matchId, garage]);
 
-  // Input handling
+  // Input handle
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       audioService.init();
@@ -316,6 +551,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         setIsPaused(p => !p);
       }
       keysPressed.current.add(e.code);
+      
+      // Prevent scrolling with arrows
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        e.preventDefault();
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => keysPressed.current.delete(e.code);
     const handleBlur = () => {
@@ -370,7 +610,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
   };
 
   const updatePhysics = (deltaTime: number) => {
-    if (countdown > 0 || isPaused) return;
+    if (countdownRef.current > 0 || (isPaused && settings.mode !== 'ONLINE')) return;
 
     setGameTime((prev) => prev + deltaTime);
 
@@ -378,7 +618,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
 
     setCars((prevCars) => {
       const newCars = prevCars.map((car) => {
-        if (car.finished) return car;
+        // In online mode, we predict ALL cars to keep them smooth between network updates
+        if (settings.mode === 'ONLINE') {
+           // If we are in STARTING (countdown), don't move
+           if (status === 'STARTING') return car;
+        }
+
+        if (car.finished) {
+           return car;
+        }
 
         let { x, y, angle, moveAngle, speed, currentWaypointIndex, lap } = car;
 
@@ -393,7 +641,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         let isDriftingFlag = false;
 
         if (!car.isAI) {
-          if (car.playerIndex === 0) {
+          if (settings.mode === 'ONLINE') {
+            const keys = car.id === socketService.playerId ? keysPressed.current : (remoteInputs.current[car.id] || new Set());
+            accelerate = keys.has('ArrowUp') || keys.has('KeyW');
+            brake = keys.has('ArrowDown') || keys.has('KeyS');
+            left = keys.has('ArrowLeft') || keys.has('KeyA');
+            right = keys.has('ArrowRight') || keys.has('KeyD');
+            drift = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyQ') || keys.has('KeyE');
+            pureBrake = keys.has('Enter') || keys.has('Space');
+          } else if (car.playerIndex === 0) {
             accelerate = keysPressed.current.has('ArrowUp');
             brake = keysPressed.current.has('ArrowDown');
             left = keysPressed.current.has('ArrowLeft');
@@ -402,6 +658,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
             pureBrake = keysPressed.current.has('Enter') || keysPressed.current.has('Space');
             
             // Allow WASD for Player 1 if not in DOUBLE mode
+            // We kept the DOUBLE mode string here in case it's still somewhere, but ONLINE is handled above
             if (settings.mode !== 'DOUBLE') {
               accelerate = accelerate || keysPressed.current.has('KeyW');
               brake = brake || keysPressed.current.has('KeyS');
@@ -421,7 +678,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           }
         } else {
           // AI Logic
-          const effDiff = (settings.mode === 'TEAM' && settings.isEliteMode) ? 4 : settings.aiDifficulty;
+          const effDiff = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.isEliteMode) ? 4 : settings.aiDifficulty;
           const aiCfg = AI_CONFIG[effDiff as AIDifficulty];
           
           const targetIdx = (currentWaypointIndex + 1) % track.waypoints.length;
@@ -589,7 +846,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         let currentAcceleration = car.acceleration * fatigueFactor;
 
         // Slightly lower acceleration if starting to simulate stall/heat
-        if (car.isAI && settings.isEliteMode && gameTime > 30000) {
+        if (car.isAI && settings.isEliteMode && gameTimeRef.current > 30000) {
            currentAcceleration *= 0.95;
         }
 
@@ -599,7 +856,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         if (accelerate) {
           speed += currentAcceleration * dtScale;
           // Start acceleration bonus for the first 1.5 seconds
-          if (gameTime < 1500) {
+          if (gameTimeRef.current < 1500) {
               speed += (car.launch * 0.05) * dtScale;
           }
         }
@@ -736,20 +993,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
             if (currentWaypointIndex + diff >= track.waypoints.length) {
               // Crossed finish line
               if (lap > 0) {
-                const currentLapTime = gameTime - car.lapStartTime;
+                const currentLapTime = gameTimeRef.current - car.lapStartTime;
                 newLapTimes.push(currentLapTime);
                 if (currentLapTime < car.bestLapTime) {
                   newBestLapTime = currentLapTime;
                 }
               }
-              newLapStartTime = gameTime;
+              newLapStartTime = gameTimeRef.current;
               
               lap += 1;
-              if (lap >= settings.laps) {
+              if (lap >= settings.laps && settings.mode !== 'ONLINE') {
                 if (firstFinishTimeRef.current === null) {
-                  firstFinishTimeRef.current = gameTime;
+                  firstFinishTimeRef.current = gameTimeRef.current;
                 }
-                let finalState = { ...car, x: nextX, y: nextY, speed: 0, finished: true, finishTime: gameTime, bestLapTime: newBestLapTime, lapTimes: newLapTimes, stuckFrames: currentStuckFrames, reversingFrames: 0 };
+                let finalState = { ...car, x: nextX, y: nextY, speed: 0, finished: true, finishTime: gameTimeRef.current, bestLapTime: newBestLapTime, lapTimes: newLapTimes, stuckFrames: currentStuckFrames, reversingFrames: 0 };
                 finalState.lap = settings.laps;
                 return finalState;
               }
@@ -776,7 +1033,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       });
 
       // Check if timeout reached (10 seconds after first finish)
-      if (firstFinishTimeRef.current !== null && gameTime - firstFinishTimeRef.current > 10000) {
+      if (firstFinishTimeRef.current !== null && gameTimeRef.current - firstFinishTimeRef.current > 10000) {
         // Force finish DNF
         let changed = false;
         const dnfCars = newCars.map(c => {
@@ -840,13 +1097,66 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
 
   // Check for finish condition
   useEffect(() => {
-    if (!hasCalledFinishRef.current && cars.length > 0 && cars.every(c => c.finished)) {
+    if (settings.mode !== 'ONLINE' && cars.length > 0 && !hasCalledFinishRef.current) {
+      if (cars.every(c => c.finished)) {
+        hasCalledFinishRef.current = true;
+        audioService.stopAll();
+        audioService.playFinish();
+        const results = [...carsRef.current].sort((a, b) => (a.finishTime || Infinity) - (b.finishTime || Infinity));
+        onFinishRef.current(results);
+      }
+    }
+  }, [cars, settings.mode]);
+
+  useEffect(() => {
+    if (settings.mode !== 'ONLINE' && !hasCalledFinishRef.current && finishCountdown === null) {
+      const anyFinished = cars.some(c => c.finished);
+      const allFinished = cars.every(c => c.finished);
+      if (anyFinished && !allFinished) {
+        setFinishCountdown(10);
+      }
+    }
+  }, [cars, settings.mode, finishCountdown]);
+
+  useEffect(() => {
+    // Online mode finish is driven by server status: FINISHED
+    if (settings.mode === 'ONLINE') return;
+    
+    if (finishCountdown !== null && finishCountdown > 0) {
+      const timer = setTimeout(() => setFinishCountdown(f => (f ? f - 1 : 0)), 1000);
+      return () => clearTimeout(timer);
+    } else if (finishCountdown === 0 && !hasCalledFinishRef.current) {
       hasCalledFinishRef.current = true;
       audioService.stopAll();
       audioService.playFinish();
-      onFinish([...cars].sort((a, b) => (a.finishTime || 0) - (b.finishTime || 0)));
+      
+      // Ensure all unfinished cars are marked as DNF
+      const finalCars = carsRef.current.map(c => {
+         if (!c.finished) {
+           return { ...c, finished: true, finishTime: Infinity, dnf: true, lap: settings.laps };
+         }
+         return c;
+      });
+      carsRef.current = finalCars;
+
+      const results = [...finalCars].sort((a, b) => (a.finishTime || Infinity) - (b.finishTime || Infinity));
+      onFinishRef.current(results);
     }
-  }, [cars, onFinish]);
+  }, [finishCountdown, settings.mode]);
+
+  // Sync cars and state for Host
+  const lastSyncTime = useRef(0);
+  useEffect(() => {
+    if (settings.mode === 'ONLINE' && socketService.playerId === socketService.room?.hostId) {
+      if (cars.length > 0) {
+         const now = Date.now();
+         if (now - lastSyncTime.current > 30) { // ~33 hz sync rate
+           socketService.syncCars({ cars, gameTime, finishCountdown, countdown });
+           lastSyncTime.current = now;
+         }
+      }
+    }
+  }, [cars, settings.mode, gameTime, finishCountdown, countdown]);
 
   const render = () => {
     const canvas = canvasRef.current;
@@ -940,7 +1250,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     ctx.restore();
 
     // Draw Cars
-    cars.forEach((car) => {
+    carsRef.current.forEach((car) => {
       ctx.save();
       ctx.translate(car.x, car.y);
       ctx.rotate(car.angle);
@@ -1118,14 +1428,49 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     }
   }, [isPaused]);
 
+  const lastInputSyncRef = useRef(0);
   const animate = (time: number) => {
-    if (lastTimeRef.current !== 0 && lastTimeRef.current !== undefined) {
-      const deltaTime = time - lastTimeRef.current;
-      updatePhysics(deltaTime);
+    try {
+      if (lastTimeRef.current !== 0 && lastTimeRef.current !== undefined) {
+        let deltaTime = time - lastTimeRef.current;
+        
+        // Periodic input sync to server (every ~30ms to avoid flooding)
+        if (settings.mode === 'ONLINE' && time - lastInputSyncRef.current > 30) {
+           socketService.socket?.emit('sendInputs', Array.from(keysPressed.current));
+           lastInputSyncRef.current = time;
+        }
+
+        if (settings.mode === 'ONLINE' && socketService.playerId !== socketService.room?.hostId) {
+           // Allow local physics for the player's OWN car only to reduce perceived lag
+           // But other cars are moved strictly by network payload
+           if (deltaTime > 2000) deltaTime = 2000;
+           updatePhysics(deltaTime); 
+        } else {
+           if (deltaTime > 2000) deltaTime = 2000;
+           const steps = Math.ceil(deltaTime / 16.666);
+           const stepDt = deltaTime / steps;
+           for (let i = 0; i < steps; i++) {
+              updatePhysics(stepDt);
+           }
+        }
+      }
+      lastTimeRef.current = time;
+      render();
+      requestRef.current = requestAnimationFrame(animate);
+    } catch (e) {
+      console.error("Game loop error:", e);
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = 'red';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = 'white';
+          ctx.font = '20px sans-serif';
+          ctx.fillText("An error occurred: " + (e as Error).message, 50, 50);
+        }
+      }
     }
-    lastTimeRef.current = time;
-    render();
-    requestRef.current = requestAnimationFrame(animate);
   };
 
   useEffect(() => {
@@ -1133,7 +1478,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [countdown, isPaused, cars]);
+  }, [isPaused, settings.mode, track]);
 
   return (
     <div className="relative w-full h-[100dvh] flex flex-col items-center bg-bg overflow-hidden p-0">
@@ -1170,7 +1515,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
                 <div className="w-1.5 h-1.5 2xl:w-2 2xl:h-2 rounded-full shadow-[0_0_5px_currentColor]" style={{ backgroundColor: car.team === 'RED' ? '#ef4444' : car.team === 'BLUE' ? '#3b82f6' : car.color, color: car.team === 'RED' ? '#ef4444' : car.team === 'BLUE' ? '#3b82f6' : car.color }} />
                 <span className={`text-[10px] hidden sm:inline uppercase ${car.team === 'RED' ? 'text-red-400' : car.team === 'BLUE' ? 'text-blue-400' : 'text-white'}`}>{car.name || car.id}</span>
               </div>
-              <span className="text-[10px] opacity-60">圈数{car.lap + 1}/{settings.laps} {car.finished ? '完成' : ''}</span>
+              <span className="text-[10px] opacity-60">圈数{Math.min(car.lap + 1, settings.laps)}/{settings.laps} {car.finished ? '完成' : ''}</span>
             </div>
           ))}
         </div>
@@ -1200,7 +1545,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
              )}
           </div>
         ))}
-        {cupState && settings.mode === 'TEAM' && (
+        {cupState && (settings.mode === 'TEAM' || settings.isTeamMode) && (
           <div className="mt-2 bg-black/60 backdrop-blur-md border border-yellow-500/30 rounded p-2 text-white font-mono shadow-[0_0_10px_rgba(234,179,8,0.2)] opacity-90 min-w-[120px] 2xl:min-w-[160px]">
              <div className="text-yellow-400 text-[10px] 2xl:text-xs mb-1 font-bold border-b border-yellow-500/20 pb-1">杯赛大比分 (红:蓝)</div>
              <div className="text-xl 2xl:text-2xl text-center font-black">
@@ -1237,10 +1582,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         >
           {isPaused ? <Play size={28} className="translate-x-0.5 group-hover:scale-110 transition-transform" /> : <Pause size={28} className="group-hover:scale-110 transition-transform" />}
         </button>
-        {firstFinishTimeRef.current !== null && (
-           <div className="bg-red-500/90 text-white font-black px-4 py-2 rounded-lg text-center text-sm md:text-xl animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.6)] backdrop-blur-md">
-             结束倒数: {Math.max(0, Math.ceil((10000 - (gameTime - firstFinishTimeRef.current)) / 1000))}
-           </div>
+        {finishCountdown !== null && finishCountdown > 0 && !hasCalledFinishRef.current && (
+          <div className="bg-black/90 backdrop-blur-md border border-red-600/50 rounded-xl p-4 text-center shadow-[0_0_25px_rgba(220,38,38,0.4)] animate-pulse min-w-[140px] 2xl:min-w-[180px] mb-2 pointer-events-none">
+             <div className="text-lg text-red-500 font-black uppercase tracking-widest mb-1 italic">即将结束</div>
+             <div className="text-4xl text-red-600 font-black drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]">{finishCountdown}s</div>
+          </div>
         )}
       </div>
 
@@ -1332,26 +1678,37 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20">
           <div className="bg-zinc-900 p-8 rounded-3xl border border-white/10 text-center flex flex-col gap-4">
             <h2 className="text-4xl font-black text-white mb-4 italic">已暂停</h2>
-            <button 
-              onClick={() => {
-                setIsPaused(false);
-                setMatchId(prev => prev + 1);
-              }}
-              className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all transform hover:scale-105"
-            >
-              重新比赛
-            </button>
-            <button 
-              onClick={() => setIsPaused(false)}
-              className="px-8 py-3 bg-accent-cyan hover:bg-accent-cyan/80 text-black font-bold rounded-xl transition-all transform hover:scale-105"
-            >
-              继续比赛
-            </button>
+            {settings.mode !== 'ONLINE' ? (
+              <>
+                <button 
+                  onClick={() => {
+                    setIsPaused(false);
+                    setMatchId(prev => prev + 1);
+                  }}
+                  className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all transform hover:scale-105"
+                >
+                  重新比赛
+                </button>
+                <button 
+                  onClick={() => setIsPaused(false)}
+                  className="px-8 py-3 bg-accent-cyan hover:bg-accent-cyan/80 text-black font-bold rounded-xl transition-all transform hover:scale-105"
+                >
+                  继续比赛
+                </button>
+              </>
+            ) : (
+              <button 
+                onClick={() => setIsPaused(false)}
+                className="px-8 py-3 bg-accent-cyan hover:bg-accent-cyan/80 text-black font-bold rounded-xl transition-all transform hover:scale-105"
+              >
+                返回游戏
+              </button>
+            )}
             <button 
               onClick={onExit}
               className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all transform hover:scale-105"
             >
-              返回主菜单
+              {settings.mode === 'ONLINE' ? '放弃比赛 (返回大厅)' : '返回主菜单'}
             </button>
           </div>
         </div>

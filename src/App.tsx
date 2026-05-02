@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { OnlineMenu, OnlineLobby } from './components/OnlineLobby';
+import { socketService } from './services/socketService';
 import { GameSettings, CarState, AIDifficulty, GameMode, GarageData, LapRecord, AIStyle, TeamSetup } from './types';
 import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES } from './constants';
 import GameCanvas from './components/GameCanvas';
@@ -153,6 +155,7 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteM
 
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
+import { TrackSelector } from './components/TrackSelector';
 import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from './services/audioService';
@@ -171,11 +174,44 @@ const initialGarageData: GarageData = (() => {
   };
 })();
 
+const OnlineRoomsPreview = () => {
+  const [rooms, setRooms] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout;
+    import('./services/socketService').then(({ socketService }) => {
+      socketService.connect();
+      const fetchRooms = () => {
+        socketService.getRooms((res) => {
+          if (res.success) {
+            setRooms(res.rooms);
+          } else if (Array.isArray(res)) {
+            setRooms(res);
+          }
+        });
+      };
+      fetchRooms();
+      interval = setInterval(fetchRooms, 3000); // refresh every 3s
+    });
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="py-4 text-zinc-300">
+      <div className="text-center">
+        <p className="text-xl font-black text-accent-cyan tracking-wider mb-2">在线对战大厅</p>
+        <p className="text-sm opacity-80">当前进行中的房间总数: <span className="font-bold text-accent-yellow">{rooms.length} / 20</span></p>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboardTrackId, setLeaderboardTrackId] = useState<string>('oval');
   const [leaderboardLapCount, setLeaderboardLapCount] = useState<number>(2);
+  const [leaderboardType, setLeaderboardType] = useState<'LOCAL' | 'ONLINE'>('LOCAL');
   const [showPlayerInfo, setShowPlayerInfo] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void} | null>(null);
   
@@ -214,12 +250,29 @@ export default function App() {
   const [flawlessVictoryMessage, setFlawlessVictoryMessage] = useState<string | null>(null);
   const [isFlawlessResult, setIsFlawlessResult] = useState<boolean>(false);
   const [cupState, setCupState] = useState<{ isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null>(null);
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS'>('MENU');
+  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY'>('MENU');
   
   const [garage, setGarage] = useState<GarageData>(initialGarageData);
 
   const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('neon_volume') || '0.5'));
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('neon_muted') === 'true');
+
+  React.useEffect(() => {
+    import('./services/socketService').then(({ socketService }) => {
+      const checkAndSetup = setInterval(() => {
+        if (socketService.socket) {
+          socketService.socket.off('returnedToLobby').on('returnedToLobby', () => {
+             setGameState(prev => prev === 'PLAYING' ? 'ONLINE_LOBBY' : prev);
+          });
+          socketService.socket.off('roomDestroyed').on('roomDestroyed', () => {
+             setGameState('ONLINE_MENU');
+          });
+          clearInterval(checkAndSetup);
+        }
+      }, 500);
+      return () => clearInterval(checkAndSetup);
+    });
+  }, []);
 
   React.useEffect(() => {
     localStorage.setItem('neon_volume', volume.toString());
@@ -313,26 +366,40 @@ export default function App() {
     input.click();
   };
 
-  const handleStartGame = () => {
+  const handleStartGame = (forceOnlineStart: boolean = false) => {
     audioService.init();
 
-    if (settings.isCupMode) {
+    if (settings.mode === 'ONLINE' && forceOnlineStart !== true) {
+      setGameState('ONLINE_MENU');
+      return;
+    }
+
+    const currentSettings = forceOnlineStart && socketService.room ? {
+       ...settings,
+       ...socketService.room.settings
+    } : settings;
+
+    if (forceOnlineStart && socketService.room) {
+       setSettings(currentSettings);
+    }
+
+    if (currentSettings.isCupMode) {
       if (!cupState?.isActive) {
         // Init cup
         const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
-        const selectedTracks = availableTracks.slice(0, settings.cupNumTracks || 4);
+        const selectedTracks = availableTracks.slice(0, currentSettings.cupNumTracks || 4);
         
         setCupState({
           isActive: true,
           tracks: selectedTracks,
           currentRaceIndex: 0,
           finished: false,
-          teamWins: settings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+          teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
         });
         setScores({});
         setTeamScore(null);
         setNewRecordInfo(null);
-        setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
+        setSettings(s => ({ ...s, trackId: selectedTracks[0], ...socketService.room?.settings }));
         
         // Show cup standings preview instead of jumping right in
         setGameState('CUP_STANDINGS');
@@ -340,7 +407,7 @@ export default function App() {
       } else {
         // Cup is active and we want to start the actual race
         setNewRecordInfo(null);
-        setSettings(s => ({ ...s, trackId: cupState.tracks[cupState.currentRaceIndex] }));
+        setSettings(s => ({ ...s, trackId: cupState.tracks[cupState.currentRaceIndex], ...socketService.room?.settings }));
         audioService.startBGM(cupState.tracks[cupState.currentRaceIndex]);
         setGameState('PLAYING');
         return;
@@ -349,7 +416,7 @@ export default function App() {
       setScores({});
       setTeamScore(null);
       setCupState(null);
-      audioService.startBGM(settings.trackId);
+      audioService.startBGM(currentSettings.trackId);
       setGameState('PLAYING');
     }
   };
@@ -362,7 +429,7 @@ export default function App() {
     
     // Save records
     const newRecords = { ...records };
-    const recordKey = `${settings.trackId}_${settings.laps}`;
+    const recordKey = settings.mode === 'ONLINE' ? `${settings.trackId}_${settings.laps}_online` : `${settings.trackId}_${settings.laps}`;
     let trackRecords = newRecords[recordKey] || [];
     let bestPreviousTime = trackRecords.length > 0 ? trackRecords[0].time : Infinity;
     let brokeRecord = false;
@@ -371,7 +438,7 @@ export default function App() {
     finalResults.forEach((car) => {
       if (!car.dnf && car.finishTime && !car.isAI) {
         // Only save human player records for leaderboard
-        const playerName = car.id === 'p1' ? '玩家 1' : '玩家 2';
+        const playerName = settings.mode === 'ONLINE' ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
         
         if (car.finishTime < bestPreviousTime) {
           brokeRecord = true;
@@ -388,7 +455,7 @@ export default function App() {
           playerName,
           time: car.finishTime,
           vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
-          isTeam: settings.mode === 'TEAM',
+          isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode),
           timestamp: Date.now()
         });
       }
@@ -411,7 +478,7 @@ export default function App() {
 
     let isFlawlessRed = false;
 
-    if (settings.mode === 'TEAM') {
+    if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       const redTeamResults = finalResults.filter(r => r.team === 'RED');
       const totalRedMembers = redTeamResults.length;
       
@@ -431,7 +498,7 @@ export default function App() {
       const earned = car.dnf ? 0 : (points[index] || 0);
       newScores[car.id] = (newScores[car.id] || 0) + earned;
       
-      if (settings.mode === 'TEAM') {
+      if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
         if (car.team === 'RED') currentRedScore += earned;
         if (car.team === 'BLUE') currentBlueScore += earned;
       }
@@ -443,7 +510,7 @@ export default function App() {
     });
 
     setFlawlessVictoryMessage(null);
-    if (settings.mode === 'TEAM') {
+    if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       setTeamScore({ RED: currentRedScore, BLUE: currentBlueScore });
       let teamBonus = 0;
       if (currentRedScore > currentBlueScore) {
@@ -467,7 +534,7 @@ export default function App() {
       let isFinished = nextIndex >= cupState.tracks.length;
       let newTeamWins = cupState.teamWins;
       
-      if (settings.mode === 'TEAM' && newTeamWins) {
+      if ((settings.mode === 'TEAM' || settings.isTeamMode) && newTeamWins) {
         if (currentRedScore > currentBlueScore) {
           newTeamWins = { ...newTeamWins, RED: newTeamWins.RED + 1 };
         } else if (currentBlueScore > currentRedScore) {
@@ -496,7 +563,17 @@ export default function App() {
     setCupState(null);
     setScores({});
     setTeamScore(null);
-    setGameState('MENU');
+    setSettings(s => ({ ...s, isTeamMode: false }));
+    if (settings.mode === 'ONLINE') {
+      import('./services/socketService').then(({ socketService }) => {
+         if (socketService.playerId === socketService.room?.hostId) {
+            socketService.socket?.emit('returnToLobby');
+         }
+      });
+      setGameState('ONLINE_LOBBY');
+    } else {
+      setGameState('MENU');
+    }
   };
 
   return (
@@ -565,7 +642,7 @@ export default function App() {
                 >
                   玩法说明
                 </button>
-                <div className="font-mono opacity-60 text-[10px] md:text-[14px] hidden sm:block">系统版本: 2.0.4</div>
+                <div className="font-mono opacity-60 text-[10px] md:text-[14px] hidden sm:block">系统版本: 3.0.0</div>
               </div>
             </header>
 
@@ -587,19 +664,19 @@ export default function App() {
                       单人模式
                     </button>
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'DOUBLE', aiCount: Math.min(s.aiCount, 4), aiRosterSeeds: generateAiRosterSeeds(Math.min(s.aiCount, 4), s.aiDifficulty, s.isEliteMode) }))}
+                      onClick={() => setSettings(s => ({ ...s, mode: 'ONLINE' }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
-                        settings.mode === 'DOUBLE' 
+                        settings.mode === 'ONLINE' 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
                         : 'bg-white/5 border border-white/10 hover:bg-white/10'
                       }`}
                     >
-                      双人竞技
+                      在线对战
                     </button>
                     <button 
                       onClick={() => setSettings(s => ({ ...s, mode: 'TEAM', cupNumTracks: s.isCupMode && s.cupNumTracks && s.cupNumTracks % 2 === 0 ? s.cupNumTracks + 1 : s.cupNumTracks }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
-                        settings.mode === 'TEAM' 
+                        (settings.mode === 'TEAM' || settings.isTeamMode) 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
                         : 'bg-white/5 border border-white/10 hover:bg-white/10'
                       }`}
@@ -610,7 +687,9 @@ export default function App() {
                 </div>
 
                 <div className="neon-panel p-[20px]">
-                  {settings.mode !== 'TEAM' ? (
+                  {settings.mode === 'ONLINE' ? (
+                    <OnlineRoomsPreview />
+                  ) : settings.mode !== 'TEAM' ? (
                     <>
                       <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">AI 对手设置</span>
                       
@@ -862,7 +941,8 @@ export default function App() {
               </div>
 
               {/* Content */}
-              <div className="flex flex-col overflow-visible lg:overflow-hidden shrink-0 min-h-[300px] lg:min-h-0 border-t border-white/10 lg:border-t-0 pt-4 lg:pt-0">
+              {settings.mode !== 'ONLINE' && (
+                <div className="flex flex-col overflow-visible lg:overflow-hidden shrink-0 min-h-[300px] lg:min-h-0 border-t border-white/10 lg:border-t-0 pt-4 lg:pt-0">
                 <div className="flex justify-between items-center mb-[15px] shrink-0 flex-wrap gap-2">
                   <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta font-bold">
                     {settings.isCupMode ? '杯赛配置' : '选择赛道 (预计 1-2 分钟)'}
@@ -887,8 +967,8 @@ export default function App() {
                       <div className="flex gap-2 justify-center items-center">
                         <button 
                           onClick={() => {
-                             let next = Math.max(settings.mode === 'TEAM' ? 3 : 2, (settings.cupNumTracks || 4) - 1);
-                             if (settings.mode === 'TEAM' && next % 2 === 0) next = Math.max(3, next - 1);
+                             let next = Math.max((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 2, (settings.cupNumTracks || 4) - 1);
+                             if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next = Math.max(3, next - 1);
                              setSettings(s => ({ ...s, cupNumTracks: next }));
                           }}
                           className="w-10 h-10 bg-white/5 border border-white/10 text-white rounded hover:bg-white/10 font-black text-xl flex items-center justify-center transition-colors"
@@ -897,15 +977,15 @@ export default function App() {
                         </button>
                         <input 
                            type="number"
-                           min={settings.mode === 'TEAM' ? 3 : 2}
-                           step={settings.mode === 'TEAM' ? 2 : 1}
+                           min={(settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 2}
+                           step={(settings.mode === 'TEAM' || settings.isTeamMode) ? 2 : 1}
                            max={TRACKS.length}
-                           value={settings.cupNumTracks || (settings.mode === 'TEAM' ? 3 : 4)}
+                           value={settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4)}
                            onChange={(e) => {
                               const val = parseInt(e.target.value);
                               if (!isNaN(val)) {
-                                 let next = Math.max(settings.mode === 'TEAM' ? 3 : 2, Math.min(TRACKS.length, val));
-                                 if (settings.mode === 'TEAM' && next % 2 === 0) next += 1;
+                                 let next = Math.max((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 2, Math.min(TRACKS.length, val));
+                                 if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next += 1;
                                  setSettings(s => ({ ...s, cupNumTracks: Math.min(TRACKS.length, next) }));
                               }
                            }}
@@ -914,9 +994,9 @@ export default function App() {
                         <button 
                           onClick={() => {
                              let next = Math.min(TRACKS.length, (settings.cupNumTracks || 4) + 1);
-                             if (settings.mode === 'TEAM' && next % 2 === 0) next = Math.min(TRACKS.length, next + 1);
+                             if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next = Math.min(TRACKS.length, next + 1);
                              // Need to handle if TRACKS.length is even and we hit it.
-                             if (settings.mode === 'TEAM' && next % 2 === 0) next -= 1; 
+                             if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next -= 1; 
                              setSettings(s => ({ ...s, cupNumTracks: next }));
                           }}
                           className="w-10 h-10 bg-white/5 border border-white/10 text-white rounded hover:bg-white/10 font-black text-xl flex items-center justify-center transition-colors"
@@ -927,66 +1007,20 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-[20px] overflow-visible lg:overflow-y-auto pr-2 pb-4 flex-1 content-start">
-                    {TRACKS.map((track) => (
-                    <div
-                      key={track.id}
-                      onClick={() => setSettings(s => ({ ...s, trackId: track.id }))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          setSettings(s => ({ ...s, trackId: track.id }));
-                        }
+                  <div className="flex-1 flex flex-col h-[600px] overflow-hidden">
+                    <TrackSelector 
+                      selectedTrackId={settings.trackId || TRACKS[0].id}
+                      onSelect={(id) => setSettings(s => ({ ...s, trackId: id }))}
+                      onViewLeaderboard={(id) => {
+                        setLeaderboardTrackId(id);
+                        setLeaderboardLapCount(settings.laps || TRACKS.find(t=>t.id===id)?.laps || 3);
+                        setShowLeaderboard(true);
                       }}
-                      role="button"
-                      tabIndex={0}
-                      className={`neon-panel relative overflow-hidden h-[140px] transition-all group cursor-pointer ${
-                        settings.trackId === track.id 
-                          ? 'border-2 border-accent-yellow shadow-[0_0_20px_rgba(244,255,64,0.4)]' 
-                          : 'hover:border-white/30'
-                      }`}
-                    >
-                      <div className="w-full h-[70%] bg-black/40 flex items-center justify-center">
-                        {/* Simple SVG Track Preview */}
-                        <svg width="120" height="60" viewBox="0 0 1600 1200" className="opacity-50 group-hover:opacity-80 transition-opacity">
-                          <path 
-                            d={track.waypoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'} 
-                            fill="none" 
-                            stroke={settings.trackId === track.id ? '#f4ff40' : '#00f2ff'} 
-                            strokeWidth="80" 
-                            strokeLinecap="round" 
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </div>
-                      <div className="p-[8px_15px] bg-black/60 text-[14px] flex justify-between items-center absolute bottom-0 w-full">
-                        <span className="font-bold flex items-center gap-2">
-                          {track.name}
-                          {(() => {
-                            const trackRecords = records[`${track.id}_${settings.laps}`] || [];
-                            if (trackRecords.length > 0) {
-                              const best = trackRecords[0];
-                              return <span className="text-[10px] text-accent-yellow bg-accent-yellow/20 px-1.5 py-0.5 rounded border border-accent-yellow/30 font-mono hidden sm:inline-block">🏆 {(best.time / 1000).toFixed(2)}s</span>
-                            }
-                            return null;
-                          })()}
-                        </span>
-                        <div className="flex items-center gap-2">
-                           <button 
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               setLeaderboardTrackId(track.id);
-                               setLeaderboardLapCount(settings.laps);
-                               setShowLeaderboard(true);
-                             }}
-                             className="text-[10px] text-accent-cyan hover:text-white px-1.5 py-0.5 rounded bg-accent-cyan/10 hover:bg-accent-cyan/30 transition-colors italic tracking-wider shadow-[0_0_5px_currentColor] border border-accent-cyan/20"
-                           >查看榜单</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    />
+                  </div>
                 )}
               </div>
+              )}
             </main>
 
             {/* Footer */}
@@ -995,7 +1029,7 @@ export default function App() {
                 <strong>驾驶警告：</strong>由于赛道抓地力限制，转弯速度过快将导致赛车撞击赛道边缘。物理碰撞会产生剧烈摩擦并大幅降低车速。
               </div>
               <div className="flex w-full md:w-auto gap-4 flex-wrap md:flex-nowrap">
-                {(settings.mode === 'SINGLE' || settings.mode === 'TEAM') && (
+                {(settings.mode === 'SINGLE' || (settings.mode === 'TEAM' || settings.isTeamMode)) && (
                   <button 
                     onClick={() => setGameState('GARAGE')}
                     className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
@@ -1010,10 +1044,10 @@ export default function App() {
                   商店 ({garage.coins} ⟁)
                 </button>
                 <button 
-                  onClick={handleStartGame}
+                  onClick={() => handleStartGame(false)}
                   className="w-full md:w-auto bg-accent-yellow text-black px-4 md:px-[40px] py-[12px] text-[16px] md:text-[20px] font-black uppercase rounded-[4px] cursor-pointer shadow-[0_0_30px_rgba(244,255,64,0.5)] transition-all transform hover:scale-105 active:scale-95"
                 >
-                  进入比赛
+                  {settings.mode === 'ONLINE' ? '加入/创建房间' : '进入比赛'}
                 </button>
               </div>
             </footer>
@@ -1022,6 +1056,19 @@ export default function App() {
 
         {gameState === 'SHOP' && <ShopUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
         {gameState === 'GARAGE' && <GarageUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
+
+        {gameState === 'ONLINE_MENU' && <OnlineMenu onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
+        {gameState === 'ONLINE_LOBBY' && <OnlineLobby onBack={() => {
+          import('./services/socketService').then(({ socketService }) => {
+            socketService.socket?.emit('leaveRoom');
+          });
+          setGameState('MENU');
+        }} onStartGame={() => handleStartGame(true)} onViewLeaderboard={(id) => {
+             setLeaderboardTrackId(id);
+             setLeaderboardLapCount(settings.laps || TRACKS.find(t=>t.id===id)?.laps || 3);
+             setLeaderboardType('ONLINE');
+             setShowLeaderboard(true);
+        }} />}
 
         {gameState === 'PLAYING' && (
           <motion.div
@@ -1090,7 +1137,7 @@ export default function App() {
                     </div>
                   </motion.div>
                 )}
-                {settings.mode === 'TEAM' ? (() => {
+                {(settings.mode === 'TEAM' || settings.isTeamMode) ? (() => {
                   const redScore = cupState.teamWins?.RED || 0;
                   const blueScore = cupState.teamWins?.BLUE || 0;
                   
@@ -1146,7 +1193,7 @@ export default function App() {
 
               {cupState.finished && (() => {
                  let isWin = false;
-                 if (settings.mode === 'TEAM') {
+                 if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                  } else {
                     const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
@@ -1171,7 +1218,7 @@ export default function App() {
                    <button 
                      onClick={() => {
                        let isWin = false;
-                       if (settings.mode === 'TEAM') {
+                       if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                           isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                        } else {
                           const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
@@ -1202,7 +1249,7 @@ export default function App() {
                        放弃并返回
                      </button>
                      <button 
-                       onClick={handleStartGame}
+                       onClick={() => handleStartGame(false)}
                        className="flex-1 px-8 py-4 bg-accent-cyan text-black font-black uppercase rounded-lg shadow-[0_0_30px_rgba(0,242,255,0.4)] transform hover:scale-105 transition-all text-left flex flex-col justify-center"
                      >
                        <span className="text-xs opacity-70 mb-1">下一场: {TRACKS.find(t => t.id === cupState.tracks[cupState.currentRaceIndex])?.name}</span>
@@ -1272,7 +1319,7 @@ export default function App() {
                 </motion.div>
               )}
 
-              {settings.mode === 'TEAM' && teamScore && (
+              {(settings.mode === 'TEAM' || settings.isTeamMode) && teamScore && (
                 <div className="flex justify-center items-start gap-8 mb-8 text-2xl font-black">
                   <div className={`flex flex-col items-center min-w-[120px] ${teamScore.RED > teamScore.BLUE ? 'text-yellow-400 scale-110' : 'text-red-400'} transition-transform`}>
                     <span className="text-sm">红队</span>
@@ -1332,7 +1379,7 @@ export default function App() {
                         <div className="flex flex-col items-start pr-4">
                           <div className="font-bold text-lg uppercase tracking-wider leading-none">
                              {car.name || car.id.toUpperCase()} 
-                             {settings.mode === 'TEAM' && (
+                             {(settings.mode === 'TEAM' || settings.isTeamMode) && (
                                <span className={`text-[10px] ml-2 px-1 rounded ${car.team === 'RED' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}>
                                  {car.team === 'RED' ? '红队' : '蓝队'}
                                </span>
@@ -1350,11 +1397,11 @@ export default function App() {
                         </div>
                         {car.id === 'p1' && !car.dnf && (
                           <div className="font-mono text-sm text-accent-yellow bg-accent-yellow/10 px-3 py-1 rounded-full border border-accent-yellow/30 flex items-center gap-1">
-                             奖励 💰 +{settings.mode === 'TEAM' ? (earned + ((teamScore?.RED! > teamScore?.BLUE! && car.team === 'RED') || (teamScore?.BLUE! > teamScore?.RED! && car.team === 'BLUE') ? 20 : 0) + (isFlawlessResult && car.team === 'RED' ? 50 : 0)) : earned}
+                             奖励 💰 +{(settings.mode === 'TEAM' || settings.isTeamMode) ? (earned + ((teamScore?.RED! > teamScore?.BLUE! && car.team === 'RED') || (teamScore?.BLUE! > teamScore?.RED! && car.team === 'BLUE') ? 20 : 0) + (isFlawlessResult && car.team === 'RED' ? 50 : 0)) : earned}
                           </div>
                         )}
                         <div className="font-mono text-sm text-accent-magenta bg-accent-magenta/10 px-3 py-1 rounded-full border border-accent-magenta/30">
-                          {settings.mode === 'TEAM' ? `贡献 ${earned}` : (car.dnf ? 0 : scores[car.id])} 分
+                          {(settings.mode === 'TEAM' || settings.isTeamMode) ? `贡献 ${earned}` : (car.dnf ? 0 : scores[car.id])} 分
                         </div>
                       </div>
                     </div>
@@ -1391,14 +1438,16 @@ export default function App() {
                        onClick={handleExit}
                        className="flex-1 h-12 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-all"
                      >
-                       返回主菜单
+                       {settings.mode === 'ONLINE' ? '返回房间' : '返回主菜单'}
                      </button>
-                     <button 
-                       onClick={handleStartGame}
-                       className="flex-1 h-12 bg-accent-cyan text-black font-black uppercase rounded-lg shadow-[0_0_20px_rgba(0,242,255,0.4)] hover:scale-[1.02] transition-all"
-                     >
-                       重新比赛
-                     </button>
+                     {settings.mode !== 'ONLINE' && (
+                       <button 
+                         onClick={() => handleStartGame(false)}
+                         className="flex-1 h-12 bg-accent-cyan text-black font-black uppercase rounded-lg shadow-[0_0_20px_rgba(0,242,255,0.4)] hover:scale-[1.02] transition-all"
+                       >
+                         重新比赛
+                       </button>
+                     )}
                    </>
                 )}
               </div>
@@ -1437,8 +1486,8 @@ export default function App() {
                   <h3 className="text-accent-yellow font-bold text-lg mb-2 flex items-center gap-2">🏆 赛事目标与概览</h3>
                   <p className="opacity-90 leading-6">
                     在多变复杂的赛道上超越所有对手，夺取冠军！比赛名次决定金币收益，你可以使用金币在商店解锁更强赛车、高配性能零件以及炫彩涂装。<br/>
-                    本游戏包含三种主要模式：<strong className="text-accent-cyan">单车竞速(单人)</strong>、<strong className="text-accent-magenta">同屏对战(双人)</strong>、<strong className="text-red-400">红</strong><strong className="text-blue-400">蓝</strong><strong>组队对决</strong>。<br/>
-                    同时提供<strong className="text-accent-yellow">杯赛模式</strong>（多轮连续作战，支持单人积分制或组队比分制，满足提前决胜条件即可结算大奖）和<strong className="text-purple-400">精英赛</strong>（最高难度AI，部分杯赛下会锁死特殊发光外观）。
+                    本游戏包含四种主要模式：<strong className="text-accent-cyan">单人模式(竞速/组队)</strong>、<strong className="text-accent-magenta">同屏对战(双人)</strong>、<strong className="text-accent-yellow">杯赛模式(联赛)</strong>、<strong className="text-green-400">在线对战(多人联机)</strong>。<br/>
+                    同时提供<strong className="text-purple-400">精英赛</strong>（最高难度AI，部分杯赛下会锁死特殊发光外观）。在<strong className="text-green-400">在线对战</strong>中，您可以创建或加入房间，与全世界的玩家进行巅峰对决，并且支持组队模式或混战！
                   </p>
                 </section>
                 
@@ -1447,15 +1496,15 @@ export default function App() {
                   <p className="opacity-80 text-sm mb-3">支持在游戏中按 <kbd className="bg-white/20 px-1 rounded">P</kbd> 键 或 <kbd className="bg-white/20 px-1 rounded">ESC</kbd> 键快速<strong className="text-white">暂停/继续</strong>比赛。</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 p-4 rounded-md border border-white/5">
                      <div>
-                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">玩家一操作（单人/组队/双人）：</strong>
+                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">玩家一操作（单人/组队/在线对战）：</strong>
                        <p className="opacity-80 leading-7">
                          • <kbd className="bg-white/10 px-1 rounded">↑</kbd> <kbd className="bg-white/10 px-1 rounded">↓</kbd> <kbd className="bg-white/10 px-1 rounded">←</kbd> <kbd className="bg-white/10 px-1 rounded">→</kbd>：加速/刹车/转向<br/>
                          • <kbd className="bg-white/10 px-1 rounded">Shift</kbd> 键：手刹漂移 (微调过弯)<br/>
                          • <kbd className="bg-white/10 px-1 rounded">空格 (Space)</kbd> / <kbd className="bg-white/10 px-1 rounded">Enter</kbd>：急刹车<br/>
-                         <span className="text-[12px] text-zinc-400">* 注：在除双人对战以外的模式，也可使用 WASD 与 Q/E 控制。</span>
+                         <span className="text-[12px] text-zinc-400">* 注：在任何模式下均可使用 WASD 与 Q/E 控制。</span>
                        </p>
                      </div>
-                     <div>
+                     <div className="hidden">
                        <strong className="text-accent-magenta block mb-2 border-b border-accent-magenta/30 pb-1">玩家二操作（仅双人模式）：</strong>
                        <p className="opacity-80 leading-7">
                          • <kbd className="bg-white/10 px-1 rounded">W</kbd> <kbd className="bg-white/10 px-1 rounded">S</kbd> <kbd className="bg-white/10 px-1 rounded">A</kbd> <kbd className="bg-white/10 px-1 rounded">D</kbd>：加速/刹车/转向<br/>
@@ -1605,10 +1654,24 @@ export default function App() {
                   ))}
                 </div>
 
+                <div className="flex gap-4 px-1 pb-4">
+                  <div className="flex rounded-md overflow-hidden border border-white/20">
+                    <button
+                      onClick={() => setLeaderboardType('LOCAL')}
+                      className={`px-4 py-1.5 text-xs font-bold transition-all ${leaderboardType === 'LOCAL' ? 'bg-accent-yellow text-black' : 'bg-black text-zinc-400 hover:bg-white/10'}`}
+                    >本地记录</button>
+                    <button
+                      onClick={() => setLeaderboardType('ONLINE')}
+                      className={`px-4 py-1.5 text-xs font-bold transition-all ${leaderboardType === 'ONLINE' ? 'bg-accent-yellow text-black' : 'bg-black text-zinc-400 hover:bg-white/10'}`}
+                    >在线对战</button>
+                  </div>
+                </div>
+
                 {/* Sub-tabs for Laps */}
                 <div className="flex gap-2 px-1">
                   {[1, 2, 3, 4, 5].map(lap => {
-                    const hasRecords = (records[`${leaderboardTrackId}_${lap}`] || []).length > 0;
+                    const recordKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${lap}_online` : `${leaderboardTrackId}_${lap}`;
+                    const hasRecords = (records[recordKey] || []).length > 0;
                     return (
                       <button
                         key={lap}
@@ -1628,25 +1691,26 @@ export default function App() {
                 {/* Records Listing */}
                 <div className="bg-white/5 border border-white/5 rounded-lg p-4">
                   {(() => {
-                    const trackRecords = records[`${leaderboardTrackId}_${leaderboardLapCount}`] || [];
+                    const currentKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${leaderboardLapCount}_online` : `${leaderboardTrackId}_${leaderboardLapCount}`;
+                    const trackRecords = records[currentKey] || [];
                     const trackName = TRACKS.find(t => t.id === leaderboardTrackId)?.name;
                     
                     if (trackRecords.length === 0) {
-                      return <div className="text-zinc-500 text-sm text-center py-8 bg-black/40 rounded-lg border border-white/5">该赛道/圈数暂无成绩，快去创造记录吧！</div>;
+                      return <div className="text-zinc-500 text-sm text-center py-8 bg-black/40 rounded-lg border border-white/5">{leaderboardType === 'ONLINE' ? '该赛道暂无在线对战成绩' : '该赛道/圈数暂无成绩，快去创造记录吧！'}</div>;
                     }
                     
                     return (
                       <div className="space-y-6">
                         <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-4">
                           <h4 className="text-accent-magenta font-bold">
-                            {trackName} - {leaderboardLapCount}圈记录
+                            {trackName} - {leaderboardLapCount}圈记录 {leaderboardType === 'ONLINE' ? '(在线对战)' : ''}
                           </h4>
                           <button 
                             onClick={() => setConfirmAction({
-                              message: `确定要删除「${trackName}」的 ${leaderboardLapCount} 圈记录吗？`,
+                              message: `确定要删除「${trackName}」的 ${leaderboardLapCount} 圈${leaderboardType === 'ONLINE' ? '在线' : ''}记录吗？`,
                               onConfirm: () => {
                                 const newRecords = { ...records };
-                                delete newRecords[`${leaderboardTrackId}_${leaderboardLapCount}`];
+                                delete newRecords[currentKey];
                                 setRecords(newRecords);
                               }
                             })}
@@ -1663,7 +1727,7 @@ export default function App() {
                               : '-';
                               
                             return (
-                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-sm p-3 rounded bg-black/40 border border-white/5 gap-2">
+                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-sm p-3 rounded bg-black/40 border border-white/5 gap-2 hover:bg-white/5 transition-colors group">
                                 <div className="flex items-center gap-3">
                                   <span className={`font-black w-6 text-center ${idx === 0 ? 'text-accent-yellow scale-125' : idx === 1 ? 'text-zinc-300 scale-110' : idx === 2 ? 'text-amber-600 scale-105' : 'text-zinc-600'}`}>
                                     #{idx + 1}
@@ -1676,6 +1740,26 @@ export default function App() {
                                 <div className="flex items-center justify-end gap-4 ml-9 sm:ml-0">
                                   <span className="text-[10px] text-zinc-500">{dateStr}</span>
                                   <span className="font-mono font-bold text-accent-magenta text-base">{(record.time / 1000).toFixed(2)}s</span>
+                                  <button
+                                    onClick={() => setConfirmAction({
+                                      message: `确定要删除此条记录吗？`,
+                                      onConfirm: () => {
+                                        const newRecords = { ...records };
+                                        const currList = [...newRecords[currentKey]];
+                                        currList.splice(idx, 1);
+                                        if (currList.length === 0) {
+                                          delete newRecords[currentKey];
+                                        } else {
+                                          newRecords[currentKey] = currList;
+                                        }
+                                        setRecords(newRecords);
+                                      }
+                                    })}
+                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/20 transition-all font-bold"
+                                    title="删除此记录"
+                                  >
+                                    ✕
+                                  </button>
                                 </div>
                               </div>
                             );
