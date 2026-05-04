@@ -248,21 +248,24 @@ const OnlineRoomsPreview = () => {
 };
 
 const calculateCoinReward = (rank: number, playerCount: number, difficulty: number, isTeamMode: boolean, isTeamWin: boolean, isFlawless: boolean, isMVP: boolean) => {
-  const baseCoins = [25, 18, 15, 12, 10, 8, 6, 4];
+  const baseCoins = [25, 18, 15, 12, 10, 8];
   const PLAYER_COUNT_MULT: Record<number, number> = { 2: 0.6, 3: 0.8, 4: 1.0, 5: 1.1, 6: 1.2 };
   const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[difficulty] || 1.0;
   
   const countMult = PLAYER_COUNT_MULT[playerCount] || 1.0;
-  const base = baseCoins[rank] || 0;
   
-  let totalFixed = 0;
   if (isTeamMode) {
-    if (isTeamWin) totalFixed += 20;
-    if (isFlawless) totalFixed += 50;
-    if (isMVP) totalFixed += 30;
+    if (!isTeamWin) return 0;
+    
+    let totalFixed = 0;
+    if (isFlawless) totalFixed += 10;
+    if (isMVP) totalFixed += 10;
+    
+    return Math.floor(20 * countMult * diffMult) + totalFixed;
+  } else {
+    const base = baseCoins[rank] || 0;
+    return Math.floor(base * countMult * diffMult);
   }
-  
-  return Math.floor(base * countMult * diffMult) + Math.floor(totalFixed * diffMult); // Wait this line exists, let me change it
 };
 
 export default function App() {
@@ -1387,14 +1390,14 @@ export default function App() {
                  if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                     if (isWin) {
-                       reward += tracks * 25;
+                       reward += tracks * 15;
                        const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
                        const redEntries = entries.filter(e => e.id.includes('p') || e.id.includes('ONLINE')); // wait we don't store team per id in scores easily, but local player is team RED.
                        // Assume p1 is always RED and potential team MVP
                        const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
                        if (entries.length > 0 && isLocal(entries[0].id)) {
                           isTeamMVP = true;
-                          reward += tracks * 15 * diffMult;
+                          reward += tracks * 10;
                        }
                     }
                  } else {
@@ -1403,10 +1406,10 @@ export default function App() {
                     const rank = entries.findIndex(e => isLocal(e.id));
                     if (rank === 0) {
                         isWin = true;
-                        reward = tracks * 40;
+                        reward = tracks * 20;
                     } else if (rank === 1 || rank === 2) {
                         isPodium = true;
-                        reward = tracks * 15;
+                        reward = tracks * 10;
                     }
                  }
 
@@ -1434,19 +1437,19 @@ export default function App() {
                        if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                           isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                           if (isWin) {
-                             reward += tracks * 25;
+                             reward += tracks * 15;
                              const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
                              const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
                              if (entries.length > 0 && isLocal(entries[0].id)) {
-                                reward += tracks * 15 * diffMult;
+                                reward += tracks * 10;
                              }
                           }
                        } else {
                           const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
                           const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
                           const rank = entries.findIndex(e => isLocal(e.id));
-                          if (rank === 0) reward = tracks * 40;
-                          else if (rank === 1 || rank === 2) reward = tracks * 15;
+                          if (rank === 0) reward = tracks * 20;
+                          else if (rank === 1 || rank === 2) reward = tracks * 10;
                        }
 
                        setGarage(g => ({...g, coins: g.coins + Math.floor(reward)}));
