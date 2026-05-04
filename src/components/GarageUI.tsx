@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { GarageData } from '../types';
 import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, BASIC_COLORS } from '../constants';
 import VehiclePreview from './VehiclePreview';
-import { Cpu, Wind, Zap, Gauge, CircleDot } from 'lucide-react';
+import { Cpu, Wind, Zap, Gauge, CircleDot, ShieldAlert } from 'lucide-react';
 
 interface GarageProps {
   garage: GarageData;
@@ -11,8 +11,11 @@ interface GarageProps {
   onClose: () => void;
 }
 
+import { getVehicleStats } from '../services/garageService';
+
 export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES'>('VEHICLES');
+  const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
 
   const equipVehicle = (id: string) => setGarage(g => ({ ...g, equippedVehicle: id }));
   
@@ -20,12 +23,17 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
     const item = ITEMS_DB.find(i => i.id === id);
     if (!item) return;
     setGarage(g => {
-      const typeKey = item.type as keyof typeof g.equippedItems;
+      const typeKey = item.type as 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
+      const v = { ...g.vehicles[g.equippedVehicle] };
+      v.equippedParts = {
+         ...v.equippedParts,
+         [typeKey]: v.equippedParts[typeKey] === id ? null : id
+      };
       return {
         ...g,
-        equippedItems: {
-          ...g.equippedItems,
-          [typeKey]: g.equippedItems[typeKey] === id ? null : id
+        vehicles: {
+           ...g.vehicles,
+           [g.equippedVehicle]: v
         }
       };
     });
@@ -43,17 +51,33 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   };
 
   const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
-  const engineBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.speedBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.boostValue || 0;
-  const tireBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.gripBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.boostValue || 0;
-  const launchBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.launch)?.launchBoost || 0;
-  const driftBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.drift)?.driftSpeedBoost || 0;
-  const accelBoost = ITEMS_DB.find(i => i.id === garage.equippedItems.acceleration)?.accelerationBoost || 0;
+  const vState = garage.vehicles[garage.equippedVehicle];
   
-  const currentSpeed = currentVehicleData.baseSpeed + engineBoost;
-  const currentGrip = currentVehicleData.baseGrip + tireBoost;
-  const currentLaunch = currentVehicleData.baseLaunch + launchBoost;
-  const currentDrift = currentVehicleData.baseDriftSpeed + driftBoost;
-  const currentAccel = (currentVehicleData.baseAcceleration || 0.15) + accelBoost;
+  const stats = getVehicleStats(currentVehicleData, vState);
+  
+  const currentSpeed = stats.speed;
+  const currentGrip = stats.grip;
+  const currentLaunch = stats.launch;
+  const currentDrift = stats.drift;
+  const currentAccel = stats.accel;
+  
+  const engineBoost = stats.engineBoost;
+  const tireBoost = stats.tireBoost;
+  const launchBoost = stats.launchBoost;
+  const driftBoost = stats.driftBoost;
+  const accelBoost = stats.accelBoost;
+
+  const handleMaintenance = () => {
+    if (!vState || vState.durability >= 100) return;
+    const cost = currentVehicleData.maintenanceFee;
+    if (garage.coins >= cost) {
+       setGarage(g => {
+          const v = { ...g.vehicles[garage.equippedVehicle], durability: 100 };
+          return { ...g, coins: g.coins - cost, vehicles: { ...g.vehicles, [v.id]: v } };
+       });
+       setShowMaintenanceConfirm(false);
+    }
+  };
 
   return (
     <motion.div
@@ -63,15 +87,18 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       exit={{ opacity: 0, scale: 0.95 }}
       className="absolute inset-0 z-50 bg-[#0d0e15] flex flex-col h-[100dvh]"
     >
-      <header className="shrink-0 z-10 bg-[#0d0e15]/95 backdrop-blur-md border-b border-white/10 w-full relative">
-        <div className="p-4 md:px-[60px] md:pt-[60px] md:pb-4 max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-end gap-4 w-full">
-          <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest shrink-0">我的车库</h1>
+      <header className="shrink-0 z-10 bg-[#0d0e15]/95 backdrop-blur-md border-b border-white/10 w-full">
+        <div className="p-4 md:px-8 md:pt-6 md:pb-4 max-w-6xl mx-auto flex flex-col gap-4 w-full">
+          <div className="flex justify-between items-center w-full">
+            <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest shrink-0 leading-none">我的车库</h1>
+            <button onClick={onClose} className="px-4 md:px-6 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg transition-all text-sm shadow-[0_4px_10px_rgba(0,0,0,0.5)] whitespace-nowrap">返回主菜单</button>
+          </div>
           
-          <div className="bg-black/40 border border-white/10 rounded-lg p-3 flex gap-4 mt-2 md:mt-0 text-center flex-wrap shrink-0">
+          <div className="bg-black/40 border border-white/10 rounded-lg p-3 flex gap-4 text-center flex-wrap shrink-0">
           <div>
             <div className="text-xs text-zinc-500 uppercase">极速</div>
             <div className="text-xl font-black text-accent-cyan">
-              {currentSpeed.toFixed(1)} <span className="text-xs text-zinc-500">{engineBoost > 0 ? `(+${engineBoost})` : ''}</span>
+              {currentSpeed.toFixed(2)} <span className="text-xs text-zinc-500">{engineBoost > 0 ? `(+${engineBoost.toFixed(2)})` : ''}</span>
             </div>
           </div>
           <div>
@@ -83,13 +110,13 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
           <div>
             <div className="text-xs text-zinc-500 uppercase">起步</div>
             <div className="text-xl font-black text-green-400">
-              {currentLaunch.toFixed(1)} <span className="text-xs text-zinc-500">{launchBoost > 0 ? `(+${launchBoost.toFixed(1)})` : ''}</span>
+              {currentLaunch.toFixed(2)} <span className="text-xs text-zinc-500">{launchBoost > 0 ? `(+${launchBoost.toFixed(2)})` : ''}</span>
             </div>
           </div>
           <div>
             <div className="text-xs text-zinc-500 uppercase">漂移速度</div>
             <div className="text-xl font-black text-purple-400">
-              {currentDrift.toFixed(1)} <span className="text-xs text-zinc-500">{driftBoost > 0 ? `(+${driftBoost.toFixed(1)})` : ''}</span>
+              {currentDrift.toFixed(2)} <span className="text-xs text-zinc-500">{driftBoost > 0 ? `(+${driftBoost.toFixed(2)})` : ''}</span>
             </div>
           </div>
           <div>
@@ -116,11 +143,42 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                  color={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? '#ffffff' : garage.equippedLivery} 
                  liveryData={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? { isGradient: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.isGradient, colors: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.colors } : undefined}
                />
+               {vState && (
+                  <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs font-mono font-bold border border-white/10">
+                     Lv. +{vState.level}
+                  </div>
+               )}
              </div>
              <div className="text-center font-bold text-lg text-white tracking-widest uppercase">
                {currentVehicleData.name}
              </div>
-             <div className="text-center text-sm text-zinc-400">
+             
+             {vState && (
+               <div className="flex flex-col gap-2">
+                 <div className="flex justify-between items-center text-xs">
+                    <span className="text-zinc-400">耐久度</span>
+                    <span className={`font-mono font-bold ${vState.durability < 30 ? 'text-red-500' : 'text-green-400'}`}>
+                      {vState.durability} / 100
+                    </span>
+                 </div>
+                 <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${vState.durability < 30 ? 'bg-red-500' : 'bg-green-400'}`} 
+                      style={{ width: `${vState.durability}%` }}
+                    />
+                 </div>
+                 {vState.durability < 100 && (
+                   <button 
+                     onClick={() => setShowMaintenanceConfirm(true)}
+                     className="mt-2 text-xs py-1.5 px-3 rounded border border-white/20 hover:bg-white/10 text-white flex justify-center items-center gap-2 transition-colors"
+                   >
+                     <ShieldAlert size={14} /> 保养 (耗费 {currentVehicleData.maintenanceFee} ⟁)
+                   </button>
+                 )}
+               </div>
+             )}
+
+             <div className="text-center text-sm text-zinc-400 border-t border-white/10 pt-4">
                我的出战赛车
              </div>
           </div>
@@ -155,13 +213,19 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                     const v = VEHICLES_DB.find(x => x.id === vId);
                     if (!v) return null;
                     const isEquipped = garage.equippedVehicle === v.id;
+                    const state = garage.vehicles[v.id];
+                    const isExpired = state && state.expireTimestamp && state.expireTimestamp < Date.now();
                     return (
-                      <div key={v.id} className={`neon-panel p-2.5 flex flex-col justify-between gap-2 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''}`}>
-                        <div className="flex justify-center items-center bg-black/40 rounded-lg py-1.5 border border-white/5 shadow-inner min-h-[70px]">
+                      <div key={v.id} className={`neon-panel p-2.5 flex flex-col justify-between gap-2 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''} ${isExpired ? 'opacity-50 grayscale border-red-500/50' : ''}`}>
+                        <div className="flex justify-center items-center bg-black/40 rounded-lg py-1.5 border border-white/5 shadow-inner min-h-[70px] relative">
+                          {isExpired && <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 font-bold text-xs z-10 rounded-lg whitespace-nowrap">租赁过期</div>}
                           <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
                         </div>
                         <div className="min-w-0">
-                          <h3 className="text-sm font-bold text-white mb-0.5 leading-tight truncate">{v.name}</h3>
+                          <h3 className="text-sm font-bold text-white mb-0.5 leading-tight truncate">
+                             {v.name}
+                             {garage.vehicles[v.id]?.level > 0 && <span className="text-accent-yellow ml-1 text-xs">+{garage.vehicles[v.id].level}</span>}
+                          </h3>
                           <div className="grid grid-cols-2 gap-x-1 text-[8px] text-zinc-400">
                             <span className="truncate">极速:{v.baseSpeed}</span>
                             <span className="truncate">抓地:{v.baseGrip}</span>
@@ -170,10 +234,11 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                           </div>
                         </div>
                         <button 
-                          onClick={() => equipVehicle(v.id)}
-                          className={`w-full py-1 rounded text-[11px] font-bold transition-transform active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                          onClick={() => !isExpired && equipVehicle(v.id)}
+                          disabled={isExpired}
+                          className={`w-full py-1 rounded text-[11px] font-bold transition-transform active:scale-95 ${isEquipped ? 'bg-white text-black' : isExpired ? 'bg-red-500/20 text-red-300' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                         >
-                          {isEquipped ? '驾驭中' : '出战'}
+                          {isEquipped ? '驾驭中' : isExpired ? '无法出战' : '出战'}
                         </button>
                       </div>
                     );
@@ -210,7 +275,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                     {categoryItems.map(itemId => {
                       const item = ITEMS_DB.find(x => x.id === itemId);
                       if (!item) return null;
-                      const isEquipped = garage.equippedItems[category] === item.id;
+                      const isEquipped = vState?.equippedParts[category] === item.id;
                       
                       let boostDesc = '';
                       if (item.speedBoost || item.boostValue && item.type === 'engine') boostDesc = `极速 +${item.speedBoost || item.boostValue}`;
@@ -319,13 +384,50 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
           </div>
         )}
       </div>
-
-            <footer className="mt-8 flex justify-end shrink-0">
-              <button onClick={onClose} className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-all">返回菜单</button>
-            </footer>
-          </div>
-        </div>
-      </div>
+    </div>
+  </div>
+</div>
+      <AnimatePresence>
+        {showMaintenanceConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex justify-center items-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-white/10 rounded-xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <div className="flex justify-center text-accent-yellow mb-4">
+                <ShieldAlert size={48} />
+              </div>
+              <h2 className="text-xl font-bold text-center text-white mb-2">确认保养车辆？</h2>
+              <p className="text-zinc-400 text-center text-sm mb-6">
+                将恢复 {currentVehicleData.name} 的 100% 耐久度<br/>
+                总花费：<span className="text-accent-yellow font-bold text-lg">{currentVehicleData.maintenanceFee} ⟁</span>
+              </p>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setShowMaintenanceConfirm(false)}
+                  className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleMaintenance}
+                  disabled={garage.coins < currentVehicleData.maintenanceFee}
+                  className="flex-1 py-2 bg-accent-yellow hover:brightness-110 text-black font-bold rounded transition-colors disabled:opacity-50"
+                >
+                  确认保养
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

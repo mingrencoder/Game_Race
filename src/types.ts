@@ -13,6 +13,7 @@ export enum AIDifficulty {
   MEDIUM = 2,
   HARD = 3,
   EXPERT = 4,
+  ELITE = 5,
 }
 
 export type GameMode = 'SINGLE' | 'ONLINE' | 'TEAM';
@@ -85,17 +86,20 @@ export type GameSettings = {
   teamRoster: TeamSetup[]; // For TEAM mode
   laps: number;
   teamSize: 2 | 3;
-  isEliteMode?: boolean;
   isCupMode?: boolean;
   cupNumTracks?: number;
   isTeamMode?: boolean;
 };
 
+export type VehicleTier = 'T0' | 'T1' | 'T2' | 'T3';
+
 export type Vehicle = {
   id: string;
   name: string;
   type: string;
+  tier: VehicleTier;
   price: number;
+  maintenanceFee: number;
   baseSpeed: number;
   baseGrip: number;
   baseLaunch: number;
@@ -104,6 +108,7 @@ export type Vehicle = {
 };
 
 export type Item = {
+
   id: string;
   name: string;
   type: 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
@@ -124,16 +129,40 @@ export type Livery = {
   colors: string[];
 };
 
+export interface OwnedVehicleData {
+  id: string;
+  durability: number;
+  level: number;
+  expireTimestamp?: number; // v3 PRD: null or 0 means permanent
+  equippedParts: {
+    engine: string | null;
+    tires: string | null;
+    launch: string | null;
+    drift: string | null;
+    acceleration: string | null;
+  };
+}
+
+export interface UserInventory {
+  coreT1: number;
+  coreT2: number;
+  coreT3: number;
+  silverCard: number;
+  goldenCard: number;
+}
+
 export type GarageData = {
   coins: number;
   ownedVehicles: string[];
+  vehicles: Record<string, OwnedVehicleData>;
+  inventory: UserInventory;
   ownedItems: string[];
   ownedLiveries: string[];
   equippedVehicle: string;
   equippedItems: {
     engine: string | null;
     tires: string | null;
-    launch?: string | null;
+    launch?: string | null; // Keep optional if missing
     drift?: string | null;
     acceleration?: string | null;
   };

@@ -308,48 +308,50 @@ export const AI_NAMES = ['影风', '雷霆', '闪电', '狂飙', '夜煞', '暗�
 
 export const BASIC_COLORS = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff2222'];
 
-export const VEHICLES_DB = [
-  { id: 'car_basic', name: '新星-V1', type: 'standard', price: 0, baseSpeed: 9.0, baseGrip: 0.15, baseLaunch: 2.0, baseDriftSpeed: 6.0, baseAcceleration: 0.15 },
-  { id: 'car_speed', name: '极速先锋', type: 'f1', price: 800, baseSpeed: 10.5, baseGrip: 0.13, baseLaunch: 2.5, baseDriftSpeed: 5.5, baseAcceleration: 0.18 },
-  { id: 'car_drift', name: '漂移幽灵', type: 'muscle', price: 1000, baseSpeed: 9.5, baseGrip: 0.18, baseLaunch: 1.8, baseDriftSpeed: 8.0, baseAcceleration: 0.14 },
-  { id: 'car_tank', name: '重装铠甲', type: 'tank', price: 1200, baseSpeed: 8.5, baseGrip: 0.22, baseLaunch: 3.5, baseDriftSpeed: 5.0, baseAcceleration: 0.12 },
-  { id: 'car_ninja', name: '暗影忍者', type: 'ninja', price: 1500, baseSpeed: 11.0, baseGrip: 0.12, baseLaunch: 2.8, baseDriftSpeed: 6.5, baseAcceleration: 0.20 },
-  { id: 'car_cyber', name: '赛博狂潮', type: 'cyber', price: 2000, baseSpeed: 10.0, baseGrip: 0.17, baseLaunch: 2.2, baseDriftSpeed: 9.5, baseAcceleration: 0.16 },
-  { id: 'car_boss', name: '机械领主', type: 'boss', price: 3000, baseSpeed: 11.5, baseGrip: 0.25, baseLaunch: 4.0, baseDriftSpeed: 7.0, baseAcceleration: 0.19 },
-  { id: 'car_legend', name: '不朽传说', type: 'legend', price: 5000, baseSpeed: 13.0, baseGrip: 0.20, baseLaunch: 3.0, baseDriftSpeed: 8.5, baseAcceleration: 0.22 }
+import { Vehicle, Item, VehicleTier } from './types';
+
+export const VEHICLES_DB: Vehicle[] = [
+  { id: 'car_basic', name: '新星-V1', type: 'standard', tier: 'T0', price: 0, maintenanceFee: 0, baseSpeed: 7.0, baseGrip: 0.12, baseLaunch: 1.5, baseDriftSpeed: 5.0, baseAcceleration: 0.10 },
+  { id: 'car_speed', name: '极速先锋', type: 'f1', tier: 'T1', price: 2000, maintenanceFee: 30, baseSpeed: 8.0, baseGrip: 0.10, baseLaunch: 2.0, baseDriftSpeed: 4.8, baseAcceleration: 0.12 },
+  { id: 'car_drift', name: '漂移幽灵', type: 'muscle', tier: 'T1', price: 2500, maintenanceFee: 37, baseSpeed: 7.5, baseGrip: 0.15, baseLaunch: 1.6, baseDriftSpeed: 7.0, baseAcceleration: 0.11 },
+  { id: 'car_tank', name: '重装铠甲', type: 'tank', tier: 'T1', price: 3000, maintenanceFee: 45, baseSpeed: 6.8, baseGrip: 0.18, baseLaunch: 2.8, baseDriftSpeed: 4.5, baseAcceleration: 0.09 },
+  { id: 'car_ninja', name: '暗影忍者', type: 'ninja', tier: 'T2', price: 8000, maintenanceFee: 120, baseSpeed: 8.8, baseGrip: 0.10, baseLaunch: 2.5, baseDriftSpeed: 6.0, baseAcceleration: 0.15 },
+  { id: 'car_cyber', name: '赛博狂潮', type: 'cyber', tier: 'T2', price: 12000, maintenanceFee: 180, baseSpeed: 8.2, baseGrip: 0.14, baseLaunch: 2.0, baseDriftSpeed: 8.5, baseAcceleration: 0.13 },
+  { id: 'car_boss', name: '机械领主', type: 'boss', tier: 'T3', price: 80000, maintenanceFee: 1200, baseSpeed: 9.8, baseGrip: 0.24, baseLaunch: 3.8, baseDriftSpeed: 6.8, baseAcceleration: 0.19 },
+  { id: 'car_legend', name: '不朽传说', type: 'legend', tier: 'T3', price: 80000, maintenanceFee: 1200, baseSpeed: 10.8, baseGrip: 0.19, baseLaunch: 3.0, baseDriftSpeed: 8.0, baseAcceleration: 0.22 }
 ];
 
 export const ITEMS_DB = [
-  { id: 'eng_v1', name: 'V1 涡轮增压', type: 'engine' as const, price: 300, boostValue: 0.8, speedBoost: 0.8 },
-  { id: 'eng_v2', name: 'V2 离子引擎', type: 'engine' as const, price: 700, boostValue: 1.5, speedBoost: 1.5 },
-  { id: 'eng_v3', name: 'V3 反物质引擎', type: 'engine' as const, price: 1500, boostValue: 2.5, speedBoost: 2.5 },
-  { id: 'tire_v1', name: '竞赛级热熔胎', type: 'tires' as const, price: 300, boostValue: 0.02, gripBoost: 0.02 },
-  { id: 'tire_v2', name: '磁悬浮稳定器', type: 'tires' as const, price: 700, boostValue: 0.04, gripBoost: 0.04 },
-  { id: 'tire_v3', name: '量子锚定装置', type: 'tires' as const, price: 1500, boostValue: 0.07, gripBoost: 0.07 },
-  { id: 'launch_1', name: '重弹射起步模块', type: 'launch' as const, price: 400, boostValue: 0, launchBoost: 1.0 },
-  { id: 'launch_2', name: '超导推进器', type: 'launch' as const, price: 800, boostValue: 0, launchBoost: 2.0 },
-  { id: 'launch_3', name: '空间瞬移引力器', type: 'launch' as const, price: 1600, boostValue: 0, launchBoost: 3.5 },
-  { id: 'drift_1', name: '基础氮气漂移', type: 'drift' as const, price: 400, boostValue: 0, driftSpeedBoost: 1.0 },
-  { id: 'drift_2', name: '矢量动力平衡翼', type: 'drift' as const, price: 800, boostValue: 0, driftSpeedBoost: 2.0 },
-  { id: 'drift_3', name: '强子对撞侧滑装置', type: 'drift' as const, price: 1600, boostValue: 0, driftSpeedBoost: 3.5 },
-  { id: 'accel_1', name: '动能回收装置', type: 'acceleration' as const, price: 400, boostValue: 0, accelerationBoost: 0.05 },
-  { id: 'accel_2', name: '微型核聚变核心', type: 'acceleration' as const, price: 800, boostValue: 0, accelerationBoost: 0.1 },
-  { id: 'accel_3', name: '反重力加速器', type: 'acceleration' as const, price: 1600, boostValue: 0, accelerationBoost: 0.2 }
+  { id: 'eng_v1', name: 'V1 涡轮增压', type: 'engine' as const, price: 300, boostValue: 0.2, speedBoost: 0.2 },
+  { id: 'eng_v2', name: 'V2 离子引擎', type: 'engine' as const, price: 2500, boostValue: 0.5, speedBoost: 0.5 },
+  { id: 'eng_v3', name: 'V3 反物质引擎', type: 'engine' as const, price: 12000, boostValue: 0.8, speedBoost: 0.8 },
+  { id: 'tire_v1', name: '竞赛级热熔胎', type: 'tires' as const, price: 300, boostValue: 0.01, gripBoost: 0.01 },
+  { id: 'tire_v2', name: '磁悬浮稳定器', type: 'tires' as const, price: 2500, boostValue: 0.02, gripBoost: 0.02 },
+  { id: 'tire_v3', name: '量子锚定装置', type: 'tires' as const, price: 12000, boostValue: 0.03, gripBoost: 0.03 },
+  { id: 'launch_1', name: '重弹射起步模块', type: 'launch' as const, price: 400, boostValue: 0, launchBoost: 0.3 },
+  { id: 'launch_2', name: '超导推进器', type: 'launch' as const, price: 3000, boostValue: 0, launchBoost: 0.6 },
+  { id: 'launch_3', name: '空间瞬移引力器', type: 'launch' as const, price: 15000, boostValue: 0, launchBoost: 1.0 },
+  { id: 'drift_1', name: '基础氮气漂移', type: 'drift' as const, price: 400, boostValue: 0, driftSpeedBoost: 0.3 },
+  { id: 'drift_2', name: '矢量动力平衡翼', type: 'drift' as const, price: 3000, boostValue: 0, driftSpeedBoost: 0.6 },
+  { id: 'drift_3', name: '强子对撞侧滑装置', type: 'drift' as const, price: 15000, boostValue: 0, driftSpeedBoost: 1.0 },
+  { id: 'accel_1', name: '动能回收装置', type: 'acceleration' as const, price: 500, boostValue: 0, accelerationBoost: 0.01 },
+  { id: 'accel_2', name: '微型核聚变核心', type: 'acceleration' as const, price: 3500, boostValue: 0, accelerationBoost: 0.02 },
+  { id: 'accel_3', name: '反重力加速器', type: 'acceleration' as const, price: 18000, boostValue: 0, accelerationBoost: 0.04 }
 ];
 
 export type LiveryTier = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'ELITE';
 
 export const LIVERIES_DB: { id: string, name: string, price: number, isGradient: boolean, colors: string[], tier: LiveryTier }[] = [
-  { id: 'liv_silver', name: '液态白银', price: 400, isGradient: true, colors: ['#ffffff', '#888888'], tier: 'INTERMEDIATE' },
-  { id: 'liv_gold', name: '尊贵土豪金', price: 800, isGradient: true, colors: ['#ffdf00', '#d4af37'], tier: 'INTERMEDIATE' },
-  { id: 'liv_orange', name: '风暴赛道橙', price: 600, isGradient: false, colors: ['#ff4500'], tier: 'INTERMEDIATE' },
-  { id: 'liv_magma', name: '地狱岩浆', price: 1000, isGradient: true, colors: ['#ff0000', '#ff8800', '#ffff00'], tier: 'ADVANCED' },
-  { id: 'liv_neon_pink', name: '荧光霓虹粉', price: 1200, isGradient: false, colors: ['#ff00ff'], tier: 'ADVANCED' },
-  { id: 'liv_cyan_pulse', name: '赛博脉冲蓝', price: 1200, isGradient: false, colors: ['#00ffff'], tier: 'ADVANCED' },
-  { id: 'liv_toxic_green', name: '生化辐射绿', price: 1200, isGradient: false, colors: ['#ccff00'], tier: 'ADVANCED' },
-  { id: 'liv_prism', name: '全息折射', price: 1500, isGradient: true, colors: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'], tier: 'ELITE' },
-  { id: 'liv_flare_red', name: '烈焰猩红', price: 1800, isGradient: false, colors: ['#ff0033'], tier: 'ELITE' },
-  { id: 'liv_royal_purple', name: '皇家暗紫', price: 1800, isGradient: false, colors: ['#bf00ff'], tier: 'ELITE' },
-  { id: 'liv_neon_yellow', name: '炫彩电光黄', price: 1800, isGradient: false, colors: ['#ffff00'], tier: 'ELITE' },
-  { id: 'liv_galaxy', name: '深邃星空', price: 2000, isGradient: true, colors: ['#0b0033', '#4b0082', '#000000'], tier: 'ELITE' }
+  { id: 'liv_silver', name: '液态白银', price: 500, isGradient: true, colors: ['#ffffff', '#888888'], tier: 'INTERMEDIATE' },
+  { id: 'liv_orange', name: '风暴赛道橙', price: 500, isGradient: false, colors: ['#ff4500'], tier: 'INTERMEDIATE' },
+  { id: 'liv_gold', name: '尊贵土豪金', price: 500, isGradient: true, colors: ['#ffdf00', '#d4af37'], tier: 'INTERMEDIATE' },
+  { id: 'liv_matte_black', name: '哑光黑', price: 500, isGradient: false, colors: ['#222222'], tier: 'INTERMEDIATE' },
+  { id: 'liv_magma', name: '地狱岩浆', price: 5000, isGradient: true, colors: ['#ff0000', '#ff8800', '#ffff00'], tier: 'ADVANCED' },
+  { id: 'liv_neon_pink', name: '荧光霓虹粉', price: 5000, isGradient: false, colors: ['#ff00ff'], tier: 'ADVANCED' },
+  { id: 'liv_cyan_pulse', name: '赛博脉冲蓝', price: 5000, isGradient: false, colors: ['#00ffff'], tier: 'ADVANCED' },
+  { id: 'liv_toxic_green', name: '生化辐射绿', price: 5000, isGradient: false, colors: ['#ccff00'], tier: 'ADVANCED' },
+  { id: 'liv_prism', name: '全息折射', price: 20000, isGradient: true, colors: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'], tier: 'ELITE' },
+  { id: 'liv_flare_red', name: '烈焰猩红', price: 20000, isGradient: false, colors: ['#ff0033'], tier: 'ELITE' },
+  { id: 'liv_neon_yellow', name: '炫彩电光黄', price: 20000, isGradient: false, colors: ['#ffff00'], tier: 'ELITE' },
+  { id: 'liv_galaxy', name: '深邃星空', price: 20000, isGradient: true, colors: ['#0b0033', '#4b0082', '#000000'], tier: 'ELITE' }
 ];

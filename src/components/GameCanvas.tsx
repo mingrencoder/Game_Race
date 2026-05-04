@@ -273,30 +273,54 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
     // Calculate P1 Stats based on garage (Only applies in SINGLE/TEAM mode)
     const isSingleOrTeam = settings.mode === 'SINGLE' || ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode);
     const p1Vehicle = isSingleOrTeam ? (VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0]) : VEHICLES_DB[0];
-    let p1MaxSpeed = isSingleOrTeam ? p1Vehicle.baseSpeed : VEHICLES_DB[0].baseSpeed;
-    let p1Grip = isSingleOrTeam ? p1Vehicle.baseGrip : VEHICLES_DB[0].baseGrip;
-    let p1Launch = 0; // Initialize launch to 0, only items add launch boost
-    let p1DriftSpeed = isSingleOrTeam ? p1Vehicle.baseDriftSpeed : VEHICLES_DB[0].baseDriftSpeed;
-    let p1Acceleration = isSingleOrTeam ? (p1Vehicle.baseAcceleration || PHYSICS.ACCELERATION) : PHYSICS.ACCELERATION;
+    const p1State = isSingleOrTeam ? garage.vehicles[p1Vehicle.id] : null;
+    const p1Parts = p1State?.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null };
+    
+    // Enhancement Base Stat Bonuses
+    const MAX_BONUS: Record<string, { speed: number, accel: number, grip?: number, launch?: number, drift?: number }> = {
+      car_basic: { speed: +0.6, accel: +0.03, grip: +0.02 },
+      car_speed: { speed: +1.6, accel: +0.05, launch: +0.5 },
+      car_drift: { speed: +0.8, accel: +0.05, drift: +2.0 },
+      car_tank: { speed: +0.7, accel: +0.04, launch: +1.5, grip: +0.08 },
+      car_ninja: { speed: +1.2, accel: +0.10, launch: +0.8 },
+      car_cyber: { speed: +1.1, accel: +0.06, drift: +1.6 },
+      car_boss: { speed: +2.2, accel: +0.12, grip: +0.12 },
+      car_legend: { speed: +2.6, accel: +0.15, drift: +1.5 },
+    };
+    const LEVEL_MULTI = [0, 0.1, 0.25, 0.45, 0.65, 1.0];
+    const lvMulti = p1State ? LEVEL_MULTI[p1State.level || 0] : 0;
+    const bonus = MAX_BONUS[p1Vehicle.id] || { speed: 0, accel: 0 };
+
+    let p1MaxSpeed = isSingleOrTeam ? p1Vehicle.baseSpeed + bonus.speed * lvMulti : VEHICLES_DB[0].baseSpeed;
+    let p1Grip = isSingleOrTeam ? p1Vehicle.baseGrip + (bonus.grip || 0) * lvMulti : VEHICLES_DB[0].baseGrip;
+    let p1Launch = isSingleOrTeam ? (p1Vehicle.baseLaunch || 0) + (bonus.launch || 0) * lvMulti : 0; 
+    let p1DriftSpeed = isSingleOrTeam ? p1Vehicle.baseDriftSpeed + (bonus.drift || 0) * lvMulti : VEHICLES_DB[0].baseDriftSpeed;
+    let p1Acceleration = isSingleOrTeam ? ((p1Vehicle.baseAcceleration || PHYSICS.ACCELERATION) + bonus.accel * lvMulti) : PHYSICS.ACCELERATION;
     
     // Player selects own stats, only livery is changed in elite mode
-    if (isSingleOrTeam && garage.equippedItems.engine) {
-      p1MaxSpeed += ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.speedBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.engine)?.boostValue || 0;
+    if (isSingleOrTeam && p1Parts.engine) {
+      p1MaxSpeed += ITEMS_DB.find(i => i.id === p1Parts.engine)?.speedBoost || ITEMS_DB.find(i => i.id === p1Parts.engine)?.boostValue || 0;
     }
-    if (isSingleOrTeam && garage.equippedItems.tires) {
-      p1Grip += ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.gripBoost || ITEMS_DB.find(i => i.id === garage.equippedItems.tires)?.boostValue || 0;
+    if (isSingleOrTeam && p1Parts.tires) {
+      p1Grip += ITEMS_DB.find(i => i.id === p1Parts.tires)?.gripBoost || ITEMS_DB.find(i => i.id === p1Parts.tires)?.boostValue || 0;
     }
-    if (isSingleOrTeam && garage.equippedItems.launch) {
-      p1Launch += ITEMS_DB.find(i => i.id === garage.equippedItems.launch)?.launchBoost || 0;
+    if (isSingleOrTeam && p1Parts.launch) {
+      p1Launch += ITEMS_DB.find(i => i.id === p1Parts.launch)?.launchBoost || 0;
     }
-    if (isSingleOrTeam && garage.equippedItems.drift) {
-      p1DriftSpeed += ITEMS_DB.find(i => i.id === garage.equippedItems.drift)?.driftSpeedBoost || 0;
+    if (isSingleOrTeam && p1Parts.drift) {
+      p1DriftSpeed += ITEMS_DB.find(i => i.id === p1Parts.drift)?.driftSpeedBoost || 0;
     }
-    if (isSingleOrTeam && garage.equippedItems.acceleration) {
-      p1Acceleration += p1Acceleration * (ITEMS_DB.find(i => i.id === garage.equippedItems.acceleration)?.accelerationBoost || 0);
+    if (isSingleOrTeam && p1Parts.acceleration) {
+      p1Acceleration += ITEMS_DB.find(i => i.id === p1Parts.acceleration)?.accelerationBoost || 0;
     }
 
-    const p1LiveryData = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.isEliteMode) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined);
+    // Durability Penalty
+    if (isSingleOrTeam && p1State && p1State.durability <= 30) {
+       p1MaxSpeed *= 0.6;
+       p1Acceleration *= 0.6;
+    }
+
+    const p1LiveryData = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.aiDifficulty === 5) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined);
     const preferredColor = isSingleOrTeam ? (p1LiveryData ? undefined : garage.equippedLivery) : BASIC_COLORS[0];
     const p1Color = p1LiveryData ? '#ffffff' : getUniqueColor(preferredColor);
 
@@ -432,7 +456,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         let aiAcceleration = baseV.baseAcceleration || PHYSICS.ACCELERATION;
         let aiLiveryData = livery ? { isGradient: livery.isGradient, colors: livery.colors } : undefined;
 
-        if (settings.isEliteMode) {
+        if (settings.aiDifficulty === 5) {
           aiLiveryData = rosterAI.team === 'RED' 
             ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] }
             : { isGradient: true, colors: ['#00f0ff', '#0055ff', '#00f0ff'] };
@@ -500,7 +524,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         // Add tiny variance to prevent exactly identical performances
         aiMaxSpeed += seed.speedVar;
         
-        if (settings.isEliteMode) {
+        if (settings.aiDifficulty === 5) {
           aiMaxSpeed += 2.5; 
           aiGrip += 0.05;
           aiAcceleration += 0.05;
@@ -693,7 +717,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           }
         } else {
           // AI Logic
-          const effDiff = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.isEliteMode) ? 4 : settings.aiDifficulty;
+          const effDiff = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.aiDifficulty === 5) ? 4 : settings.aiDifficulty;
           const aiCfg = AI_CONFIG[effDiff as AIDifficulty];
           
           const targetIdx = (currentWaypointIndex + 1) % track.waypoints.length;
@@ -861,7 +885,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
         let currentAcceleration = car.acceleration * fatigueFactor;
 
         // Slightly lower acceleration if starting to simulate stall/heat
-        if (car.isAI && settings.isEliteMode && gameTimeRef.current > 30000) {
+        if (car.isAI && settings.aiDifficulty === 5 && gameTimeRef.current > 30000) {
            currentAcceleration *= 0.95;
         }
 
@@ -1591,7 +1615,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">
             <span className="opacity-60 hidden 2xl:inline">难度:</span>
             <span className="text-accent-magenta font-bold">
-              {settings.isEliteMode ? '精英赛' : settings.aiDifficulty === 1 ? '入门级(LV1)' : settings.aiDifficulty === 2 ? '进阶级(LV2)' : settings.aiDifficulty === 3 ? '专家级(LV3)' : '专业级(LV4)'}
+              {settings.aiDifficulty === 5 ? '精英赛(LV5)' : settings.aiDifficulty === 1 ? '入门级(LV1)' : settings.aiDifficulty === 2 ? '进阶级(LV2)' : settings.aiDifficulty === 3 ? '专家级(LV3)' : '专业级(LV4)'}
             </span>
           </div>
           <div className="flex gap-2 2xl:justify-between 2xl:w-full text-[10px] 2xl:text-sm">

@@ -7,14 +7,14 @@ import GameCanvas from './components/GameCanvas';
 
 const getRandomAiName = () => AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
 
-const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2, isEliteMode?: boolean): TeamSetup[] => {
+const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): TeamSetup[] => {
   const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
   const roster: TeamSetup[] = [];
   
   // Create AI that fits the difficulty level roughly
   const createRandomAI = (id: string, name: string, team: 'RED' | 'BLUE'): TeamSetup => {
     let availableVehicles = VEHICLES_DB;
-    if (isEliteMode) {
+    if (difficulty === 5) {
       availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
     } else {
       if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
@@ -27,8 +27,8 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2, i
 
     const v = availableVehicles[Math.floor(Math.random() * availableVehicles.length)];
     
-    const probUpgrade = isEliteMode ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
-    const isTopTierUpgrade = isEliteMode || difficulty === 4;
+    const probUpgrade = difficulty === 5 ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
+    const isTopTierUpgrade = difficulty >= 4;
 
     const hasEngine = Math.random() < probUpgrade;
     const hasTires = Math.random() < probUpgrade;
@@ -74,13 +74,13 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2, i
   return roster;
 };
 
-const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteMode?: boolean) => {
+const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty) => {
   const seeds = [];
   const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
   
   for (let i = 0; i < count; i++) {
     let availableVehicles = VEHICLES_DB;
-    if (isEliteMode) {
+    if (difficulty === 5) {
       availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
     } else {
       if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
@@ -93,8 +93,8 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteM
     
     const randomBaseVehicle = availableVehicles[Math.floor(Math.random() * availableVehicles.length)];
     
-    const probUpgrade = isEliteMode ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
-    const isTopTierUpgrade = isEliteMode || difficulty === 4;
+    const probUpgrade = difficulty === 5 ? 1.0 : (difficulty === 4 ? 0.9 : difficulty * 0.25); 
+    const isTopTierUpgrade = difficulty >= 4;
 
     const hasEngine = Math.random() < probUpgrade;
     const hasTires = Math.random() < probUpgrade;
@@ -131,7 +131,7 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteM
     // Elite difficulty (bright neon)
     const eliteColors = ['#ff00ff', '#00ffff', '#ffff00', '#ff00aa', '#00aa00', '#ff3300', '#ccff00', '#7fff00'];
 
-    if (isEliteMode) {
+    if (difficulty === 5) {
       randomLivery = { isGradient: true, colors: [`hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`] };
       pColor = eliteColors[Math.floor(Math.random() * eliteColors.length)];
     } else {
@@ -155,22 +155,63 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty, isEliteM
 
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
+import EnhancementUI from './components/EnhancementUI';
 import { TrackSelector } from './components/TrackSelector';
 import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from './services/audioService';
 
 const initialGarageData: GarageData = (() => {
-  const saved = localStorage.getItem('neon_garage_v2');
+  const saved = localStorage.getItem('neon_garage_v3');
   if (saved) return JSON.parse(saved);
+
+  // Fallback to older version migration or fresh start
+  const oldSaved = localStorage.getItem('neon_garage_v2');
+  let oldData: any = {};
+  if (oldSaved) {
+    oldData = JSON.parse(oldSaved);
+  }
+
+  const baseVehicles = oldData.ownedVehicles || ['car_basic'];
+  const vehiclesMap: Record<string, any> = {};
+  
+  for (const vId of baseVehicles) {
+    vehiclesMap[vId] = {
+      id: vId,
+      durability: 100,
+      level: 0,
+      equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
+    };
+  }
+
+  // If old equipped item exists, map it to the active car's equipped parts (just a best-effort migration)
+  const activeCar = oldData.equippedVehicle || 'car_basic';
+  if (oldData.equippedItems && vehiclesMap[activeCar]) {
+    vehiclesMap[activeCar].equippedParts = {
+       engine: oldData.equippedItems.engine || null,
+       tires: oldData.equippedItems.tires || null,
+       launch: oldData.equippedItems.launch || null,
+       drift: oldData.equippedItems.drift || null,
+       acceleration: oldData.equippedItems.acceleration || null,
+    };
+  }
+
   return {
-    coins: 0,
-    ownedVehicles: ['car_basic'],
-    ownedItems: [],
-    ownedLiveries: [],
-    equippedVehicle: 'car_basic',
-    equippedItems: { engine: null, tires: null },
-    equippedLivery: '#00f2ff'
+    coins: oldData.coins || 0,
+    ownedVehicles: baseVehicles,
+    vehicles: vehiclesMap,
+    inventory: {
+      coreT1: 0,
+      coreT2: 0,
+      coreT3: 0,
+      silverCard: 0,
+      goldenCard: 0,
+    },
+    ownedItems: oldData.ownedItems || [],
+    ownedLiveries: oldData.ownedLiveries || [],
+    equippedVehicle: activeCar,
+    equippedItems: { engine: null, tires: null }, // deprecated but kept
+    equippedLivery: oldData.equippedLivery || '#00f2ff'
   };
 })();
 
@@ -206,6 +247,24 @@ const OnlineRoomsPreview = () => {
   );
 };
 
+const calculateCoinReward = (rank: number, playerCount: number, difficulty: number, isTeamMode: boolean, isTeamWin: boolean, isFlawless: boolean, isMVP: boolean) => {
+  const baseCoins = [25, 18, 15, 12, 10, 8, 6, 4];
+  const PLAYER_COUNT_MULT: Record<number, number> = { 2: 0.6, 3: 0.8, 4: 1.0, 5: 1.1, 6: 1.2 };
+  const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[difficulty] || 1.0;
+  
+  const countMult = PLAYER_COUNT_MULT[playerCount] || 1.0;
+  const base = baseCoins[rank] || 0;
+  
+  let totalFixed = 0;
+  if (isTeamMode) {
+    if (isTeamWin) totalFixed += 20;
+    if (isFlawless) totalFixed += 50;
+    if (isMVP) totalFixed += 30;
+  }
+  
+  return Math.floor(base * countMult * diffMult) + Math.floor(totalFixed * diffMult); // Wait this line exists, let me change it
+};
+
 export default function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -213,7 +272,7 @@ export default function App() {
   const [leaderboardLapCount, setLeaderboardLapCount] = useState<number>(2);
   const [leaderboardType, setLeaderboardType] = useState<'LOCAL' | 'ONLINE'>('LOCAL');
   const [showPlayerInfo, setShowPlayerInfo] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void} | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void, confirmText?: string} | null>(null);
   
   const [records, setRecords] = useState<Record<string, LapRecord[]>>(() => {
     const saved = localStorage.getItem('neon_lap_records');
@@ -250,7 +309,7 @@ export default function App() {
   const [flawlessVictoryMessage, setFlawlessVictoryMessage] = useState<string | null>(null);
   const [isFlawlessResult, setIsFlawlessResult] = useState<boolean>(false);
   const [cupState, setCupState] = useState<{ isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null>(null);
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY'>('MENU');
+  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY' | 'ENHANCEMENT'>('MENU');
   
   const [garage, setGarage] = useState<GarageData>(initialGarageData);
 
@@ -286,7 +345,7 @@ export default function App() {
   }, [isMuted]);
 
   React.useEffect(() => {
-    localStorage.setItem('neon_garage_v2', JSON.stringify(garage));
+    localStorage.setItem('neon_garage_v3', JSON.stringify(garage));
   }, [garage]);
 
   React.useEffect(() => {
@@ -384,26 +443,55 @@ export default function App() {
        setSettings(currentSettings);
     }
 
+    if (settings.mode !== 'ONLINE') {
+       const eqVehicle = garage.vehicles[garage.equippedVehicle];
+       if (eqVehicle?.expireTimestamp && eqVehicle.expireTimestamp < Date.now()) {
+          setConfirmAction({
+             message: '您当前装备的车辆已过租赁期，无法出战！请先前往车库更换车辆，或去赛道商店续费。',
+             onConfirm: () => setConfirmAction(null)
+          });
+          return;
+       }
+    }
+
     if (currentSettings.isCupMode) {
       if (!cupState?.isActive) {
         // Init cup
-        const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
-        const selectedTracks = availableTracks.slice(0, currentSettings.cupNumTracks || 4);
+        const cupTracksCount = currentSettings.cupNumTracks || 4;
+        const entryFee = cupTracksCount * 10;
         
-        setCupState({
-          isActive: true,
-          tracks: selectedTracks,
-          currentRaceIndex: 0,
-          finished: false,
-          teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+        if (garage.coins < entryFee) {
+           setConfirmAction({
+              message: `进入杯赛需要 ${entryFee} ⟁ 报名费，您的金币不足！`,
+              onConfirm: () => setConfirmAction(null),
+              confirmText: '我知道了'
+           });
+           return;
+        }
+
+        setConfirmAction({
+           message: `进入杯赛将扣除 ${entryFee} ⟁ 作为报名费（中途退出不予退还），确定进入吗？`,
+           onConfirm: () => {
+              setGarage(g => ({ ...g, coins: g.coins - entryFee }));
+              const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
+              const selectedTracks = availableTracks.slice(0, cupTracksCount);
+              
+              setCupState({
+                isActive: true,
+                tracks: selectedTracks,
+                currentRaceIndex: 0,
+                finished: false,
+                teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+              });
+              setScores({});
+              setTeamScore(null);
+              setNewRecordInfo(null);
+              setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
+              
+              setGameState('CUP_STANDINGS');
+           },
+           confirmText: '支付并进入'
         });
-        setScores({});
-        setTeamScore(null);
-        setNewRecordInfo(null);
-        setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
-        
-        // Show cup standings preview instead of jumping right in
-        setGameState('CUP_STANDINGS');
         return;
       } else {
         // Cup is active and we want to start the actual race
@@ -502,18 +590,26 @@ export default function App() {
     
     let currentRedScore = 0;
     let currentBlueScore = 0;
-
     let isFlawlessRed = false;
+    const playerCount = sortedResults.length;
+    
+    const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
+      2: [10, 8],
+      3: [10, 8, 6],
+      4: [10, 8, 6, 5],
+      5: [10, 8, 6, 5, 4],
+      6: [10, 8, 6, 5, 4, 3],
+      7: [10, 8, 6, 5, 4, 3, 2],
+      8: [10, 8, 6, 5, 4, 3, 2, 1],
+    };
+    const racePoints = RACE_POINTS_BY_COUNT[playerCount] || [10, 8, 6, 5, 4, 3, 2, 1];
 
     if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
-      const redTeamResults = finalResults.filter(r => r.team === 'RED');
+      const redTeamResults = sortedResults.filter(r => r.team === 'RED');
       const totalRedMembers = redTeamResults.length;
       
-      // Condition 1: All red members must finish
       const allRedFinished = redTeamResults.every(r => !r.dnf);
-      
-      // Condition 2: Red members must occupy top spots (0 to totalRedMembers - 1)
-      const currentTopSweep = finalResults.slice(0, totalRedMembers).every(r => r.team === 'RED');
+      const currentTopSweep = sortedResults.slice(0, totalRedMembers).every(r => r.team === 'RED');
 
       if (allRedFinished && currentTopSweep) {
         isFlawlessRed = true;
@@ -521,35 +617,83 @@ export default function App() {
     }
 
     setIsFlawlessResult(isFlawlessRed);
-    finalResults.forEach((car, index) => {
-      const earned = car.dnf ? 0 : (points[index] || 0);
+    
+    let redMvpId = '';
+    let maxRedScore = -1;
+    let totalRedRaceScore = 0;
+    let totalBlueRaceScore = 0;
+
+    sortedResults.forEach((car, index) => {
+      const earned = car.dnf ? 0 : (racePoints[index] || 0);
       newScores[car.id] = (newScores[car.id] || 0) + earned;
       
       if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
-        if (car.team === 'RED') currentRedScore += earned;
-        if (car.team === 'BLUE') currentBlueScore += earned;
+        if (car.team === 'RED') {
+           totalRedRaceScore += earned;
+           if (newScores[car.id] > maxRedScore) {
+             maxRedScore = newScores[car.id];
+             redMvpId = car.id;
+           }
+        }
+        if (car.team === 'BLUE') {
+           totalBlueRaceScore += earned;
+        }
       }
+    });
+    
+    currentRedScore = totalRedRaceScore;
+    currentBlueScore = totalBlueRaceScore;
+    let isTeamWin = false;
+    if (currentRedScore > currentBlueScore) {
+       isTeamWin = true;
+    } else if (currentRedScore === currentBlueScore && sortedResults.length > 0 && sortedResults[0].team === 'RED') {
+       isTeamWin = true;
+    }
 
+    sortedResults.forEach((car, index) => {
       const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
-      if (isLocalPlayer && settings.mode !== 'ONLINE') {
-        let moneyEarned = earned;
-        setGarage(g => ({ ...g, coins: g.coins + moneyEarned }));
+      if (isLocalPlayer) {
+        setGarage(g => {
+           let updatedVehicles = { ...g.vehicles };
+           const eqId = g.equippedVehicle;
+           if (updatedVehicles[eqId]) {
+              const eqDef = VEHICLES_DB.find(v => v.id === eqId) || { tier: 'T0' };
+              let loss = 1;
+              if (eqDef.tier === 'T0') loss = 0;
+              else if (eqDef.tier === 'T1') loss = 1;
+              else if (eqDef.tier === 'T2') loss = 0.8;
+              else if (eqDef.tier === 'T3') loss = 0.5;
+              
+              updatedVehicles[eqId] = {
+                 ...updatedVehicles[eqId],
+                 durability: Math.max(0, Number((updatedVehicles[eqId].durability - loss).toFixed(3)))
+              };
+           }
+           
+           if (!car.dnf) {
+             const isMVP = car.id === redMvpId && isTeamWin;
+             const totalCoins = calculateCoinReward(
+               index,
+               playerCount, 
+               settings.aiDifficulty, 
+               !!(settings.mode === 'TEAM' || settings.isTeamMode), 
+               isTeamWin, 
+               isFlawlessRed, 
+               isMVP
+             );
+             return { ...g, coins: g.coins + totalCoins, vehicles: updatedVehicles };
+           }
+           
+           return { ...g, vehicles: updatedVehicles };
+        });
       }
     });
 
     setFlawlessVictoryMessage(null);
     if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       setTeamScore({ RED: currentRedScore, BLUE: currentBlueScore });
-      let teamBonus = 0;
-      if (currentRedScore > currentBlueScore) {
-        teamBonus += 20; // Win bonus
-      }
       if (isFlawlessRed) {
-        teamBonus += 50; // Flawless victory bonus
-        setFlawlessVictoryMessage(`🔥 完胜！ 红队全员完赛并包揽前 ${finalResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +50！`);
-      }
-      if (teamBonus > 0 && settings.mode !== 'ONLINE') {
-        setGarage(g => ({ ...g, coins: g.coins + teamBonus }));
+        setFlawlessVictoryMessage(`🔥 完胜！ 红队全员完赛并包揽前 ${sortedResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +50！`);
       }
     } else {
       setTeamScore(null);
@@ -573,6 +717,50 @@ export default function App() {
         if (newTeamWins.RED >= requiredWins || newTeamWins.BLUE >= requiredWins) {
           isFinished = true;
         }
+      }
+
+      if (isFinished && settings.mode !== 'ONLINE') {
+        let bonus = 0;
+        if (settings.mode === 'TEAM' || settings.isTeamMode) {
+           const requiredWins = Math.ceil(cupState.tracks.length / 2);
+           const p1Team = 'RED'; // Currently p1 is always RED team
+           const redWon = (newTeamWins?.RED || 0) >= requiredWins;
+           
+           if (redWon && p1Team === 'RED') {
+              bonus += cupState.tracks.length * 25;
+           }
+
+           if (redWon) {
+              const sortedOverall = Object.entries(newScores).sort((a, b) => (b[1] as number) - (a[1] as number));
+              // MVP is the member of the winning team with the most race points
+              const winningTeamId = (newTeamWins?.RED || 0) > (newTeamWins?.BLUE || 0) ? 'RED' : 'BLUE';
+              
+              let mvpId = '';
+              let maxScore = -1;
+              sortedOverall.forEach(([id, score]) => {
+                 // In our simplified offline logic, RED team is p1, p3, p5. BLUE is p2, p4, p6.
+                 const isRed = parseInt(id.replace('p', '')) % 2 !== 0;
+                 const team = isRed ? 'RED' : 'BLUE';
+                 if (team === winningTeamId && (score as number) > maxScore) {
+                    maxScore = score as number;
+                    mvpId = id;
+                 }
+              });
+              
+              if (mvpId === 'p1') {
+                 const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
+                 bonus += Math.floor(cupState.tracks.length * 15 * diffMult);
+              }
+           }
+        } else {
+           const sortedOverall = Object.entries(newScores).sort((a, b) => (b[1] as number) - (a[1] as number));
+           const p1Index = sortedOverall.findIndex(s => s[0] === 'p1');
+           
+           if (p1Index === 0) bonus = cupState.tracks.length * 40;
+           else if (p1Index === 1 || p1Index === 2) bonus = cupState.tracks.length * 15;
+        }
+
+        // Removed bonus application here, as it is applied when user clicks the claim button in CUP_STANDINGS
       }
 
       setCupState({
@@ -608,27 +796,29 @@ export default function App() {
     <div className="min-h-[100dvh] bg-bg text-neon-text font-sans selection:bg-accent-cyan/30 flex flex-col relative">
       
       {/* Global Volume Control */}
-      <div className="fixed top-4 right-4 z-[999] flex items-center gap-2 bg-black/50 p-1.5 sm:p-2 rounded-lg border border-white/10 backdrop-blur-md">
-        <button 
-          onClick={() => { setIsMuted(!isMuted); audioService.init(); }}
-          className="text-zinc-400 hover:text-white transition-colors flex items-center justify-center w-6 h-6 sm:w-auto sm:h-auto"
-        >
-          {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={volume}
-          onChange={(e) => { 
-            setVolume(parseFloat(e.target.value)); 
-            if (isMuted) setIsMuted(false); 
-            audioService.init(); 
-          }}
-          className="w-20 md:w-32 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-accent-cyan disabled:opacity-50"
-        />
-      </div>
+      {gameState !== 'SHOP' && gameState !== 'GARAGE' && gameState !== 'ENHANCEMENT' && (
+        <div className="fixed top-4 right-4 z-[999] flex items-center gap-2 bg-black/50 p-1.5 sm:p-2 rounded-lg border border-white/10 backdrop-blur-md">
+          <button 
+            onClick={() => { setIsMuted(!isMuted); audioService.init(); }}
+            className="text-zinc-400 hover:text-white transition-colors flex items-center justify-center w-6 h-6 sm:w-auto sm:h-auto"
+          >
+            {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={volume}
+            onChange={(e) => { 
+              setVolume(parseFloat(e.target.value)); 
+              if (isMuted) setIsMuted(false); 
+              audioService.init(); 
+            }}
+            className="w-20 md:w-32 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer accent-accent-cyan disabled:opacity-50"
+          />
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {gameState === 'MENU' && (
@@ -682,7 +872,7 @@ export default function App() {
                   <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta mb-[15px] block font-bold">模式选择</span>
                   <div className="flex gap-[10px]">
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'SINGLE', aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, s.isEliteMode) }))}
+                      onClick={() => setSettings(s => ({ ...s, mode: 'SINGLE', aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty) }))}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                         settings.mode === 'SINGLE' 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -729,7 +919,7 @@ export default function App() {
                         {Array.from({length: settings.mode === 'SINGLE' ? 6 : 5}).map((_, count) => (
                           <button 
                             key={count}
-                            onClick={() => setSettings(s => ({ ...s, aiCount: count, aiRosterSeeds: generateAiRosterSeeds(count, s.aiDifficulty, s.isEliteMode) }))}
+                            onClick={() => setSettings(s => ({ ...s, aiCount: count, aiRosterSeeds: generateAiRosterSeeds(count, s.aiDifficulty) }))}
                             className={`flex-1 min-w-[30px] p-[5px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                               settings.aiCount === count 
                               ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -768,40 +958,33 @@ export default function App() {
                             {settings.aiDifficulty === 1 && '入门级'}
                             {settings.aiDifficulty === 2 && '进阶级'}
                             {settings.aiDifficulty === 3 && '专家级'}
-                            {settings.aiDifficulty === 4 && '专业级'} (LV {settings.aiDifficulty})
+                            {settings.aiDifficulty === 4 && '专业级'}
+                            {settings.aiDifficulty === 5 && '精英赛'} (LV {settings.aiDifficulty})
                           </span>
                         </div>
                         <div className="flex gap-2">
                           <button 
-                            onClick={() => setSettings(s => ({ ...s, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, s.isEliteMode) }))}
+                            onClick={() => setSettings(s => ({ ...s, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty) }))}
                             className="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded transition-colors text-[11px]"
                           >
                             随机车手
                           </button>
-                          <button 
-                            onClick={() => setSettings(s => ({ ...s, isEliteMode: !s.isEliteMode, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, s.aiDifficulty, !s.isEliteMode) }))}
-                            className={`px-3 py-1.5 rounded transition-colors text-[11px] ${settings.isEliteMode ? 'bg-accent-magenta text-white font-bold shadow-[0_0_10px_rgba(255,0,234,0.5)]' : 'bg-white/10 hover:bg-white/20'}`}
-                          >
-                            精英赛
-                          </button>
                         </div>
                       </div>
                       
-                      {!settings.isEliteMode && (
-                        <div className="flex gap-[5px] mt-[10px]">
-                          {[1, 2, 3, 4].map(level => (
-                            <button
-                              key={level}
-                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, level, s.isEliteMode) }))}
-                              className={`h-[6px] flex-1 rounded-[2px] transition-all ${
-                                settings.aiDifficulty >= level 
-                                ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
+                      <div className="flex gap-[5px] mt-[10px]">
+                        {[1, 2, 3, 4, 5].map(level => (
+                          <button
+                            key={level}
+                            onClick={() => setSettings(s => ({ ...s, aiDifficulty: level as AIDifficulty, aiRosterSeeds: generateAiRosterSeeds(s.aiCount, level as AIDifficulty) }))}
+                            className={`h-[6px] flex-1 rounded-[2px] transition-all ${
+                              settings.aiDifficulty >= level 
+                                ? (level === 5 ? 'bg-accent-yellow shadow-[0_0_8px_rgba(255,255,0,0.6)]' : 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]')
                                 : 'bg-white/10 hover:bg-white/20'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      )}
+                            }`}
+                          />
+                        ))}
+                      </div>
 
                       {settings.aiCount > 0 && (
                         <div className="mt-4 pt-4 border-t border-white/10 text-xs text-left">
@@ -830,28 +1013,22 @@ export default function App() {
                          <span className="text-[12px] uppercase tracking-[2px] text-accent-magenta font-bold">队伍配置</span>
                          <div className="flex gap-[5px] text-[12px]">
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamSize: 2, teamRoster: generateTeamRoster(2, s.aiDifficulty, s.isEliteMode) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamSize: 2, teamRoster: generateTeamRoster(2, s.aiDifficulty) }))}
                              className={`px-2 py-1 rounded transition-colors ${settings.teamSize === 2 ? 'bg-accent-cyan text-black font-bold' : 'bg-white/10 hover:bg-white/20'}`}
                            >
                              2v2
                            </button>
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamSize: 3, teamRoster: generateTeamRoster(3, s.aiDifficulty, s.isEliteMode) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamSize: 3, teamRoster: generateTeamRoster(3, s.aiDifficulty) }))}
                              className={`px-2 py-1 rounded transition-colors ${settings.teamSize === 3 ? 'bg-accent-cyan text-black font-bold' : 'bg-white/10 hover:bg-white/20'}`}
                            >
                              3v3
                            </button>
                            <button 
-                             onClick={() => setSettings(s => ({ ...s, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty, s.isEliteMode) }))}
+                             onClick={() => setSettings(s => ({ ...s, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty) }))}
                              className="text-[10px] bg-white/10 hover:bg-white/20 px-2 py-1 rounded ml-2"
                            >
                              随机阵容
-                           </button>
-                           <button 
-                             onClick={() => setSettings(s => ({ ...s, isEliteMode: !s.isEliteMode, teamRoster: generateTeamRoster(s.teamSize, s.aiDifficulty, !s.isEliteMode) }))}
-                             className={`px-2 py-1 rounded transition-colors text-[10px] ml-2 ${settings.isEliteMode ? 'bg-accent-magenta text-white font-bold shadow-[0_0_10px_rgba(255,0,234,0.5)]' : 'bg-white/10 hover:bg-white/20'}`}
-                           >
-                             精英赛
                            </button>
                          </div>
                       </div>
@@ -876,29 +1053,31 @@ export default function App() {
                         ))}
                       </div>
 
-                    {!settings.isEliteMode && (
-                      <>
-                        <div className="flex justify-between mb-[5px] text-[13px]">
-                          <span>AI 难度 (影响队友及对手)</span>
-                          <span className="text-accent-magenta">
-                            LV {settings.aiDifficulty}
-                          </span>
+                        <div className="flex justify-between mb-[5px] text-[13px] items-center">
+                          <div className="flex flex-col">
+                            <span>AI 难度 (影响队友及对手)</span>
+                            <span className="text-accent-magenta text-[10px]">
+                              {settings.aiDifficulty === 1 && '入门级'}
+                              {settings.aiDifficulty === 2 && '进阶级'}
+                              {settings.aiDifficulty === 3 && '专家级'}
+                              {settings.aiDifficulty === 4 && '专业级'}
+                              {settings.aiDifficulty === 5 && '精英赛'} (LV {settings.aiDifficulty})
+                            </span>
+                          </div>
                         </div>
                         <div className="flex gap-[5px] mt-[10px] mb-[20px]">
-                          {[1, 2, 3, 4].map(level => (
+                          {[1, 2, 3, 4, 5].map(level => (
                             <button
                               key={level}
-                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level, teamRoster: generateTeamRoster(s.teamSize, level, s.isEliteMode) }))}
+                              onClick={() => setSettings(s => ({ ...s, aiDifficulty: level as AIDifficulty, teamRoster: generateTeamRoster(s.teamSize, level as AIDifficulty) }))}
                               className={`h-[6px] flex-1 rounded-[2px] transition-all ${
                                 settings.aiDifficulty >= level 
-                                ? 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]' 
-                                : 'bg-white/10 hover:bg-white/20'
+                                  ? (level === 5 ? 'bg-accent-yellow shadow-[0_0_8px_rgba(255,255,0,0.6)]' : 'bg-accent-magenta shadow-[0_0_8px_rgba(255,0,234,0.6)]')
+                                  : 'bg-white/10 hover:bg-white/20'
                               }`}
                             />
                           ))}
                         </div>
-                      </>
-                    )}
 
                       <div className="mt-4 pt-4 border-t border-white/10 space-y-4 text-xs font-mono">
                         <div>
@@ -1058,12 +1237,20 @@ export default function App() {
               </div>
               <div className="flex w-full md:w-auto gap-4 flex-wrap md:flex-nowrap">
                 {(settings.mode === 'SINGLE' || (settings.mode === 'TEAM' || settings.isTeamMode)) && (
-                  <button 
-                    onClick={() => setGameState('GARAGE')}
-                    className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
-                  >
-                    我的车库
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => setGameState('GARAGE')}
+                      className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
+                    >
+                      我的车库
+                    </button>
+                    <button 
+                      onClick={() => setGameState('ENHANCEMENT')}
+                      className="flex-1 md:flex-none border border-[#f4ff40]/50 text-[#f4ff40] px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-[#f4ff40] hover:text-black"
+                    >
+                      强化工坊
+                    </button>
+                  </>
                 )}
                 <button 
                   onClick={() => setGameState('SHOP')}
@@ -1084,6 +1271,7 @@ export default function App() {
 
         {gameState === 'SHOP' && <ShopUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
         {gameState === 'GARAGE' && <GarageUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
+        {gameState === 'ENHANCEMENT' && <EnhancementUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'ONLINE_MENU' && <OnlineMenu onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
         {gameState === 'ONLINE_LOBBY' && <OnlineLobby onBack={() => {
@@ -1133,38 +1321,6 @@ export default function App() {
               </p>
               
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4 mb-6">
-                {newRecordInfo && (
-                  <motion.div 
-                    initial={{ scale: 0.5, y: -50, opacity: 0 }}
-                    animate={{ scale: 1, y: 0, opacity: 1 }}
-                    transition={{ type: 'spring', bounce: 0.6, duration: 1 }}
-                    className="mb-8 p-6 rounded-xl bg-black/80 border-4 border-accent-yellow shadow-[0_0_50px_rgba(244,255,64,0.6)] relative overflow-hidden shrink-0"
-                  >
-                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PHJlY3Qgd2lkdGg9IjIwIiBoZWlnaHQ9IjIwIiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTAgMjBMMjAgMFEyMCAyMCAwIDIwWiIgZmlsbD0icmdiYSg1OSwgMTMwLCAyNDYsIDAuMSkiLz48L3N2Zz4=')] opacity-50"></div>
-                    <div className="relative z-10">
-                      <p className="text-xl font-black italic text-white mb-2 tracking-wider flex items-center justify-center gap-2 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">
-                         <Trophy className="w-6 h-6 text-accent-yellow" />
-                         🎉 新赛道记录！ 🎉
-                      </p>
-                      <div className="flex items-center justify-center gap-4 mt-4 text-sm sm:text-base">
-                         <div className="text-zinc-400 text-center">
-                            <div className="text-[10px] uppercase font-bold tracking-widest mb-1">旧记录</div>
-                            <div className="font-mono">{newRecordInfo.oldTime === Infinity ? '--' : (newRecordInfo.oldTime / 1000).toFixed(2)}s</div>
-                         </div>
-                         <div className="text-accent-yellow scale-150 font-black">➔</div>
-                         <div className="text-white text-center">
-                            <div className="text-[10px] uppercase font-bold tracking-widest mb-1 text-accent-cyan">新纪录</div>
-                            <div className="text-xl font-mono font-black text-accent-cyan">{(newRecordInfo.newTime / 1000).toFixed(2)}s</div>
-                         </div>
-                      </div>
-                      {newRecordInfo.diff > 0 && (
-                        <div className="mt-4 text-accent-yellow font-black text-center animate-pulse text-sm">
-                           提升了 {(newRecordInfo.diff / 1000).toFixed(2)} 秒！
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
                 {(settings.mode === 'TEAM' || settings.isTeamMode) ? (() => {
                   const redScore = cupState.teamWins?.RED || 0;
                   const blueScore = cupState.teamWins?.BLUE || 0;
@@ -1221,22 +1377,46 @@ export default function App() {
 
               {cupState.finished && (() => {
                  let isWin = false;
+                 let reward = 0;
+                 let isPodium = false;
+                 let isTeamMVP = false;
+                 
+                 const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
+                 const tracks = settings.cupNumTracks || 4;
+
                  if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
+                    if (isWin) {
+                       reward += tracks * 25;
+                       const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
+                       const redEntries = entries.filter(e => e.id.includes('p') || e.id.includes('ONLINE')); // wait we don't store team per id in scores easily, but local player is team RED.
+                       // Assume p1 is always RED and potential team MVP
+                       const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                       if (entries.length > 0 && isLocal(entries[0].id)) {
+                          isTeamMVP = true;
+                          reward += tracks * 15 * diffMult;
+                       }
+                    }
                  } else {
                     const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                    const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1' || id === 'p2');
-                    isWin = entries.length > 0 && isLocal(entries[0].id);
+                    const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                    const rank = entries.findIndex(e => isLocal(e.id));
+                    if (rank === 0) {
+                        isWin = true;
+                        reward = tracks * 40;
+                    } else if (rank === 1 || rank === 2) {
+                        isPodium = true;
+                        reward = tracks * 15;
+                    }
                  }
-                 const reward = isWin ? (settings.cupNumTracks || 4) * 150 : (settings.cupNumTracks || 4) * 40;
 
                  return (
                    <div className={`border p-4 rounded-lg mb-6 animate-pulse ${isWin ? 'bg-accent-yellow/10 border-accent-yellow/50 shadow-[0_0_20px_rgba(244,255,64,0.3)]' : 'bg-white/5 border-white/20'}`}>
                       <p className={`font-black text-xl mb-2 ${isWin ? 'text-accent-yellow' : 'text-zinc-400'}`}>
-                         {isWin ? '🏆 恭喜获得杯赛冠军！ 🏆' : '😔 遗憾错失冠军 😔'}
+                         {isWin ? '🏆 恭喜获得杯赛冠军！ 🏆' : isPodium ? '🥈 恭喜登上领奖台！' : '😔 遗憾错失前列 😔'}
                       </p>
-                      <p className={`font-bold text-lg ${isWin ? 'text-accent-yellow' : 'text-zinc-500'}`}>
-                         获得杯赛结算金币 {reward} ⟁
+                      <p className={`font-bold text-lg ${isWin || isPodium ? 'text-accent-yellow' : 'text-zinc-500'}`}>
+                         获得杯赛结算金币 {Math.floor(reward)} ⟁ {isTeamMVP && '(含MVP奖励)'}
                       </p>
                    </div>
                  );
@@ -1247,16 +1427,29 @@ export default function App() {
                    <button 
                      onClick={() => {
                        let isWin = false;
+                       let reward = 0;
+                       const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
+                       const tracks = settings.cupNumTracks || 4;
+
                        if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                           isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
+                          if (isWin) {
+                             reward += tracks * 25;
+                             const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
+                             const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                             if (entries.length > 0 && isLocal(entries[0].id)) {
+                                reward += tracks * 15 * diffMult;
+                             }
+                          }
                        } else {
                           const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                          const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1' || id === 'p2');
-                          isWin = entries.length > 0 && isLocal(entries[0].id);
+                          const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                          const rank = entries.findIndex(e => isLocal(e.id));
+                          if (rank === 0) reward = tracks * 40;
+                          else if (rank === 1 || rank === 2) reward = tracks * 15;
                        }
-                       const reward = isWin ? (settings.cupNumTracks || 4) * 150 : (settings.cupNumTracks || 4) * 40;
 
-                       setGarage(g => ({...g, coins: g.coins + reward}));
+                       setGarage(g => ({...g, coins: g.coins + Math.floor(reward)}));
                        setCupState(null);
                        setScores({});
                        setTeamScore(null);
@@ -1357,7 +1550,11 @@ export default function App() {
                     
                     <div className="flex flex-col gap-1 mt-3 text-xs font-normal opacity-80 w-full border-t border-current pt-2">
                        {results.filter(c => c.team === 'RED').map(c => {
-                          const earned = c.dnf ? 0 : (points[results.findIndex(r => r.id === c.id)] || 0);
+                          const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
+                            2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
+                          };
+                          const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                          const earned = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
                           return (
                             <div key={c.id} className="flex justify-between w-full">
                               <span className="opacity-80 truncate max-w-[80px]">{c.name || c.id.toUpperCase()}</span>
@@ -1378,7 +1575,11 @@ export default function App() {
 
                     <div className="flex flex-col gap-1 mt-3 text-xs font-normal opacity-80 w-full border-t border-current pt-2">
                        {results.filter(c => c.team === 'BLUE').map(c => {
-                          const earned = c.dnf ? 0 : (points[results.findIndex(r => r.id === c.id)] || 0);
+                          const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
+                            2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
+                          };
+                          const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                          const earned = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
                           return (
                             <div key={c.id} className="flex justify-between w-full">
                               <span className="opacity-80 truncate max-w-[80px]">{c.name || c.id.toUpperCase()}</span>
@@ -1395,8 +1596,38 @@ export default function App() {
 
               <div className="space-y-4 mb-8">
                 {results.map((car, index) => {
-                  const earned = car.dnf ? 0 : (points[index] || 0);
+                  const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
+                    2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
+                  };
+                  const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                  // the real earned points for the player
+                  const earnedPts = car.dnf ? 0 : (racePoints[index] || 0);
+
                   const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
+                  
+                  // For UI Display of purely single-match calculations:
+                  let displayCoins = 0;
+                  if (settings.mode !== 'ONLINE') {
+                    const isTeamWin = teamScore && ((teamScore.RED > teamScore.BLUE && car.team === 'RED') || (teamScore.BLUE > teamScore.RED && car.team === 'BLUE'));
+                    
+                    let mvpId = '';
+                    let maxPts = -1;
+                    if (isTeamWin) {
+                       results.filter(c => c.team === car.team).forEach(c => {
+                          const pts = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
+                          if (pts > maxPts) { maxPts = pts; mvpId = c.id; }
+                       });
+                    }
+                    displayCoins = calculateCoinReward(
+                       index,
+                       results.length,
+                       settings.aiDifficulty,
+                       !!(settings.mode === 'TEAM' || settings.isTeamMode),
+                       !!isTeamWin,
+                       !!(isFlawlessResult && car.team === 'RED'),
+                       car.id === mvpId
+                    );
+                  }
                   return (
                     <div 
                       key={car.id} 
@@ -1430,11 +1661,11 @@ export default function App() {
                         </div>
                         {isLocalPlayer && !car.dnf && settings.mode !== 'ONLINE' && (
                           <div className="font-mono text-sm text-accent-yellow bg-accent-yellow/10 px-3 py-1 rounded-full border border-accent-yellow/30 flex items-center gap-1">
-                             奖励 💰 +{(settings.mode === 'TEAM' || settings.isTeamMode) ? (earned + ((teamScore?.RED! > teamScore?.BLUE! && car.team === 'RED') || (teamScore?.BLUE! > teamScore?.RED! && car.team === 'BLUE') ? 20 : 0) + (isFlawlessResult && car.team === 'RED' ? 50 : 0)) : earned}
+                             奖励 💰 +{displayCoins}
                           </div>
                         )}
                         <div className="font-mono text-sm text-accent-magenta bg-accent-magenta/10 px-3 py-1 rounded-full border border-accent-magenta/30">
-                          {(settings.mode === 'TEAM' || settings.isTeamMode) ? `贡献 ${earned}` : (car.dnf ? 0 : scores[car.id])} 分
+                          {(settings.mode === 'TEAM' || settings.isTeamMode) ? `贡献 ${earnedPts}` : (car.dnf ? 0 : scores[car.id])} 分
                         </div>
                       </div>
                     </div>
@@ -1607,7 +1838,7 @@ export default function App() {
                   }}
                   className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors border border-red-400/50"
                 >
-                  确定删除
+                  {confirmAction.confirmText || '确定'}
                 </button>
               </div>
             </motion.div>
