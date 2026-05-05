@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -7,10 +8,74 @@ import { TRACKS, VEHICLES_DB, LIVERIES_DB, ITEMS_DB, PHYSICS } from './src/const
 import { updateCarPhysics, updateAICar } from './src/lib/gameEngine';
 import { CarState, OnlinePlayer } from './src/types';
 
+// ================== 后端基建模块引入 ==================
+import jwt from 'jsonwebtoken';
+import { AuthService } from './server/AuthService';
+import { GMController } from './server/GMController';
+import { requireAuth, requireAdmin } from './server/GMMiddleware';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('CRITICAL: JWT_SECRET environment variable is missing.');
+    process.exit(1);
+}
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT || 3000;
 
+  // 跨域支持 (为 debug.html 本地联调使用)
+  app.use(cors());
+
+  // 必须配置 body parsing 才能解析 JSON payload
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
+  // ================== Auth & API Routes ==================
+  
+  // 测试验证联通性
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', version: '1.0' });
+  });
+
+  // 1. 获取发号器注册 API
+  app.post('/api/auth/register', async (req, res) => {
+      try {
+          const { username, password } = req.body;
+          if (!username || !password) {
+              return res.status(400).json({ error: 'Missing username or password' });
+          }
+          const user = await AuthService.register(username, password);
+          res.json({ success: true, user });
+      } catch (error: any) {
+          res.status(400).json({ error: error.message });
+      }
+  });
+
+  // 2. 验证与生成 JWT 凭证的登录 API
+  app.post('/api/auth/login', async (req, res) => {
+      try {
+          const { username, password } = req.body;
+          if (!username || !password) {
+              return res.status(400).json({ error: 'Missing username or password' });
+          }
+          const user = await AuthService.login(username, password);
+          
+          // 签发 Token，1天过期
+          const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+          res.json({ success: true, token, user });
+      } catch (error: any) {
+          res.status(401).json({ error: error.message });
+      }
+  });
+
+  // 3. 挂载带 JWT 和角色验证的 GM API 专线
+  app.post('/api/gm/overrideGarage', requireAuth, requireAdmin, GMController.overrideGarage);
+
+  // ================== WebSocket Server Setup ==================
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: { origin: '*' }
@@ -717,6 +782,9 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Bootstrap 初始化：预加载索引并注入管理员账号
+  await AuthService.bootstrap();
 
   server.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
