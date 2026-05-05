@@ -226,7 +226,31 @@
                     <label>目标车辆 ID</label>
                     <input type="text" id="gmVehicleId" value="car_basic" placeholder="车辆ID，默认为 car_basic (新星-V1)">
                 </div>
-                <button onclick="handleGMOverride()" style="width: 100%;">⚡ 执行车库一键强改 (Level 5 + T3配件)</button>
+                <button onclick="handleGMOverride()" style="width: 100%; margin-bottom: 10px;">⚡ 执行车库一键强改 (Level 5 + T3配件)</button>
+                <button onclick="handleGMGrantResources()" style="width: 100%;">💰 一键发放初始资金与材料 (10w金币+全材料卡片)</button>
+            </div>
+
+            <div class="module">
+                <h2>模块三：核心经济与玩法测试</h2>
+                
+                <div class="form-group">
+                    <label>使用的赛车ID用于跑赛</label>
+                    <input type="text" id="raceCarId" value="car_basic" placeholder="车辆ID，默认 car_basic">
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button onclick="handlePlaySingle()" style="flex: 1;">🏁 跑一局单人赛 (第1名)</button>
+                    <button onclick="handleBuyT1Car()" style="flex: 1;">🛒 购买一辆 T1 赛车 (30金币)</button>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button onclick="handleBuyPart()" style="flex: 1;">🛒 买配件 (engine_t1, 10金币)</button>
+                    <button onclick="handleEquipPart()" style="flex: 1;">🔧 装配配件 (engine_t1 到 engine槽)</button>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="handleUpgradeCar()" style="flex: 1;">⚙️ 强化一次赛车 (消耗核心)</button>
+                </div>
             </div>
 
         </div>
@@ -381,6 +405,66 @@
 
             log('Client', `正在执行 GM 强改... 目标UID: ${targetUid}, 车辆: ${vehicleId}`);
             await fetchAPI('/gm/overrideGarage', 'POST', { targetUid, vehicleId });
+        }
+
+        async function handleGMGrantResources() {
+            const targetUid = document.getElementById('gmTargetUid').value.trim();
+
+            if (!targetUid) {
+                alert('请输入目标玩家 UID');
+                return;
+            }
+
+            log('Client', `正在执行 GM 资源发放... 目标UID: ${targetUid}`);
+            await fetchAPI('/gm/grantResources', 'POST', { targetUid });
+        }
+
+        async function handlePlaySingle() {
+            const carId = document.getElementById('raceCarId').value.trim() || 'car_basic';
+            log('Client', `跑跑赛车结算中... 模式: 单人, 车辆: ${carId}, 名次: 1`);
+            await fetchAPI('/economy/calculate', 'POST', { 
+                mode: 'single', 
+                carId: carId, 
+                rank: 1, 
+                players: 1, 
+                difficulty: 1 
+            });
+        }
+
+        async function handleBuyT1Car() {
+            log('Client', `尝试购买 T1 赛车... 花费: 30`);
+            await fetchAPI('/shop/buyCar', 'POST', { 
+                carId: 'car_t1_base', 
+                isPermanent: false, 
+                cost: 30 
+            });
+        }
+
+        async function handleBuyPart() {
+            log('Client', `尝试购买 engine_t1 配件...`);
+            await fetchAPI('/shop/buyPart', 'POST', { 
+                partId: 'engine_t1', 
+                cost: 10 
+            });
+        }
+
+        async function handleEquipPart() {
+            const carId = document.getElementById('raceCarId').value.trim() || 'car_basic';
+            log('Client', `尝试给 ${carId} 装配 engine_t1 ...`);
+            await fetchAPI('/shop/equipPart', 'POST', { 
+                carId: carId,
+                slotId: 'engine',
+                partId: 'engine_t1'
+            });
+        }
+
+        async function handleUpgradeCar() {
+            const carId = document.getElementById('raceCarId').value.trim() || 'car_basic';
+            log('Client', `请求尝试强化赛车: ${carId} (若无材料会报错)`);
+            await fetchAPI('/upgrade/car', 'POST', { 
+                carId: carId, 
+                useProtectionCard: false 
+            });
         }
 
     </script>

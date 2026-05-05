@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { StorageEngine } from './StorageEngine';
 
 dotenv.config();
 
@@ -49,7 +50,7 @@ export const requireAuth = (req: AuthenticatedRequest, res: Response, next: Next
  * GM / 管理员权限认证中间件
  * 必须在 requireAuth 之后使用
  */
-export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+export const requireAdmin = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -57,6 +58,17 @@ export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: Nex
 
     if (req.user.role !== 'admin') {
         res.status(403).json({ error: 'Access denied: GM privileges required' });
+        return;
+    }
+
+    try {
+        const playerData = await StorageEngine.readEncrypted(req.user.uid);
+        if (playerData?.profile?.status === 'banned') {
+            res.status(403).json({ error: `账号已封禁，原因：${playerData.profile.banReason}` });
+            return;
+        }
+    } catch (err) {
+        res.status(500).json({ error: '内部验证失败' });
         return;
     }
 

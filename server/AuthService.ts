@@ -75,13 +75,22 @@ export class AuthService {
 
             // 为管理员账号初始化加密数据文件
             const adminData = {
-                uid: adminUid,
-                username: 'admin',
-                role: 'admin',
-                level: 99,
-                gold: 9999999,
+                profile: {
+                    uid: adminUid,
+                    nickname: 'admin',
+                    role: 'admin',
+                    status: 'active',
+                    banReason: '',
+                    registerTime: Date.now()
+                },
+                wallet: { coins: 9999999 },
                 garage: [],
-                createdAt: new Date().toISOString()
+                inventory: {
+                    materials: {},
+                    protectors: {},
+                    parts: {},
+                    paints: []
+                }
             };
             await StorageEngine.writeEncrypted(adminUid, adminData);
             console.log(`[AuthService]  admin 初始化完成，UID: ${adminUid}`);
@@ -127,13 +136,22 @@ export class AuthService {
 
             // 为新用户创建基础空数据
             const initData = {
-                uid: newUid,
-                username,
-                role: 'user',
-                level: 1,
-                gold: 0,
-                garage: [], // 车库空空如也
-                createdAt: new Date().toISOString()
+                profile: {
+                    uid: newUid,
+                    nickname: username,
+                    role: 'player',
+                    status: 'active',
+                    banReason: '',
+                    registerTime: Date.now()
+                },
+                wallet: { coins: 0 },
+                garage: [],
+                inventory: {
+                    materials: {},
+                    protectors: {},
+                    parts: {},
+                    paints: []
+                }
             };
             await StorageEngine.writeEncrypted(newUid, initData);
 
@@ -160,10 +178,29 @@ export class AuthService {
             throw new Error("密码错误");
         }
 
+        const playerData = await StorageEngine.readEncrypted(accountInfo.uid);
+
+        // 旧存档兜底兼容
+        if (playerData && playerData.profile) {
+            if (!playerData.profile.role) {
+                playerData.profile.role = accountInfo.role === 'admin' ? 'admin' : 'player';
+            }
+            if (!playerData.profile.status) {
+                playerData.profile.status = 'active';
+            }
+            if (playerData.profile.banReason === undefined) {
+                playerData.profile.banReason = '';
+            }
+        }
+
+        if (playerData?.profile?.status === 'banned') {
+            throw new Error(`账号已封禁，原因：${playerData.profile.banReason}`);
+        }
+
         return {
             uid: accountInfo.uid,
             username: username,
-            role: accountInfo.role
+            role: playerData?.profile?.role || accountInfo.role
         };
     }
 }
