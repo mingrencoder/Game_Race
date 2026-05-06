@@ -61,11 +61,12 @@ async function startServer() {
   // 2. 验证与生成 JWT 凭证的登录 API
   app.post('/api/auth/login', async (req, res) => {
       try {
-          const { username, password } = req.body;
-          if (!username || !password) {
-              return res.status(400).json({ error: 'Missing username or password' });
+          const identifier = req.body.identifier || req.body.username;
+          const password = req.body.password;
+          if (!identifier || !password) {
+              return res.status(400).json({ error: 'Missing identifier/username or password' });
           }
-          const user = await AuthService.login(username, password);
+          const user = await AuthService.login(identifier, password);
           
           // 签发 Token，1天过期
           const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });

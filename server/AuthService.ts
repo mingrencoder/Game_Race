@@ -165,10 +165,29 @@ export class AuthService {
      * 登录校验
      * @returns 成功返回用户信息，失败抛出错误
      */
-    static async login(username: string, passwordPlain: string) {
+    static async login(identifier: string, passwordPlain: string) {
         if (!isInitialized) await this.bootstrap();
         
-        const accountInfo = accountsCache[username];
+        let accountInfo = null;
+        let actualUsername = null;
+
+        // 1. 作为 UID 查找 (8位数字或系统内部保留uid)
+        if (/^\d{8}$/.test(identifier) || identifier === 'admin') {
+            for (const [uname, info] of Object.entries(accountsCache)) {
+                if (info.uid === identifier) {
+                    accountInfo = info;
+                    actualUsername = uname;
+                    break;
+                }
+            }
+        }
+
+        // 2. 作为 username (nickname) 查找
+        if (!accountInfo) {
+            accountInfo = accountsCache[identifier];
+            actualUsername = identifier;
+        }
+
         if (!accountInfo) {
             throw new Error("账号不存在");
         }
@@ -199,7 +218,7 @@ export class AuthService {
 
         return {
             uid: accountInfo.uid,
-            username: username,
+            username: actualUsername,
             role: playerData?.profile?.role || accountInfo.role
         };
     }
