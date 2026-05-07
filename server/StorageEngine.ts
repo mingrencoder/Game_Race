@@ -16,8 +16,22 @@ if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length !== 64) {
 // 解析 key 为 buffer，如果长度不足或超过 32 bytes，在 createCipheriv 时会报错。这里使用 sha256 确保正好是 32 byte
 const KEY_BUFFER = crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest();
 
-// 简单的写入锁机制，防止并发覆盖导致 JSON 损坏
-const writeLocks = new Set<string>();
+// 真正的异步互斥锁队列，保证读改写(Read-Modify-Write)的原子性
+const lockQueues = new Map<string, Promise<void>>();
+
+async function acquireLock(key: string): Promise<() => void> {
+    const currentQueue = lockQueues.get(key) || Promise.resolve();
+    let release!: () => void;
+    const nextQueue = new Promise<void>(resolve => { release = resolve; });
+    lockQueues.set(key, currentQueue.then(() => nextQueue));
+    await currentQueue;
+    return () => {
+        release();
+        if (lockQueues.get(key) === nextQueue) {
+            lockQueues.delete(key);
+        }
+    };
+}
 
 async function ensureDataDir() {
     try {
@@ -28,22 +42,46 @@ async function ensureDataDir() {
 }
 
 export class StorageEngine {
+
     /**
-     * 加密写入数据到文件系统
+     * 对特定资源申请互斥锁，并在获得锁后执行操作
+     */
+    static async runLocked<T>(key: string, operation: () => Promise<T>): Promise<T> {
+        const release = await acquireLock(key);
+        try {
+            return await operation();
+        } finally {
+            release();
+        }
+    }
+
+    /**
+     * 为玩家数据提供包裹事务：自动加锁 -> 读取 -> 被回调修改 -> 写入 -> 解锁
+     */
+    static async transaction(uid: string, operator: (data: any) => Promise<boolean | void>): Promise<void> {
+        await this.runLocked(`UID_${uid}`, async () => {
+            const data = await this.readEncrypted(uid);
+            if (!data) throw new Error(`Player data not found for UID: ${uid}`);
+            const shouldSave = await operator(data);
+            if (shouldSave !== false) {
+                await this._writeEncryptedInternal(uid, data);
+            }
+        });
+    }
+
+    /**
+     * 加密写入数据到文件系统 (带有独立的锁保护)
      * @param uid 玩家唯一标识
      * @param dataObject 要保存的数据对象
      */
     static async writeEncrypted(uid: string, dataObject: any): Promise<void> {
+        await this.runLocked(`UID_${uid}`, async () => {
+            await this._writeEncryptedInternal(uid, dataObject);
+        });
+    }
+
+    private static async _writeEncryptedInternal(uid: string, dataObject: any): Promise<void> {
         const filePath = path.join(DATA_DIR, `UID_${uid}.json`);
-        
-        // 简单的自旋等待锁释放
-        while (writeLocks.has(uid)) {
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        
-        // 加锁
-        writeLocks.add(uid);
-        
         try {
             await ensureDataDir();
             const payload = JSON.stringify(dataObject);
@@ -66,9 +104,6 @@ export class StorageEngine {
         } catch (error) {
             console.error(`[Storage Engine] 写入 UID ${uid} 数据时发生异常:`, error);
             throw error;
-        } finally {
-            // 释放锁
-            writeLocks.delete(uid);
         }
     }
 
@@ -128,19 +163,11 @@ export class StorageEngine {
     }
 
     /**
-     * 写入全局排行榜
+     * 写入全局排行榜 (内部方法，外部需调用带锁或者保证有锁)
      * @param dataObject 要保存的排行榜数据对象
      */
-    static async writeLeaderboard(dataObject: any): Promise<void> {
+    private static async _writeLeaderboardInternal(dataObject: any): Promise<void> {
         const filePath = path.join(DATA_DIR, 'leaderboard.json');
-        const lockKey = 'GLOBAL_LEADERBOARD';
-        
-        while (writeLocks.has(lockKey)) {
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        
-        writeLocks.add(lockKey);
-        
         try {
             await ensureDataDir();
             const payload = JSON.stringify(dataObject, null, 2);
@@ -148,33 +175,52 @@ export class StorageEngine {
         } catch (error) {
             console.error(`[Storage Engine] 写入排行榜数据发生异常:`, error);
             throw error;
-        } finally {
-            writeLocks.delete(lockKey);
         }
     }
 
     /**
-     * 提交赛道成绩
+     * 读取并写入排行榜（完整事务包裹）
+     */
+    static async leaderboardTransaction(operator: (board: any) => Promise<boolean | void>): Promise<void> {
+        await this.runLocked('GLOBAL_LEADERBOARD', async () => {
+            const board = await this.readLeaderboard();
+            const shouldSave = await operator(board);
+            if (shouldSave !== false) {
+                await this._writeLeaderboardInternal(board);
+            }
+        });
+    }
+
+    /**
+     * 写入全局排行榜
+     * @param dataObject 要保存的排行榜数据对象
+     */
+    static async writeLeaderboard(dataObject: any): Promise<void> {
+        await this.runLocked('GLOBAL_LEADERBOARD', async () => {
+            await this._writeLeaderboardInternal(dataObject);
+        });
+    }
+
+    /**
+     * 提交赛道成绩，保证原子读改写操作
      * @param trackId 赛道ID
      * @param laps 圈数
      * @param recordData 成绩对象
      */
     static async submitRecord(trackId: string, laps: number, recordData: { uid: string; playerName: string; time: number; vehicle: string; isTeam: boolean; timestamp: number }): Promise<void> {
-        const board = await this.readLeaderboard();
-        const key = `${trackId}_${laps}`;
-        
-        if (!board[key]) board[key] = [];
-        
-        board[key].push(recordData);
-        // 按时间从小到大（从快到慢）排序
-        board[key].sort((a: any, b: any) => a.time - b.time);
-        
-        // 只保留前 50 名
-        if (board[key].length > 50) {
-            board[key] = board[key].slice(0, 50);
-        }
-        
-        await this.writeLeaderboard(board);
+        await this.leaderboardTransaction(async (board) => {
+            const key = `${trackId}_${laps}`;
+            if (!board[key]) board[key] = [];
+            
+            board[key].push(recordData);
+            // 按时间从小到大（从快到慢）排序
+            board[key].sort((a: any, b: any) => a.time - b.time);
+            
+            // 只保留前 50 名
+            if (board[key].length > 50) {
+                board[key] = board[key].slice(0, 50);
+            }
+        });
     }
 
     /**
