@@ -118,4 +118,45 @@ export class PlayerController {
             }
         }
     }
+
+    /**
+     * 设置玩家当前出战的车辆
+     */
+    static async setActiveCar(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            const { carId } = req.body;
+            if (!carId) { res.status(400).json({ error: 'Missing carId' }); return; }
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.garage) playerData.garage = [];
+            const vehicle = playerData.garage.find((v: any) => v.carId === carId);
+
+            if (!vehicle) {
+                res.status(400).json({ error: '车辆未拥有/车库中不存在' });
+                return;
+            }
+
+            if (!vehicle.isPermanent && vehicle.expireAt && vehicle.expireAt < Date.now()) {
+                res.status(400).json({ error: '该车辆租赁已过期，无法出战' });
+                return;
+            }
+
+            if (!playerData.profile) {
+                playerData.profile = { uid, nickname: `user_${uid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() };
+            }
+
+            playerData.profile.activeCarId = carId;
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+            res.json({ success: true, message: '出战车辆设置成功', activeCarId: carId });
+        } catch (error: any) {
+            console.error('[PlayerController] setActiveCar error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
 }

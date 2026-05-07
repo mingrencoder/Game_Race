@@ -124,4 +124,45 @@ export class EconomyController {
              res.status(500).json({ error: 'Internal Server Error' });
         }
     }
+
+    /**
+     * 杯赛入场扣费（仅报名费）
+     */
+    static async payCupEntryFee(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            const { cupTracksCount } = req.body;
+            if (!cupTracksCount || typeof cupTracksCount !== 'number') {
+                res.status(400).json({ error: 'Missing or invalid cupTracksCount' });
+                return;
+            }
+
+            const fee = cupTracksCount * 10;
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.wallet) playerData.wallet = { coins: 0 };
+            if (playerData.wallet.coins < fee) {
+                res.status(400).json({ error: '金币不足，无法支付杯赛报名费' });
+                return;
+            }
+
+            playerData.wallet.coins -= fee;
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+
+            res.json({
+                success: true,
+                feePaid: fee,
+                wallet: playerData.wallet
+            });
+
+        } catch (error: any) {
+            console.error('[EconomyController] payCupEntryFee error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
 }

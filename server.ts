@@ -81,6 +81,7 @@ async function startServer() {
   app.get('/api/player/profile', requireAuth, PlayerController.getProfile);
   app.post('/api/player/nickname', requireAuth, PlayerController.updateNickname);
   app.post('/api/player/password', requireAuth, PlayerController.updatePassword);
+  app.post('/api/player/activeCar', requireAuth, PlayerController.setActiveCar);
 
   // 4. 挂载带 JWT 和角色验证的 GM API 专线
   app.post('/api/gm/queryPlayer', requireAuth, requireAdmin, GMController.queryPlayer);
@@ -91,11 +92,15 @@ async function startServer() {
 
   // 4. 经济与比赛结算
   app.post('/api/economy/calculate', requireAuth, EconomyController.calculateRaceReward);
+  app.post('/api/economy/payEntryFee', requireAuth, EconomyController.payCupEntryFee);
   
   // 5. 商店与车库消费
   app.post('/api/shop/buyCar', requireAuth, ShopController.buyCar);
   app.post('/api/shop/buyPart', requireAuth, ShopController.buyPart);
   app.post('/api/shop/equipPart', requireAuth, ShopController.equipPart);
+  app.post('/api/shop/buyItem', requireAuth, ShopController.buyItem);
+  app.post('/api/shop/buyLivery', requireAuth, ShopController.buyLivery);
+  app.post('/api/shop/equipLivery', requireAuth, ShopController.equipLivery);
   app.post('/api/shop/repairCar', requireAuth, ShopController.repairCar);
   
   // 6. 硬核强化

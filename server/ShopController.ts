@@ -210,4 +210,115 @@ export class ShopController {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }
+
+    static async buyItem(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            const { itemId, quantity = 1, cost } = req.body;
+            if (!itemId || cost === undefined) { res.status(400).json({ error: 'Missing parameters' }); return; }
+
+            const totalCost = cost * quantity;
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.wallet) playerData.wallet = { coins: 0 };
+            if (playerData.wallet.coins < totalCost) { res.status(400).json({ error: `金币不足 (需要 ${totalCost} ⟁)` }); return; }
+
+            playerData.wallet.coins -= totalCost;
+            
+            if (!playerData.inventory) playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
+            if (!playerData.inventory.materials) playerData.inventory.materials = {};
+            if (!playerData.inventory.protectors) playerData.inventory.protectors = {};
+            if (!playerData.inventory.parts) playerData.inventory.parts = {};
+            
+            if (itemId.includes('core_') || itemId.includes('coreT')) {
+                playerData.inventory.materials[itemId] = (playerData.inventory.materials[itemId] || 0) + quantity;
+            } else if (itemId.includes('Card') || itemId.includes('card_')) {
+                playerData.inventory.protectors[itemId] = (playerData.inventory.protectors[itemId] || 0) + quantity;
+            } else {
+                playerData.inventory.parts[itemId] = (playerData.inventory.parts[itemId] || 0) + quantity;
+            }
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+            res.json({ success: true, message: '购买成功', itemId, quantity, currentCoins: playerData.wallet.coins, inventory: playerData.inventory });
+        } catch (error: any) {
+            console.error('[ShopController] buyItem error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    static async buyLivery(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            const { liveryId, cost } = req.body;
+            if (!liveryId || cost === undefined) { res.status(400).json({ error: 'Missing parameters' }); return; }
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.inventory) playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
+            if (!playerData.inventory.paints) playerData.inventory.paints = [];
+
+            if (playerData.inventory.paints.includes(liveryId)) {
+                res.status(400).json({ error: '您已拥有该涂装' });
+                return;
+            }
+
+            if (!playerData.wallet) playerData.wallet = { coins: 0 };
+            if (playerData.wallet.coins < cost) {
+                res.status(400).json({ error: `金币不足 (需要 ${cost} ⟁)` });
+                return;
+            }
+
+            playerData.wallet.coins -= cost;
+            playerData.inventory.paints.push(liveryId);
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+            res.json({ success: true, message: '涂装购买成功', liveryId, currentCoins: playerData.wallet.coins, paints: playerData.inventory.paints });
+        } catch (error: any) {
+            console.error('[ShopController] buyLivery error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    static async equipLivery(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            const { carId, liveryId } = req.body;
+            if (!carId || !liveryId) { res.status(400).json({ error: 'Missing parameters' }); return; }
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.inventory) playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
+            if (!playerData.inventory.paints) playerData.inventory.paints = [];
+
+            // If it's not a basic color/hex and not 'default', check if owned
+            if (liveryId !== 'default' && !liveryId.startsWith('#')) {
+                if (!playerData.inventory.paints.includes(liveryId)) {
+                    res.status(400).json({ error: '您未拥有该涂装' });
+                    return;
+                }
+            }
+
+            if (!playerData.garage) playerData.garage = [];
+            const vehicle = playerData.garage.find((c: any) => c.carId === carId);
+            if (!vehicle) { res.status(400).json({ error: 'Vehicle not found in garage' }); return; }
+
+            vehicle.equippedPaint = liveryId === 'default' ? null : liveryId;
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+            res.json({ success: true, message: '涂装装备成功', carId, equippedPaint: vehicle.equippedPaint });
+        } catch (error: any) {
+            console.error('[ShopController] equipLivery error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
 }
