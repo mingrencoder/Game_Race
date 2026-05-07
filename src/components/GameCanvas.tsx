@@ -384,7 +384,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       const p1Pos = getStartPos(0, totalCars);
     initialCars.push({
       id: 'p1',
-      name: '玩家1',
+      name: garage?.profile?.nickname || '玩家1',
       isAI: false,
       playerIndex: 0,
       x: p1Pos.x,

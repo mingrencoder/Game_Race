@@ -153,6 +153,7 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty) => {
   return seeds;
 };
 
+import AuthUI from './components/AuthUI';
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
 import EnhancementUI from './components/EnhancementUI';
@@ -348,7 +349,7 @@ export default function App() {
   const [flawlessVictoryMessage, setFlawlessVictoryMessage] = useState<string | null>(null);
   const [isFlawlessResult, setIsFlawlessResult] = useState<boolean>(false);
   const [cupState, setCupState] = useState<{ isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null>(null);
-  const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY' | 'ENHANCEMENT'>('MENU');
+  const [gameState, setGameState] = useState<'LOGIN' | 'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY' | 'ENHANCEMENT'>('LOGIN');
   
   const [playerData, setPlayerData] = useState<PlayerData>(initialPlayerData);
 
@@ -878,6 +879,17 @@ export default function App() {
                 <span className="text-accent-magenta uppercase tracking-[2px] text-[10px] md:text-xs font-bold">PAOPAO RACING</span>
               </div>
               <div className="flex items-center gap-2 sm:gap-4 pr-32 md:pr-48">
+                {/* 动态玩家昵称与徽章展示 */}
+                <div className="hidden md:flex items-center gap-2 bg-black/40 border border-[#00f2ff]/20 px-3 py-1 rounded-full">
+                  <div className="w-2 h-2 rounded-full bg-[#00f2ff] animate-pulse" />
+                  <span className="font-mono text-[10px] md:text-xs text-[#00f2ff] font-bold">
+                    {playerData.profile.nickname}
+                  </span>
+                  <div className="bg-[#ff0055]/20 text-[#ff0055] border border-[#ff0055]/30 text-[8px] px-1.5 py-0.5 rounded font-black italic">
+                    Lv.1
+                  </div>
+                </div>
+
                 <button
                   onClick={() => setShowPlayerInfo(true)}
                   className="text-accent-cyan hover:text-white transition-colors text-xs sm:text-sm underline underline-offset-4 font-bold cursor-pointer"
@@ -1309,6 +1321,7 @@ export default function App() {
           </motion.div>
         )}
 
+        {gameState === 'LOGIN' && <AuthUI setGarage={setPlayerData} onLoginSuccess={() => setGameState('MENU')} />}
         {gameState === 'SHOP' && <ShopUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
         {gameState === 'GARAGE' && <GarageUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
         {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
