@@ -129,7 +129,7 @@ export class AuthService {
             accountsCache[username] = {
                 uid: newUid,
                 passwordHash,
-                role: 'user'
+                role: 'player'
             };
             // 落盘
             await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf8');
@@ -155,7 +155,7 @@ export class AuthService {
             };
             await StorageEngine.writeEncrypted(newUid, initData);
 
-            return { uid: newUid, username, role: 'user' };
+            return { uid: newUid, username, role: 'player' };
         } finally {
             authLock = false; // 释放锁
         }

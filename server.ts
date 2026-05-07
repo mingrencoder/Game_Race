@@ -55,7 +55,9 @@ async function startServer() {
               return res.status(400).json({ error: 'Missing username or password' });
           }
           const user = await AuthService.register(username, password);
-          res.json({ success: true, user });
+          // 签发 Token，1天过期
+          const token = jwt.sign(user, JWT_SECRET, { expiresIn: '1d' });
+          res.json({ success: true, token, user });
       } catch (error: any) {
           res.status(400).json({ error: error.message });
       }

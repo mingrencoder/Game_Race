@@ -2,19 +2,14 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
 
+import { getVehicleTier } from './utils/vehicleUtils';
+
 const ECONOMY_CONFIG = {
     playersMult: { 1: 1.0, 2: 0.6, 3: 0.8, 4: 1.0, 5: 1.1, 6: 1.2 } as Record<number, number>,
     diffMult: { '入门': 0.8, '进阶': 1.0, '专家': 1.2, '专业': 1.5, '精英': 1.8 } as Record<string, number>,
     singleBase: { 1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8 } as Record<number, number>,
     durabilityLoss: { 0: 0, 1: 1, 2: 0.8, 3: 0.5 } as Record<number, number>
 };
-
-function getVehicleTier(carId: string): number {
-    if (carId.includes('lord') || carId.includes('legend') || carId.includes('t3')) return 3;
-    if (carId.includes('ninja') || carId.includes('cyber') || carId.includes('t2')) return 2;
-    if (carId.includes('pioneer') || carId.includes('ghost') || carId.includes('armor') || carId.includes('t1')) return 1;
-    return 0; // nova_v1, car_basic, default T0
-}
 
 export class EconomyController {
     static async calculateRaceReward(req: AuthenticatedRequest, res: Response): Promise<void> {

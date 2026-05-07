@@ -1,13 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
-
-function getVehicleTier(carId: string): number {
-    if (carId.includes('lord') || carId.includes('legend') || carId.includes('t3')) return 3;
-    if (carId.includes('ninja') || carId.includes('cyber') || carId.includes('t2')) return 2;
-    if (carId.includes('pioneer') || carId.includes('ghost') || carId.includes('armor') || carId.includes('car_t1') || carId.includes('t1')) return 1;
-    return 0; // nova_v1, car_basic, default T0
-}
+import { getVehicleTier } from './utils/vehicleUtils';
 
 const UPGRADE_CONFIG: Record<number, any> = {
     0: { material: 'core_primary', cost: 1, rate: { 0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0 }, protection: null, failDrop: 0 },
