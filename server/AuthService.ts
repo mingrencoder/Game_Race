@@ -141,11 +141,28 @@ export class AuthService {
                     nickname: username,
                     role: 'player',
                     status: 'active',
+                    activeCarId: 'car_basic',
                     banReason: '',
                     registerTime: Date.now()
                 },
                 wallet: { coins: 0 },
-                garage: [],
+                garage: [
+                    {
+                        carId: 'car_basic',
+                        level: 0,
+                        durability: 100,
+                        isPermanent: true,
+                        expireAt: null,
+                        equippedParts: {
+                            engine: null,
+                            tires: null,
+                            launch: null,
+                            drift: null,
+                            acceleration: null
+                        },
+                        equippedPaint: null
+                    }
+                ],
                 inventory: {
                     materials: {},
                     protectors: {},
