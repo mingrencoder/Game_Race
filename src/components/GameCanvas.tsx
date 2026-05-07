@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Pause, Play } from 'lucide-react';
-import { GameSettings, CarState, Point, Track, AIDifficulty, GarageData } from '../types';
+import { GameSettings, CarState, Point, Track, AIDifficulty, PlayerData } from '../types';
 import { TRACKS, PHYSICS, AI_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from '../services/audioService';
@@ -8,7 +8,7 @@ import { socketService } from '../services/socketService';
 
 interface GameCanvasProps {
   settings: GameSettings;
-  garage: GarageData;
+  garage: PlayerData;
   cupState?: { isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null;
   scores?: Record<string, number>;
   onFinish: (results: CarState[]) => void;
@@ -272,8 +272,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
 
     // Calculate P1 Stats based on garage (Only applies in SINGLE/TEAM mode)
     const isSingleOrTeam = settings.mode === 'SINGLE' || ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode);
-    const p1Vehicle = isSingleOrTeam ? (VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0]) : VEHICLES_DB[0];
-    const p1State = isSingleOrTeam ? garage.vehicles[p1Vehicle.id] : null;
+    const p1Vehicle = isSingleOrTeam ? (VEHICLES_DB.find(v => v.id === garage.profile.activeCarId) || VEHICLES_DB[0]) : VEHICLES_DB[0];
+    const p1State = isSingleOrTeam ? garage.garage.find(c => c.carId === p1Vehicle.id) : null;
     const p1Parts = p1State?.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null };
     
     // Enhancement Base Stat Bonuses
@@ -320,8 +320,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
        p1Acceleration *= 0.6;
     }
 
-    const p1LiveryData = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.aiDifficulty === 5) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam ? LIVERIES_DB.find(l => l.id === garage.equippedLivery) : undefined);
-    const preferredColor = isSingleOrTeam ? (p1LiveryData ? undefined : garage.equippedLivery) : BASIC_COLORS[0];
+    const p1LiveryData = ((settings.mode === 'TEAM' || settings.isTeamMode) && settings.aiDifficulty === 5) ? { isGradient: true, colors: ['#ff0055', '#ffaa00', '#ff0055'] } : (isSingleOrTeam && p1State ? LIVERIES_DB.find(l => l.id === p1State.equippedPaint) : undefined);
+    const preferredColor = isSingleOrTeam ? (p1LiveryData ? undefined : (p1State?.equippedPaint || BASIC_COLORS[0])) : BASIC_COLORS[0];
     const p1Color = p1LiveryData ? '#ffffff' : getUniqueColor(preferredColor);
 
     // Total cars calculation

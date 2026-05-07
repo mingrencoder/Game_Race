@@ -1,4 +1,4 @@
-import { Vehicle, OwnedVehicleData } from '../types';
+import { Vehicle, GarageCar } from '../types';
 import { VEHICLES_DB, ITEMS_DB } from '../constants';
 
 export const LEVEL_MULTI = [0, 0.1, 0.25, 0.45, 0.65, 1.0];
@@ -14,7 +14,7 @@ export const MAX_BONUS: Record<string, { speed: number, accel: number, grip?: nu
   car_legend: { speed: 2.6, accel: 0.15, drift: 1.5 },
 };
 
-export function getVehicleStats(vehicleData: Vehicle, state?: OwnedVehicleData) {
+export function getVehicleStats(vehicleData: Vehicle, state?: GarageCar) {
   const lv = state?.level || 0;
   const multi = LEVEL_MULTI[lv];
   const bonus = MAX_BONUS[vehicleData.id] || { speed: 0, accel: 0 };

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
+import { AuthService } from './AuthService';
 
 /**
  * Game Master / Admin 功能控制器
@@ -13,7 +14,7 @@ export class GMController {
      */
     static async queryPlayer(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const { targetUid } = req.body;
+            const targetUid = req.body.targetUid || req.body.uid;
             if (!targetUid) {
                 res.status(400).json({ error: '缺少 targetUid 参数' });
                 return;
@@ -38,9 +39,15 @@ export class GMController {
      */
     static async updateProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const { targetUid, updates } = req.body;
+            const targetUid = req.body.targetUid || req.body.uid;
+            const updates = req.body.updates || req.body;
             if (!targetUid || !updates || typeof updates !== 'object') {
                 res.status(400).json({ error: '缺少 targetUid 参数或 updates 字段格式错误' });
+                return;
+            }
+
+            if (req.user?.uid === targetUid && updates.status === 'banned') {
+                res.status(403).json({ error: '管理员不能封禁自己' });
                 return;
             }
 
@@ -78,6 +85,10 @@ export class GMController {
 
             if (isModified) {
                 await StorageEngine.writeEncrypted(targetUid, playerData);
+                // 必须立刻调用同步更新索引的方法，确保全局索引库中的昵称被同步修改。
+                if (updates.nickname !== undefined && typeof updates.nickname === 'string') {
+                    await AuthService.updateNicknameInIndex(targetUid, updates.nickname);
+                }
             }
 
             res.status(200).json({ success: true, message: '玩家资产更新成功', profile: playerData.profile, wallet: playerData.wallet });
@@ -93,7 +104,10 @@ export class GMController {
      */
     static async manageVehicle(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const { targetUid, action, vehicleId, updates } = req.body;
+            const targetUid = req.body.targetUid || req.body.uid;
+            const action = req.body.action;
+            const vehicleId = req.body.vehicleId;
+            const updates = req.body.updates || req.body;
             if (!targetUid || !action || !vehicleId) {
                 res.status(400).json({ error: '缺少 targetUid, action 或 vehicleId 参数' });
                 return;
@@ -119,7 +133,7 @@ export class GMController {
                     durability: updates?.durability ?? 100,
                     isPermanent: updates?.isPermanent ?? true,
                     expireAt: updates?.expireAt || null,
-                    equippedParts: updates?.equippedParts || { engine: null, tire: null, startup: null, drift: null, acceleration: null }
+                    equippedParts: updates?.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null }
                 };
                 playerData.garage.push(newVehicle);
             } else if (action === 'update') {
@@ -157,7 +171,8 @@ export class GMController {
      */
     static async modifyInventory(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const { targetUid, delta } = req.body;
+            const targetUid = req.body.targetUid || req.body.uid;
+            const delta = req.body.delta || req.body;
             if (!targetUid || !delta || typeof delta !== 'object') {
                 res.status(400).json({ error: '缺少 targetUid 或差值更新对象 (delta)' });
                 return;
@@ -226,6 +241,34 @@ export class GMController {
         } catch (error: any) {
             console.error('[GMController] modifyInventory execution failed:', error.message);
             res.status(500).json({ error: '修改背包失败', details: error.message });
+        }
+    }
+
+    /**
+     * GM接口：强制重置玩家密码
+     */
+    static async resetUserPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const targetUid = req.body.targetUid || req.body.uid;
+            const newPassword = req.body.newPassword;
+
+            if (!targetUid || !newPassword) {
+                res.status(400).json({ error: '缺少 targetUid 或 newPassword 参数' });
+                return;
+            }
+
+            // 调用 AuthService 中新增的管理方法强制改密码
+            await AuthService.adminResetPassword(targetUid, newPassword);
+
+            res.status(200).json({ success: true, message: '密码重置成功' });
+        } catch (error: any) {
+            console.error('[GMController] resetUserPassword execution failed:', error.message);
+            // 这里判断是否是因为找不到UID或者密码长度不符
+            if (error.message.includes('找不到目标玩家') || error.message.includes('长度必须')) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: '重置密码失败', details: error.message });
+            }
         }
     }
 }

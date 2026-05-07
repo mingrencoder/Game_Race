@@ -222,4 +222,115 @@ export class AuthService {
             role: playerData?.profile?.role || accountInfo.role
         };
     }
+
+    /**
+     * 同步更新全局账户索引中的昵称
+     */
+    static async updateNicknameInIndex(uid: string, newNickname: string) {
+        if (!isInitialized) await this.bootstrap();
+
+        // 查找对应的老昵称（即 accountsCache 的 key）
+        let oldUsername = null;
+        for (const [uname, info] of Object.entries(accountsCache)) {
+            if (info.uid === uid) {
+                oldUsername = uname;
+                break;
+            }
+        }
+
+        if (oldUsername && oldUsername !== newNickname) {
+            // 防止新昵称已经存在
+            if (accountsCache[newNickname]) {
+                throw new Error("新昵称已被注册");
+            }
+            
+            // 迁移数据
+            accountsCache[newNickname] = accountsCache[oldUsername];
+            delete accountsCache[oldUsername];
+            
+            // 落盘
+            await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf8');
+        }
+    }
+
+    /**
+     * GM接口专用：强制重置玩家密码
+     * @param targetUid 目标玩家 UID
+     * @param newPasswordPlain 新密码明文
+     */
+    static async adminResetPassword(targetUid: string, newPasswordPlain: string): Promise<void> {
+        if (!isInitialized) await this.bootstrap();
+
+        // 校验密码长度
+        if (!newPasswordPlain || newPasswordPlain.length < 6 || newPasswordPlain.length > 16) {
+            throw new Error('新密码长度必须在 6 到 16 个字符之间');
+        }
+
+        // 查找对应的账号记录
+        let targetUsername = null;
+        for (const [uname, info] of Object.entries(accountsCache)) {
+            if (info.uid === targetUid) {
+                targetUsername = uname;
+                break;
+            }
+        }
+
+        if (!targetUsername) {
+            throw new Error(`找不到目标玩家 [UID: ${targetUid}]`);
+        }
+
+        // 使用 bcrypt 重新计算新密码的哈希
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPasswordPlain, salt);
+
+        // 更新缓存中的密码哈希并落盘
+        accountsCache[targetUsername].passwordHash = passwordHash;
+        await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf8');
+        console.log(`[AuthService] 玩家 [UID: ${targetUid}] 的密码已被 GM 强制重置`);
+    }
+
+    /**
+     * 玩家自助修改密码
+     * @param uid 玩家 UID
+     * @param oldPasswordPlain 原密码明文
+     * @param newPasswordPlain 新密码明文
+     */
+    static async playerChangePassword(uid: string, oldPasswordPlain: string, newPasswordPlain: string): Promise<void> {
+        if (!isInitialized) await this.bootstrap();
+
+        // 校验新密码长度
+        if (!newPasswordPlain || newPasswordPlain.length < 6 || newPasswordPlain.length > 16) {
+            throw new Error('新密码长度必须在 6 到 16 个字符之间');
+        }
+
+        // 查找对应的账号记录
+        let targetUsername = null;
+        for (const [uname, info] of Object.entries(accountsCache)) {
+            if (info.uid === uid) {
+                targetUsername = uname;
+                break;
+            }
+        }
+
+        if (!targetUsername) {
+            throw new Error(`找不到当前玩家 [UID: ${uid}]`);
+        }
+
+        const accountInfo = accountsCache[targetUsername];
+
+        // 校验原密码
+        const isMatch = await bcrypt.compare(oldPasswordPlain, accountInfo.passwordHash);
+        if (!isMatch) {
+            throw new Error("原密码错误");
+        }
+
+        // 使用 bcrypt 重新计算新密码的哈希
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPasswordPlain, salt);
+
+        // 更新缓存中的密码哈希并落盘
+        accountsCache[targetUsername].passwordHash = passwordHash;
+        await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf8');
+        console.log(`[AuthService] 玩家 [UID: ${uid}] 成功自助修改了密码`);
+    }
 }

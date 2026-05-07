@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { OnlineMenu, OnlineLobby } from './components/OnlineLobby';
 import { socketService } from './services/socketService';
-import { GameSettings, CarState, AIDifficulty, GameMode, GarageData, LapRecord, AIStyle, TeamSetup } from './types';
+import { GameSettings, CarState, AIDifficulty, GameMode, PlayerData, LapRecord, AIStyle, TeamSetup } from './types';
 import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES } from './constants';
 import GameCanvas from './components/GameCanvas';
 
@@ -161,58 +161,94 @@ import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from './services/audioService';
 
-const initialGarageData: GarageData = (() => {
-  const saved = localStorage.getItem('neon_garage_v3');
-  if (saved) return JSON.parse(saved);
+const initialPlayerData: PlayerData = (() => {
+  const savedV4 = localStorage.getItem('neon_player_v4');
+  if (savedV4) return JSON.parse(savedV4);
 
-  // Fallback to older version migration or fresh start
-  const oldSaved = localStorage.getItem('neon_garage_v2');
-  let oldData: any = {};
-  if (oldSaved) {
-    oldData = JSON.parse(oldSaved);
-  }
+  const savedV3 = localStorage.getItem('neon_garage_v3');
+  const savedV2 = localStorage.getItem('neon_garage_v2');
+  let oldData: any = null;
+  if (savedV3) oldData = JSON.parse(savedV3);
+  else if (savedV2) oldData = JSON.parse(savedV2);
 
-  const baseVehicles = oldData.ownedVehicles || ['car_basic'];
-  const vehiclesMap: Record<string, any> = {};
-  
-  for (const vId of baseVehicles) {
-    vehiclesMap[vId] = {
-      id: vId,
-      durability: 100,
-      level: 0,
-      equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
-    };
-  }
-
-  // If old equipped item exists, map it to the active car's equipped parts (just a best-effort migration)
-  const activeCar = oldData.equippedVehicle || 'car_basic';
-  if (oldData.equippedItems && vehiclesMap[activeCar]) {
-    vehiclesMap[activeCar].equippedParts = {
-       engine: oldData.equippedItems.engine || null,
-       tires: oldData.equippedItems.tires || null,
-       launch: oldData.equippedItems.launch || null,
-       drift: oldData.equippedItems.drift || null,
-       acceleration: oldData.equippedItems.acceleration || null,
-    };
-  }
-
-  return {
-    coins: oldData.coins || 0,
-    ownedVehicles: baseVehicles,
-    vehicles: vehiclesMap,
-    inventory: {
-      coreT1: 0,
-      coreT2: 0,
-      coreT3: 0,
-      silverCard: 0,
-      goldenCard: 0,
+  const newData: PlayerData = {
+    profile: {
+      uid: 'local_user',
+      nickname: 'Local Player',
+      role: 'player',
+      status: 'active',
+      banReason: '',
+      registerTime: Date.now(),
+      activeCarId: 'car_basic'
     },
-    ownedItems: oldData.ownedItems || [],
-    ownedLiveries: oldData.ownedLiveries || [],
-    equippedVehicle: activeCar,
-    equippedItems: { engine: null, tires: null }, // deprecated but kept
-    equippedLivery: oldData.equippedLivery || '#00f2ff'
+    wallet: { coins: 0 },
+    garage: [],
+    inventory: {
+      materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
+      protectors: { card_silver: 0, card_gold: 0 },
+      parts: {},
+      paints: []
+    }
   };
+
+  if (oldData) {
+    newData.wallet.coins = oldData.coins || 0;
+    newData.profile.activeCarId = oldData.equippedVehicle || 'car_basic';
+    
+    if (oldData.vehicles) {
+      newData.garage = Object.keys(oldData.vehicles).map(vId => {
+        const oldV = oldData.vehicles[vId];
+        return {
+          carId: oldV.id || vId,
+          level: oldV.level || 0,
+          durability: oldV.durability ?? 100,
+          isPermanent: !oldV.expireTimestamp,
+          expireAt: oldV.expireTimestamp || null,
+          equippedParts: {
+            engine: oldV.equippedParts?.engine || oldData.equippedItems?.engine || null,
+            tires: oldV.equippedParts?.tires || oldData.equippedItems?.tires || null,
+            launch: oldV.equippedParts?.launch || oldData.equippedItems?.launch || null,
+            drift: oldV.equippedParts?.drift || oldData.equippedItems?.drift || null,
+            acceleration: oldV.equippedParts?.acceleration || oldData.equippedItems?.acceleration || null
+          },
+          equippedPaint: newData.profile.activeCarId === (oldV.id || vId) ? (oldData.equippedLivery || null) : null
+        };
+      });
+    }
+
+    if (oldData.inventory) {
+      newData.inventory.materials.core_primary = oldData.inventory.coreT1 || 0;
+      newData.inventory.materials.core_advanced = oldData.inventory.coreT2 || 0;
+      newData.inventory.materials.core_legendary = oldData.inventory.coreT3 || 0;
+      newData.inventory.protectors.card_silver = oldData.inventory.silverCard || 0;
+      newData.inventory.protectors.card_gold = oldData.inventory.goldenCard || 0;
+    }
+    
+    if (oldData.ownedLiveries) newData.inventory.paints = oldData.ownedLiveries;
+    if (oldData.ownedItems) {
+      oldData.ownedItems.forEach((itemId: string) => {
+        newData.inventory.parts[itemId] = 1;
+      });
+    }
+  }
+
+  if (!newData.garage.find(c => c.carId === newData.profile.activeCarId)) {
+    if (newData.garage.length > 0) {
+      newData.profile.activeCarId = newData.garage[0].carId;
+    } else {
+      newData.profile.activeCarId = 'car_basic';
+      newData.garage.push({
+        carId: 'car_basic',
+        level: 0,
+        durability: 100,
+        isPermanent: true,
+        expireAt: null,
+        equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
+        equippedPaint: null
+      });
+    }
+  }
+  return newData;
 })();
 
 const OnlineRoomsPreview = () => {
@@ -314,7 +350,7 @@ export default function App() {
   const [cupState, setCupState] = useState<{ isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null>(null);
   const [gameState, setGameState] = useState<'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY' | 'ENHANCEMENT'>('MENU');
   
-  const [garage, setGarage] = useState<GarageData>(initialGarageData);
+  const [playerData, setPlayerData] = useState<PlayerData>(initialPlayerData);
 
   const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('neon_volume') || '0.5'));
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('neon_muted') === 'true');
@@ -348,8 +384,8 @@ export default function App() {
   }, [isMuted]);
 
   React.useEffect(() => {
-    localStorage.setItem('neon_garage_v3', JSON.stringify(garage));
-  }, [garage]);
+    localStorage.setItem('neon_player_v4', JSON.stringify(playerData));
+  }, [playerData]);
 
   React.useEffect(() => {
     localStorage.setItem('neon_lap_records', JSON.stringify(records));
@@ -447,8 +483,8 @@ export default function App() {
     }
 
     if (settings.mode !== 'ONLINE') {
-       const eqVehicle = garage.vehicles[garage.equippedVehicle];
-       if (eqVehicle?.expireTimestamp && eqVehicle.expireTimestamp < Date.now()) {
+       const eqVehicle = playerData.garage.find((c: any) => c.carId === playerData.profile.activeCarId);
+       if (eqVehicle?.expireAt && eqVehicle.expireAt < Date.now()) {
           setConfirmAction({
              message: '您当前装备的车辆已过租赁期，无法出战！请先前往车库更换车辆，或去赛道商店续费。',
              onConfirm: () => setConfirmAction(null)
@@ -463,7 +499,7 @@ export default function App() {
         const cupTracksCount = currentSettings.cupNumTracks || 4;
         const entryFee = cupTracksCount * 10;
         
-        if (garage.coins < entryFee) {
+        if (playerData.wallet.coins < entryFee) {
            setConfirmAction({
               message: `进入杯赛需要 ${entryFee} ⟁ 报名费，您的金币不足！`,
               onConfirm: () => setConfirmAction(null),
@@ -475,7 +511,7 @@ export default function App() {
         setConfirmAction({
            message: `进入杯赛将扣除 ${entryFee} ⟁ 作为报名费（中途退出不予退还），确定进入吗？`,
            onConfirm: () => {
-              setGarage(g => ({ ...g, coins: g.coins - entryFee }));
+              setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: p.wallet.coins - entryFee } }));
               const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
               const selectedTracks = availableTracks.slice(0, cupTracksCount);
               
@@ -656,10 +692,11 @@ export default function App() {
     sortedResults.forEach((car, index) => {
       const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
       if (isLocalPlayer) {
-        setGarage(g => {
-           let updatedVehicles = { ...g.vehicles };
-           const eqId = g.equippedVehicle;
-           if (updatedVehicles[eqId]) {
+        setPlayerData(p => {
+           let newGarage = [...p.garage];
+           const eqId = p.profile.activeCarId;
+           const targetIdx = newGarage.findIndex(v => v.carId === eqId);
+           if (targetIdx !== -1) {
               const eqDef = VEHICLES_DB.find(v => v.id === eqId) || { tier: 'T0' };
               let loss = 1;
               if (eqDef.tier === 'T0') loss = 0;
@@ -667,9 +704,9 @@ export default function App() {
               else if (eqDef.tier === 'T2') loss = 0.8;
               else if (eqDef.tier === 'T3') loss = 0.5;
               
-              updatedVehicles[eqId] = {
-                 ...updatedVehicles[eqId],
-                 durability: Math.max(0, Number((updatedVehicles[eqId].durability - loss).toFixed(3)))
+              newGarage[targetIdx] = {
+                 ...newGarage[targetIdx],
+                 durability: Math.max(0, Number((newGarage[targetIdx].durability - loss).toFixed(3)))
               };
            }
            
@@ -684,10 +721,10 @@ export default function App() {
                isFlawlessRed, 
                isMVP
              );
-             return { ...g, coins: g.coins + totalCoins, vehicles: updatedVehicles };
+             return { ...p, wallet: { ...p.wallet, coins: p.wallet.coins + totalCoins }, garage: newGarage };
            }
            
-           return { ...g, vehicles: updatedVehicles };
+           return { ...p, garage: newGarage };
         });
       }
     });
@@ -1259,7 +1296,7 @@ export default function App() {
                   onClick={() => setGameState('SHOP')}
                   className="flex-1 md:flex-none bg-accent-magenta/20 text-accent-magenta border border-accent-magenta px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-magenta/40"
                 >
-                  商店 ({garage.coins} ⟁)
+                  商店 ({playerData.wallet.coins} ⟁)
                 </button>
                 <button 
                   onClick={() => handleStartGame(false)}
@@ -1272,9 +1309,9 @@ export default function App() {
           </motion.div>
         )}
 
-        {gameState === 'SHOP' && <ShopUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
-        {gameState === 'GARAGE' && <GarageUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
-        {gameState === 'ENHANCEMENT' && <EnhancementUI garage={garage} setGarage={setGarage} onClose={() => setGameState('MENU')} />}
+        {gameState === 'SHOP' && <ShopUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
+        {gameState === 'GARAGE' && <GarageUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
+        {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'ONLINE_MENU' && <OnlineMenu onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
         {gameState === 'ONLINE_LOBBY' && <OnlineLobby onBack={() => {
@@ -1299,7 +1336,7 @@ export default function App() {
           >
             <GameCanvas 
               settings={settings} 
-              garage={garage}
+              garage={playerData}
               cupState={cupState}
               scores={scores}
               onFinish={handleFinish} 
@@ -1452,7 +1489,7 @@ export default function App() {
                           else if (rank === 1 || rank === 2) reward = tracks * 10;
                        }
 
-                       setGarage(g => ({...g, coins: g.coins + Math.floor(reward)}));
+                       setPlayerData(p => ({...p, wallet: {...p.wallet, coins: p.wallet.coins + Math.floor(reward)}}));
                        setCupState(null);
                        setScores({});
                        setTeamScore(null);
@@ -2045,9 +2082,10 @@ export default function App() {
       {/* Player Info Modal */}
       <AnimatePresence>
         {showPlayerInfo && (() => {
-          const baseVehicle = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
-          const engine = ITEMS_DB.find(i => i.id === garage.equippedItems.engine);
-          const tires = ITEMS_DB.find(i => i.id === garage.equippedItems.tires);
+          const eqVehicle = playerData.garage.find((c: any) => c.carId === playerData.profile.activeCarId);
+          const baseVehicle = VEHICLES_DB.find(v => v.id === playerData.profile.activeCarId) || VEHICLES_DB[0];
+          const engine = ITEMS_DB.find(i => i.id === eqVehicle?.equippedParts?.engine);
+          const tires = ITEMS_DB.find(i => i.id === eqVehicle?.equippedParts?.tires);
           
           const finalSpeed = baseVehicle.baseSpeed + (engine?.boostValue || 0);
           const finalGrip = baseVehicle.baseGrip + (tires?.boostValue || 0);
@@ -2079,11 +2117,11 @@ export default function App() {
                   <div className="flex justify-between items-center bg-white/5 p-4 rounded-lg border border-white/10">
                     <span className="text-zinc-400">总资产</span>
                     <div className="flex items-center gap-4">
-                      <span className="text-accent-yellow font-black text-xl">{garage.coins} ⟁</span>
+                      <span className="text-accent-yellow font-black text-xl">{playerData.wallet.coins} ⟁</span>
                       <button 
                         onClick={() => {
                           if (confirm('确定要清空金币吗？此操作不可撤销。')) {
-                            setGarage(g => ({ ...g, coins: 0 }));
+                            setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: 0 } }));
                           }
                         }}
                         className="text-xs text-red-500 hover:text-red-400 border border-red-500/30 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"

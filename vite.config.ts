@@ -23,7 +23,7 @@ export default defineConfig(({mode}) => {
       // 👇 新增这一行，允许你的自定义域名访问开发服务器
       // allowedHosts: ['demo.mengya.cloud'],
       // allowedHosts: ['race.mengya.cloud'],
-      allowedHosts: 'all',
+      allowedHosts: true,
     },
   };
 });

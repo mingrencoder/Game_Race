@@ -12,6 +12,7 @@ import { CarState, OnlinePlayer } from './src/types';
 import jwt from 'jsonwebtoken';
 import { AuthService } from './server/AuthService';
 import { GMController } from './server/GMController';
+import { PlayerController } from './server/PlayerController';
 import { requireAuth, requireAdmin } from './server/GMMiddleware';
 import { EconomyController } from './server/EconomyController';
 import { ShopController } from './server/ShopController';
@@ -76,11 +77,17 @@ async function startServer() {
       }
   });
 
-  // 3. 挂载带 JWT 和角色验证的 GM API 专线
+  // 3. 玩家个人信息接口
+  app.get('/api/player/profile', requireAuth, PlayerController.getProfile);
+  app.post('/api/player/nickname', requireAuth, PlayerController.updateNickname);
+  app.post('/api/player/password', requireAuth, PlayerController.updatePassword);
+
+  // 4. 挂载带 JWT 和角色验证的 GM API 专线
   app.post('/api/gm/queryPlayer', requireAuth, requireAdmin, GMController.queryPlayer);
   app.post('/api/gm/updateProfile', requireAuth, requireAdmin, GMController.updateProfile);
   app.post('/api/gm/manageVehicle', requireAuth, requireAdmin, GMController.manageVehicle);
   app.post('/api/gm/modifyInventory', requireAuth, requireAdmin, GMController.modifyInventory);
+  app.post('/api/gm/resetPassword', requireAuth, requireAdmin, GMController.resetUserPassword);
 
   // 4. 经济与比赛结算
   app.post('/api/economy/calculate', requireAuth, EconomyController.calculateRaceReward);

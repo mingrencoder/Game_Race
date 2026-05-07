@@ -99,6 +99,7 @@ export type Vehicle = {
   type: string;
   tier: VehicleTier;
   price: number;
+  rent?: number;
   maintenanceFee: number;
   baseSpeed: number;
   baseGrip: number;
@@ -129,11 +130,12 @@ export type Livery = {
   colors: string[];
 };
 
-export interface OwnedVehicleData {
-  id: string;
-  durability: number;
+export interface GarageCar {
+  carId: string;
   level: number;
-  expireTimestamp?: number; // v3 PRD: null or 0 means permanent
+  durability: number;
+  isPermanent: boolean;
+  expireAt: number | null;
   equippedParts: {
     engine: string | null;
     tires: string | null;
@@ -141,33 +143,37 @@ export interface OwnedVehicleData {
     drift: string | null;
     acceleration: string | null;
   };
+  equippedPaint: string | null;
 }
 
-export interface UserInventory {
-  coreT1: number;
-  coreT2: number;
-  coreT3: number;
-  silverCard: number;
-  goldenCard: number;
-}
-
-export type GarageData = {
-  coins: number;
-  ownedVehicles: string[];
-  vehicles: Record<string, OwnedVehicleData>;
-  inventory: UserInventory;
-  ownedItems: string[];
-  ownedLiveries: string[];
-  equippedVehicle: string;
-  equippedItems: {
-    engine: string | null;
-    tires: string | null;
-    launch?: string | null; // Keep optional if missing
-    drift?: string | null;
-    acceleration?: string | null;
+export interface PlayerData {
+  profile: {
+    uid: string;
+    nickname: string;
+    role: 'player' | 'admin';
+    status: 'active' | 'banned';
+    banReason: string;
+    registerTime: number;
+    activeCarId: string;
   };
-  equippedLivery: string; 
-};
+  wallet: {
+    coins: number;
+  };
+  garage: GarageCar[];
+  inventory: {
+    materials: {
+      core_primary: number;
+      core_advanced: number;
+      core_legendary: number;
+    };
+    protectors: {
+      card_silver: number;
+      card_gold: number;
+    };
+    parts: Record<string, number>;
+    paints: string[];
+  };
+}
 
 export type CarState = {
   id: string;

@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GarageData, OwnedVehicleData, UserInventory } from '../types';
+import { PlayerData, GarageCar } from '../types';
 import { VEHICLES_DB, ITEMS_DB } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Wrench, Zap, Shield, ArrowUpCircle } from 'lucide-react';
 
 interface EnhancementUIProps {
-  garage: GarageData;
-  setGarage: React.Dispatch<React.SetStateAction<GarageData>>;
+  garage: PlayerData;
+  setGarage: React.Dispatch<React.SetStateAction<PlayerData>>;
   onClose: () => void;
 }
 
 import { getVehicleStats, LEVEL_MULTI } from '../services/garageService';
 
 export default function EnhancementUI({ garage, setGarage, onClose }: EnhancementUIProps) {
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(garage.equippedVehicle || garage.ownedVehicles[0]);
-  const vehicleState = garage.vehicles[selectedVehicleId];
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(garage.profile.activeCarId || garage.garage[0]?.carId);
+  const vehicleState = garage.garage.find(c => c.carId === selectedVehicleId);
   const vehicleDef = VEHICLES_DB.find(v => v.id === selectedVehicleId);
 
   const PROBABILITY = {
@@ -38,7 +38,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
       ...vehicleState,
       durability: 100,
       level: level
-    } as OwnedVehicleData;
+    } as GarageCar;
 
     const stats = getVehicleStats(vehicleDef, mockState);
 
@@ -58,16 +58,16 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
   const [resultMsg, setResultMsg] = useState<{msg: string, success: boolean} | null>(null);
 
   const getUpgradeReqs = (level: number) => {
-    if (level === 0) return { coreType: 'coreT1' as keyof UserInventory, amount: 1, name: '初级强化核心' };
-    if (level === 1) return { coreType: 'coreT1' as keyof UserInventory, amount: 3, name: '初级强化核心' };
-    if (level === 2) return { coreType: 'coreT2' as keyof UserInventory, amount: 2, name: '高级强化核心' };
-    if (level === 3) return { coreType: 'coreT2' as keyof UserInventory, amount: 4, name: '高级强化核心' };
-    return { coreType: 'coreT3' as keyof UserInventory, amount: 3, name: '传说强化核心' };
+    if (level === 0) return { coreType: 'core_primary' as const, amount: 1, name: '初级强化核心' };
+    if (level === 1) return { coreType: 'core_primary' as const, amount: 3, name: '初级强化核心' };
+    if (level === 2) return { coreType: 'core_advanced' as const, amount: 2, name: '高级强化核心' };
+    if (level === 3) return { coreType: 'core_advanced' as const, amount: 4, name: '高级强化核心' };
+    return { coreType: 'core_legendary' as const, amount: 3, name: '传说强化核心' };
   };
 
   const getShieldReq = (level: number) => {
-    if (level === 3) return { shieldType: 'silverCard' as keyof UserInventory, cost: 1500, name: '白银保护卡' };
-    if (level === 4) return { shieldType: 'goldenCard' as keyof UserInventory, cost: 8000, name: '黄金保护卡' };
+    if (level === 3) return { shieldType: 'card_silver' as const, cost: 1500, name: '白银保护卡' };
+    if (level === 4) return { shieldType: 'card_gold' as const, cost: 8000, name: '黄金保护卡' };
     return null;
   };
 
@@ -81,20 +81,19 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
   const handleUpgrade = () => {
     if (vehicleState.level >= 5) return;
     
-    const hasCore = garage.inventory[req.coreType] >= req.amount;
+    const hasCore = garage.inventory.materials[req.coreType] >= req.amount;
     if (!hasCore) {
-      setResultMsg({ msg: `材料不足！需要 ${req.amount} 个 ${req.name}，目前只有 ${garage.inventory[req.coreType]} 个。`, success: false });
+      setResultMsg({ msg: `材料不足！需要 ${req.amount} 个 ${req.name}，目前只有 ${garage.inventory.materials[req.coreType]} 个。`, success: false });
       return;
     }
     
     let consumedShield = false;
-    // auto fallback to buy card if not enough but have coins
     let buyShieldWithCoins = false;
     
     if (useShield && shield) {
-       if (garage.inventory[shield.shieldType] > 0) {
+       if (garage.inventory.protectors[shield.shieldType] > 0) {
           consumedShield = true;
-       } else if (garage.coins >= shield.cost) {
+       } else if (garage.wallet.coins >= shield.cost) {
           buyShieldWithCoins = true;
        } else {
           setResultMsg({ msg: `货币和材料不足！缺少 ${shield.name} 且 ⟁不足。`, success: false });
@@ -106,38 +105,39 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
     const isSuccess = rand <= successRate;
 
     setGarage(g => {
-      const draft = { ...g, vehicles: { ...g.vehicles }, inventory: { ...g.inventory } };
+      const draft = { ...g, garage: [...g.garage], inventory: { ...g.inventory, materials: { ...g.inventory.materials }, protectors: { ...g.inventory.protectors } }, wallet: { ...g.wallet } };
       
-      draft.inventory[req.coreType] -= req.amount;
+      draft.inventory.materials[req.coreType] -= req.amount;
       
       if (buyShieldWithCoins) {
-         draft.coins -= shield!.cost;
+         draft.wallet.coins -= shield!.cost;
       } else if (consumedShield) {
-         draft.inventory[shield!.shieldType] -= 1;
+         draft.inventory.protectors[shield!.shieldType] -= 1;
       }
       
-      const v = { ...draft.vehicles[vehicleState.id] };
-
-      if (isSuccess) {
-         v.level += 1;
-         setResultMsg({ msg: '强化成功！性能突破！', success: true });
-      } else {
-         if (useShield && shield) {
-            setResultMsg({ msg: '强化失败！保护卡抵消了惩罚。', success: false });
-         } else {
-            if (v.level === 3) {
-               v.level -= 1;
-               setResultMsg({ msg: '强化失败！车辆掉级...', success: false });
-            } else if (v.level === 4) {
-               v.level = 0;
-               setResultMsg({ msg: '强化失败！强化层级归零...', success: false });
-            } else {
-               setResultMsg({ msg: '强化失败！没有任何影响。', success: false });
-            }
-         }
+      const vIndex = draft.garage.findIndex(v => v.carId === vehicleState.carId);
+      if (vIndex !== -1) {
+          const v = { ...draft.garage[vIndex] };
+          if (isSuccess) {
+             v.level += 1;
+             setResultMsg({ msg: '强化成功！性能突破！', success: true });
+          } else {
+             if (useShield && shield) {
+                setResultMsg({ msg: '强化失败！保护卡抵消了惩罚。', success: false });
+             } else {
+                if (v.level === 3) {
+                   v.level -= 1;
+                   setResultMsg({ msg: '强化失败！车辆掉级...', success: false });
+                } else if (v.level === 4) {
+                   v.level = 0;
+                   setResultMsg({ msg: '强化失败！强化层级归零...', success: false });
+                } else {
+                   setResultMsg({ msg: '强化失败！没有任何影响。', success: false });
+                }
+             }
+          }
+          draft.garage[vIndex] = v;
       }
-      
-      draft.vehicles[vehicleState.id] = v;
       return draft;
     });
   };
@@ -161,9 +161,9 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
         {/* Left Side: Vehicle List */}
         <div className="w-full md:w-1/3 border-r border-white/5 bg-black/50 p-4 shrink-0 max-h-[35vh] md:max-h-full overflow-y-auto">
           <div className="flex flex-col gap-2">
-            {garage.ownedVehicles.map(id => {
+            {garage.garage.map(vState => vState.carId).map(id => {
                const v = VEHICLES_DB.find(x => x.id === id);
-               const vState = garage.vehicles[id];
+               const lvState = garage.garage.find(c => c.carId === id);
                if (!v) return null;
                return (
                  <button
@@ -173,7 +173,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
                  >
                    <div>
                      <div className="font-bold">{v.name}</div>
-                     <div className="text-xs opacity-70">Lv: +{vState?.level || 0}</div>
+                     <div className="text-xs opacity-70">Lv: +{lvState?.level || 0}</div>
                    </div>
                  </button>
                );
@@ -185,7 +185,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
         <div className="w-full md:w-2/3 p-6 flex flex-col items-center overflow-y-auto">
            <div className="w-full flex justify-between items-center mb-6">
              <h3 className="text-2xl font-bold text-white">{vehicleDef.name} <span className="text-accent-yellow">+{vehicleState.level}</span></h3>
-             <div className="text-xl font-bold text-accent-yellow bg-black/50 px-4 py-1 rounded">{garage.coins} ⟁</div>
+             <div className="text-xl font-bold text-accent-yellow bg-black/50 px-4 py-1 rounded">{garage.wallet.coins} ⟁</div>
            </div>
 
            <div className="relative w-full aspect-video md:aspect-auto md:h-64 flex justify-center items-center bg-black/30 rounded-xl mb-6 neon-panel">
@@ -256,8 +256,8 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
                   <span className="text-zinc-400">强化核心消耗</span>
                   <div className="flex items-center gap-2">
                      <span className="text-white">{req.name} x{req.amount}</span>
-                     <span className={`font-mono ${garage.inventory[req.coreType] >= req.amount ? 'text-green-400' : 'text-red-400'}`}>
-                        ({garage.inventory[req.coreType]}/{req.amount})
+                     <span className={`font-mono ${garage.inventory.materials[req.coreType] >= req.amount ? 'text-green-400' : 'text-red-400'}`}>
+                        ({garage.inventory.materials[req.coreType]}/{req.amount})
                      </span>
                   </div>
                 </div>
@@ -271,10 +271,10 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
                     <div className="flex items-center gap-2">
                        <Shield size={16} className={`${useShield ? 'text-accent-magenta' : 'text-zinc-600'}`} />
                        <span className="text-white">{shield.name}</span>
-                       <span className={`font-mono ${garage.inventory[shield.shieldType] > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ({garage.inventory[shield.shieldType]}/1)
+                       <span className={`font-mono ${garage.inventory.protectors[shield.shieldType] > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          ({garage.inventory.protectors[shield.shieldType]}/1)
                        </span>
-                       {(useShield && garage.inventory[shield.shieldType] === 0) && <span className="text-accent-yellow">-{shield.cost}⟁</span>}
+                       {(useShield && garage.inventory.protectors[shield.shieldType] === 0) && <span className="text-accent-yellow">-{shield.cost}⟁</span>}
                     </div>
                   </div>
                 )}

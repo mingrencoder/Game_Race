@@ -311,14 +311,14 @@ export const BASIC_COLORS = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff222
 import { Vehicle, Item, VehicleTier } from './types';
 
 export const VEHICLES_DB: Vehicle[] = [
-  { id: 'car_basic', name: '新星-V1', type: 'standard', tier: 'T0', price: 0, maintenanceFee: 0, baseSpeed: 7.0, baseGrip: 0.12, baseLaunch: 1.5, baseDriftSpeed: 5.0, baseAcceleration: 0.10 },
-  { id: 'car_speed', name: '极速先锋', type: 'f1', tier: 'T1', price: 2000, maintenanceFee: 30, baseSpeed: 8.0, baseGrip: 0.10, baseLaunch: 2.0, baseDriftSpeed: 4.8, baseAcceleration: 0.12 },
-  { id: 'car_drift', name: '漂移幽灵', type: 'muscle', tier: 'T1', price: 2500, maintenanceFee: 37, baseSpeed: 7.5, baseGrip: 0.15, baseLaunch: 1.6, baseDriftSpeed: 7.0, baseAcceleration: 0.11 },
-  { id: 'car_tank', name: '重装铠甲', type: 'tank', tier: 'T1', price: 3000, maintenanceFee: 45, baseSpeed: 6.8, baseGrip: 0.18, baseLaunch: 2.8, baseDriftSpeed: 4.5, baseAcceleration: 0.09 },
-  { id: 'car_ninja', name: '暗影忍者', type: 'ninja', tier: 'T2', price: 8000, maintenanceFee: 120, baseSpeed: 8.8, baseGrip: 0.10, baseLaunch: 2.5, baseDriftSpeed: 6.0, baseAcceleration: 0.15 },
-  { id: 'car_cyber', name: '赛博狂潮', type: 'cyber', tier: 'T2', price: 12000, maintenanceFee: 180, baseSpeed: 8.2, baseGrip: 0.14, baseLaunch: 2.0, baseDriftSpeed: 8.5, baseAcceleration: 0.13 },
-  { id: 'car_boss', name: '机械领主', type: 'boss', tier: 'T3', price: 80000, maintenanceFee: 1200, baseSpeed: 9.8, baseGrip: 0.24, baseLaunch: 3.8, baseDriftSpeed: 6.8, baseAcceleration: 0.19 },
-  { id: 'car_legend', name: '不朽传说', type: 'legend', tier: 'T3', price: 80000, maintenanceFee: 1200, baseSpeed: 10.8, baseGrip: 0.19, baseLaunch: 3.0, baseDriftSpeed: 8.0, baseAcceleration: 0.22 }
+  { id: 'car_basic', name: '新星-V1', type: 'standard', tier: 'T0', price: 0, rent: 0, maintenanceFee: 0, baseSpeed: 7.0, baseGrip: 0.12, baseLaunch: 1.5, baseDriftSpeed: 5.0, baseAcceleration: 0.10 },
+  { id: 'car_speed', name: '极速先锋', type: 'f1', tier: 'T1', price: 2000, rent: 600, maintenanceFee: 30, baseSpeed: 8.0, baseGrip: 0.10, baseLaunch: 2.0, baseDriftSpeed: 4.8, baseAcceleration: 0.12 },
+  { id: 'car_drift', name: '漂移幽灵', type: 'muscle', tier: 'T1', price: 2500, rent: 750, maintenanceFee: 37, baseSpeed: 7.5, baseGrip: 0.15, baseLaunch: 1.6, baseDriftSpeed: 7.0, baseAcceleration: 0.11 },
+  { id: 'car_tank', name: '重装铠甲', type: 'tank', tier: 'T1', price: 3000, rent: 900, maintenanceFee: 45, baseSpeed: 6.8, baseGrip: 0.18, baseLaunch: 2.8, baseDriftSpeed: 4.5, baseAcceleration: 0.09 },
+  { id: 'car_ninja', name: '暗影忍者', type: 'ninja', tier: 'T2', price: 8000, rent: 2400, maintenanceFee: 120, baseSpeed: 8.8, baseGrip: 0.10, baseLaunch: 2.5, baseDriftSpeed: 6.0, baseAcceleration: 0.15 },
+  { id: 'car_cyber', name: '赛博狂潮', type: 'cyber', tier: 'T2', price: 12000, rent: 3600, maintenanceFee: 180, baseSpeed: 8.2, baseGrip: 0.14, baseLaunch: 2.0, baseDriftSpeed: 8.5, baseAcceleration: 0.13 },
+  { id: 'car_boss', name: '机械领主', type: 'boss', tier: 'T3', price: 80000, rent: 24000, maintenanceFee: 1200, baseSpeed: 9.8, baseGrip: 0.24, baseLaunch: 3.8, baseDriftSpeed: 6.8, baseAcceleration: 0.19 },
+  { id: 'car_legend', name: '不朽传说', type: 'legend', tier: 'T3', price: 80000, rent: 24000, maintenanceFee: 1200, baseSpeed: 10.8, baseGrip: 0.19, baseLaunch: 3.0, baseDriftSpeed: 8.0, baseAcceleration: 0.22 }
 ];
 
 export const ITEMS_DB = [

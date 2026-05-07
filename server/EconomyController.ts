@@ -31,8 +31,8 @@ export class EconomyController {
                 players = 1,
                 difficulty = '进阶', // 默认进阶 1.0x
                 rank,
-                isWin = false,
-                isPerfectWin = false,
+                isTeamWin = false,
+                isFlawless = false,
                 isMVP = false,
                 matches = 1, // 杯赛比赛场数
             } = req.body;
@@ -74,9 +74,9 @@ export class EconomyController {
                 }
             } else if (mode === 'team' || mode === 'cup_team') {
                 // 组队模式：无基础名次低保，战败0收益
-                if (isWin) {
+                if (isTeamWin) {
                     coinDelta += Math.floor(20 * pMult * dMult);
-                    if (isPerfectWin) coinDelta += 10;
+                    if (isFlawless) coinDelta += 10;
                     if (isMVP) coinDelta += 10;
                 }
             }
@@ -86,7 +86,7 @@ export class EconomyController {
                 if (rank === 1) coinDelta += matches * 20;
                 else if (rank === 2 || rank === 3) coinDelta += matches * 10;
             } else if (mode === 'cup_team') {
-                if (isWin) coinDelta += matches * 15;
+                if (isTeamWin) coinDelta += matches * 15;
                 if (isMVP) coinDelta += matches * 10;
             }
 

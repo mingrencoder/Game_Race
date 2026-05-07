@@ -1,38 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
-
-const SHOP_CONFIG = {
-    cars: {
-        'car_basic': { tier: 0, price: 0, rent: 0, repair: 0 },
-        'nova_v1': { tier: 0, price: 0, rent: 0, repair: 0 },
-        'car_t1_base': { tier: 1, price: 2000, rent: 600, repair: 30 }, // for debug testing matching HTML
-        'pioneer_v1': { tier: 1, price: 2000, rent: 600, repair: 30 },
-        'ghost_v1': { tier: 1, price: 2500, rent: 750, repair: 37 },
-        'armor_v1': { tier: 1, price: 3000, rent: 900, repair: 45 },
-        'ninja_v1': { tier: 2, price: 8000, rent: 2400, repair: 120 },
-        'cyber_v1': { tier: 2, price: 12000, rent: 3600, repair: 180 },
-        'lord_v1': { tier: 3, price: 80000, rent: 24000, repair: 1200 },
-        'legend_v1': { tier: 3, price: 80000, rent: 24000, repair: 1200 }
-    } as Record<string, any>,
-    parts: {
-        'engine_t1': { slot: 'engine', price: 300 },
-        'engine_t2': { slot: 'engine', price: 2500 },
-        'engine_t3': { slot: 'engine', price: 12000 },
-        'tire_t1': { slot: 'tire', price: 300 },
-        'tire_t2': { slot: 'tire', price: 2500 },
-        'tire_t3': { slot: 'tire', price: 12000 },
-        'startup_t1': { slot: 'startup', price: 400 },
-        'startup_t2': { slot: 'startup', price: 3000 },
-        'startup_t3': { slot: 'startup', price: 15000 },
-        'drift_t1': { slot: 'drift', price: 400 },
-        'drift_t2': { slot: 'drift', price: 3000 },
-        'drift_t3': { slot: 'drift', price: 15000 },
-        'accel_t1': { slot: 'acceleration', price: 500 },
-        'accel_t2': { slot: 'acceleration', price: 3500 },
-        'accel_t3': { slot: 'acceleration', price: 18000 }
-    } as Record<string, any>
-};
+import { VEHICLES_DB, ITEMS_DB } from '../src/constants';
 
 export class ShopController {
     
@@ -47,13 +16,13 @@ export class ShopController {
                 return;
             }
 
-            const carConfig = SHOP_CONFIG.cars[carId];
+            const carConfig = VEHICLES_DB.find(c => c.id === carId);
             if (!carConfig) {
                 res.status(400).json({ error: 'Invalid carId' });
                 return;
             }
 
-            const cost = isPermanent ? carConfig.price : carConfig.rent;
+            const cost = isPermanent ? carConfig.price : (carConfig.rent || 0);
 
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
@@ -83,7 +52,7 @@ export class ShopController {
                     durability: 100,
                     isPermanent,
                     expireAt: isPermanent ? null : Date.now() + 30 * 24 * 60 * 60 * 1000,
-                    equippedParts: { engine: null, tire: null, startup: null, drift: null, acceleration: null }
+                    equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
                 });
             }
 
@@ -103,7 +72,7 @@ export class ShopController {
             const { partId } = req.body;
             if (!partId) { res.status(400).json({ error: 'Missing parameters' }); return; }
 
-            const partConfig = SHOP_CONFIG.parts[partId];
+            const partConfig = ITEMS_DB.find(p => p.id === partId);
             if (!partConfig) { res.status(400).json({ error: 'Invalid partId' }); return; }
 
             const cost = partConfig.price;
@@ -139,7 +108,7 @@ export class ShopController {
 
             if (!carId || !slotId) { res.status(400).json({ error: 'Missing parameters' }); return; }
 
-            const validSlots = ['engine', 'tire', 'startup', 'drift', 'acceleration'];
+            const validSlots = ['engine', 'tires', 'launch', 'drift', 'acceleration'];
             if (!validSlots.includes(slotId)) { res.status(400).json({ error: 'Invalid slotId' }); return; }
 
             let playerData = await StorageEngine.readEncrypted(uid);
@@ -152,7 +121,7 @@ export class ShopController {
             if (!playerData.garage) playerData.garage = [];
             const vehicle = playerData.garage.find((c: any) => c.carId === carId);
             if (!vehicle) { res.status(400).json({ error: 'Vehicle not found in garage' }); return; }
-            if (!vehicle.equippedParts) vehicle.equippedParts = { engine: null, tire: null, startup: null, drift: null, acceleration: null };
+            if (!vehicle.equippedParts) vehicle.equippedParts = { engine: null, tires: null, launch: null, drift: null, acceleration: null };
 
             const oldPartId = vehicle.equippedParts[slotId];
             let unequipCost = 0;
@@ -160,7 +129,7 @@ export class ShopController {
             // 卸下旧零件 (20% 折损费规则) 
             // - PRD 指定：替换旧零件，或仅拆除旧零件，均需向系统支付旧零件原售价 20%
             if (oldPartId) {
-                const oldPartConfig = SHOP_CONFIG.parts[oldPartId];
+                const oldPartConfig = ITEMS_DB.find(p => p.id === oldPartId);
                 if (oldPartConfig) {
                     unequipCost = Math.floor(oldPartConfig.price * 0.2);
                 }
@@ -213,10 +182,10 @@ export class ShopController {
             const { carId } = req.body;
             if (!carId) { res.status(400).json({ error: 'Missing carId' }); return; }
 
-            const carConfig = SHOP_CONFIG.cars[carId];
+            const carConfig = VEHICLES_DB.find(c => c.id === carId);
             if (!carConfig) { res.status(400).json({ error: 'Invalid carId' }); return; }
 
-            const repairCost = carConfig.repair;
+            const repairCost = carConfig.maintenanceFee;
 
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }

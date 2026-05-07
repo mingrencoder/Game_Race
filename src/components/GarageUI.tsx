@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GarageData } from '../types';
+import { PlayerData } from '../types';
 import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, BASIC_COLORS } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Cpu, Wind, Zap, Gauge, CircleDot, ShieldAlert } from 'lucide-react';
 
 interface GarageProps {
-  garage: GarageData;
-  setGarage: React.Dispatch<React.SetStateAction<GarageData>>;
+  garage: PlayerData;
+  setGarage: React.Dispatch<React.SetStateAction<PlayerData>>;
   onClose: () => void;
 }
 
@@ -17,29 +17,37 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES'>('VEHICLES');
   const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
 
-  const equipVehicle = (id: string) => setGarage(g => ({ ...g, equippedVehicle: id }));
+  const equipVehicle = (id: string) => setGarage(p => ({ ...p, profile: { ...p.profile, activeCarId: id } }));
   
   const equipItem = (id: string) => {
     const item = ITEMS_DB.find(i => i.id === id);
     if (!item) return;
-    setGarage(g => {
+    setGarage(p => {
       const typeKey = item.type as 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
-      const v = { ...g.vehicles[g.equippedVehicle] };
-      v.equippedParts = {
-         ...v.equippedParts,
-         [typeKey]: v.equippedParts[typeKey] === id ? null : id
-      };
-      return {
-        ...g,
-        vehicles: {
-           ...g.vehicles,
-           [g.equippedVehicle]: v
-        }
-      };
+      const newGarage = [...p.garage];
+      const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
+      if (targetIdx !== -1) {
+          const v = { ...newGarage[targetIdx] };
+          v.equippedParts = {
+             ...v.equippedParts,
+             [typeKey]: v.equippedParts[typeKey] === id ? null : id
+          } as any;
+          newGarage[targetIdx] = v;
+      }
+      return { ...p, garage: newGarage };
     });
   };
 
-  const equipLivery = (val: string) => setGarage(g => ({ ...g, equippedLivery: val }));
+  const equipLivery = (val: string) => setGarage(p => {
+      const newGarage = [...p.garage];
+      const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
+      if (targetIdx !== -1) {
+          const v = { ...newGarage[targetIdx] };
+          v.equippedPaint = val;
+          newGarage[targetIdx] = v;
+      }
+      return { ...p, garage: newGarage };
+  });
 
   const getItemIcon = (type: string, size: number = 32) => {
     if (type === 'engine') return <Cpu size={size} className="text-[#00f2ff]" />;
@@ -50,8 +58,8 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
     return <Cpu size={size} />;
   };
 
-  const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.equippedVehicle) || VEHICLES_DB[0];
-  const vState = garage.vehicles[garage.equippedVehicle];
+  const currentVehicleData = VEHICLES_DB.find(v => v.id === garage.profile.activeCarId) || VEHICLES_DB[0];
+  const vState = garage.garage.find(c => c.carId === garage.profile.activeCarId);
   
   const stats = getVehicleStats(currentVehicleData, vState);
   
@@ -70,10 +78,15 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const handleMaintenance = () => {
     if (!vState || vState.durability >= 100) return;
     const cost = currentVehicleData.maintenanceFee;
-    if (garage.coins >= cost) {
-       setGarage(g => {
-          const v = { ...g.vehicles[garage.equippedVehicle], durability: 100 };
-          return { ...g, coins: g.coins - cost, vehicles: { ...g.vehicles, [v.id]: v } };
+    if (garage.wallet.coins >= cost) {
+       setGarage(p => {
+          const newGarage = [...p.garage];
+          const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
+          if (targetIdx !== -1) {
+              const v = { ...newGarage[targetIdx], durability: 100 };
+              newGarage[targetIdx] = v;
+          }
+          return { ...p, wallet: { ...p.wallet, coins: p.wallet.coins - cost }, garage: newGarage };
        });
        setShowMaintenanceConfirm(false);
     }
@@ -140,8 +153,8 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                  vehicleType={currentVehicleData.type} 
                  width={200} 
                  height={200} 
-                 color={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? '#ffffff' : garage.equippedLivery} 
-                 liveryData={LIVERIES_DB.find(l => l.id === garage.equippedLivery) ? { isGradient: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.isGradient, colors: LIVERIES_DB.find(l => l.id === garage.equippedLivery)!.colors } : undefined}
+                 color={LIVERIES_DB.find(l => l.id === vState?.equippedPaint) ? '#ffffff' : (vState?.equippedPaint || '#00f2ff')} 
+                 liveryData={LIVERIES_DB.find(l => l.id === vState?.equippedPaint) ? { isGradient: LIVERIES_DB.find(l => l.id === vState?.equippedPaint)!.isGradient, colors: LIVERIES_DB.find(l => l.id === vState?.equippedPaint)!.colors } : undefined}
                />
                {vState && (
                   <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs font-mono font-bold border border-white/10">
@@ -209,22 +222,22 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
             <div className="flex-1 overflow-y-auto pr-2 pb-8">
               {tab === 'VEHICLES' && (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                  {garage.ownedVehicles.map(vId => {
-                    const v = VEHICLES_DB.find(x => x.id === vId);
+                  {garage.garage.map(vStateItem => {
+                    const v = VEHICLES_DB.find(x => x.id === vStateItem.carId);
                     if (!v) return null;
-                    const isEquipped = garage.equippedVehicle === v.id;
-                    const state = garage.vehicles[v.id];
-                    const isExpired = state && state.expireTimestamp && state.expireTimestamp < Date.now();
+                    const isEquipped = garage.profile.activeCarId === v.id;
+                    const state = vStateItem;
+                    const isExpired = state && state.expireAt && state.expireAt < Date.now();
                     return (
                       <div key={v.id} className={`neon-panel p-2.5 flex flex-col justify-between gap-2 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''} ${isExpired ? 'opacity-50 grayscale border-red-500/50' : ''}`}>
                         <div className="flex justify-center items-center bg-black/40 rounded-lg py-1.5 border border-white/5 shadow-inner min-h-[70px] relative">
                           {isExpired && <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 font-bold text-xs z-10 rounded-lg whitespace-nowrap">租赁过期</div>}
-                          <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped ? garage.equippedLivery.startsWith('#') ? garage.equippedLivery : '#00f2ff' : '#00f2ff'} />
+                          <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped && state?.equippedPaint?.startsWith('#') ? state.equippedPaint : '#00f2ff'} />
                         </div>
                         <div className="min-w-0">
                           <h3 className="text-sm font-bold text-white mb-0.5 leading-tight truncate">
                              {v.name}
-                             {garage.vehicles[v.id]?.level > 0 && <span className="text-accent-yellow ml-1 text-xs">+{garage.vehicles[v.id].level}</span>}
+                             {state?.level > 0 && <span className="text-accent-yellow ml-1 text-xs">+{state.level}</span>}
                           </h3>
                           <div className="grid grid-cols-2 gap-x-1 text-[8px] text-zinc-400">
                             <span className="truncate">极速:{v.baseSpeed}</span>
@@ -249,7 +262,9 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
         {tab === 'ITEMS' && (
           <div className="flex flex-col gap-6 w-full">
             {(['engine', 'tires', 'acceleration', 'launch', 'drift'] as const).map(category => {
-              const categoryItems = garage.ownedItems.filter(id => {
+              const categoryItems = Object.keys(garage.inventory.parts).filter(id => {
+                const count = garage.inventory.parts[id] || 0;
+                if (count <= 0) return false;
                 const item = ITEMS_DB.find(x => x.id === id);
                 return item?.type === category;
               }).sort((a, b) => {
@@ -306,7 +321,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                 </div>
               );
             })}
-            {garage.ownedItems.length === 0 && (
+            {Object.keys(garage.inventory.parts).length === 0 && (
               <div className="text-zinc-500 italic">尚未拥有任何道具，请前往商店购买。</div>
             )}
           </div>
@@ -323,15 +338,15 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                   <button 
                     key={color}
                     onClick={() => equipLivery(color)}
-                    className={`w-12 h-12 rounded-full border-2 transition-all ${garage.equippedLivery === color ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`}
-                    style={{ backgroundColor: color, boxShadow: garage.equippedLivery === color ? `0 0 20px ${color}` : 'none' }}
+                    className={`w-12 h-12 rounded-full border-2 transition-all ${(vState?.equippedPaint || '') === color ? 'border-white scale-110 shadow-lg' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                    style={{ backgroundColor: color, boxShadow: (vState?.equippedPaint || '') === color ? `0 0 20px ${color}` : 'none' }}
                   />
                 ))}
               </div>
             </div>
 
             {(['INTERMEDIATE', 'ADVANCED', 'ELITE'] as const).map(tier => {
-              const ownedTierLiveries = garage.ownedLiveries
+              const ownedTierLiveries = garage.inventory.paints
                  .map(lId => LIVERIES_DB.find(x => x.id === lId))
                  .filter((l): l is NonNullable<typeof l> => l !== undefined && l.tier === tier);
 
@@ -354,7 +369,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                   </h2>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                     {ownedTierLiveries.map(l => {
-                      const isEquipped = garage.equippedLivery === l.id;
+                      const isEquipped = (vState?.equippedPaint || '') === l.id;
                       return (
                         <button 
                           key={l.id}
@@ -418,7 +433,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                 </button>
                 <button
                   onClick={handleMaintenance}
-                  disabled={garage.coins < currentVehicleData.maintenanceFee}
+                  disabled={garage.wallet.coins < currentVehicleData.maintenanceFee}
                   className="flex-1 py-2 bg-accent-yellow hover:brightness-110 text-black font-bold rounded transition-colors disabled:opacity-50"
                 >
                   确认保养

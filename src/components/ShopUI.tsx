@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { GarageData } from '../types';
+import { PlayerData } from '../types';
 import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Cpu, Wind, Zap, Gauge, CircleDot } from 'lucide-react';
 
 interface ShopProps {
-  garage: GarageData;
-  setGarage: React.Dispatch<React.SetStateAction<GarageData>>;
+  garage: PlayerData;
+  setGarage: React.Dispatch<React.SetStateAction<PlayerData>>;
   onClose: () => void;
 }
 
@@ -15,74 +15,103 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES' | 'MATERIALS'>('VEHICLES');
 
   const handlePurchaseVehicle = (id: string, price: number, isLease: boolean) => {
-    if (garage.coins >= price) {
+    if (garage.wallet.coins >= price) {
       setGarage(g => {
-        const existingVehicle = g.vehicles[id];
+        const newGarage = [...g.garage];
+        const vIndex = newGarage.findIndex(c => c.carId === id);
         const now = Date.now();
         const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
         
-        let newExpireTimestamp = undefined;
+        let newExpireTimestamp: number | null = null;
         if (isLease) {
-          if (existingVehicle && existingVehicle.expireTimestamp && existingVehicle.expireTimestamp > now) {
-            newExpireTimestamp = existingVehicle.expireTimestamp + thirtyDaysMs;
+          if (vIndex !== -1 && newGarage[vIndex].expireAt && newGarage[vIndex].expireAt > now) {
+            newExpireTimestamp = newGarage[vIndex].expireAt! + thirtyDaysMs;
           } else {
             newExpireTimestamp = now + thirtyDaysMs;
           }
         }
 
-        const newVehicleState = existingVehicle ? {
-          ...existingVehicle,
-          expireTimestamp: newExpireTimestamp
-        } : {
-          id,
-          durability: 100,
-          level: 0,
-          expireTimestamp: newExpireTimestamp,
-          equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
-        };
+        if (vIndex !== -1) {
+            newGarage[vIndex] = {
+                ...newGarage[vIndex],
+                isPermanent: !isLease ? true : newGarage[vIndex].isPermanent,
+                expireAt: !isLease ? null : (newGarage[vIndex].isPermanent ? null : newExpireTimestamp)
+            };
+        } else {
+            newGarage.push({
+                carId: id,
+                level: 0,
+                durability: 100,
+                isPermanent: !isLease,
+                expireAt: newExpireTimestamp,
+                equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
+                equippedPaint: null
+            });
+        }
 
         return {
           ...g,
-          coins: g.coins - price,
-          ownedVehicles: [...new Set([...g.ownedVehicles, id])], // Ensure unique
-          vehicles: {
-            ...g.vehicles,
-            [id]: newVehicleState
-          }
+          wallet: { ...g.wallet, coins: g.wallet.coins - price },
+          garage: newGarage
         };
       });
     }
   };
 
   const buyItem = (id: string, price: number) => {
-    if (garage.coins >= price && !garage.ownedItems.includes(id)) {
+    if (garage.wallet.coins >= price && !garage.inventory.parts[id]) {
       setGarage(g => ({
         ...g,
-        coins: g.coins - price,
-        ownedItems: [...g.ownedItems, id]
-      }));
-    }
-  };
-
-  const buyMaterial = (id: string, price: number) => {
-    if (garage.coins >= price) {
-      setGarage(g => ({
-        ...g,
-        coins: g.coins - price,
+        wallet: { ...g.wallet, coins: g.wallet.coins - price },
         inventory: {
-          ...g.inventory,
-          [id]: (g.inventory[id as keyof typeof g.inventory] || 0) + 1
+            ...g.inventory,
+            parts: {
+                ...g.inventory.parts,
+                [id]: 1
+            }
         }
       }));
     }
   };
 
+  const buyMaterial = (id: string, price: number) => {
+    if (garage.wallet.coins >= price) {
+      setGarage(g => {
+        const isMaterial = id.startsWith('core');
+        const isProtector = id.includes('Card');
+        
+        let newMaterials = { ...g.inventory.materials };
+        let newProtectors = { ...g.inventory.protectors };
+        
+        if (id === 'coreT1') newMaterials.core_primary++;
+        if (id === 'coreT2') newMaterials.core_advanced++;
+        if (id === 'coreT3') newMaterials.core_legendary++;
+        
+        if (id === 'silverCard') newProtectors.card_silver++;
+        if (id === 'goldenCard') newProtectors.card_gold++;
+
+        return {
+          ...g,
+          wallet: { ...g.wallet, coins: g.wallet.coins - price },
+          inventory: {
+            ...g.inventory,
+            materials: newMaterials,
+            protectors: newProtectors
+          }
+        };
+      });
+    }
+  };
+
   const buyLivery = (id: string, price: number) => {
-    if (garage.coins >= price && !garage.ownedLiveries.includes(id)) {
+    if (garage.wallet.coins >= price && !garage.inventory.paints.includes(id)) {
       setGarage(g => ({
         ...g,
-        coins: g.coins - price,
-        ownedLiveries: [...g.ownedLiveries, id]
+        wallet: { ...g.wallet, coins: g.wallet.coins - price },
+        inventory: {
+           ...g.inventory,
+           paints: [...g.inventory.paints, id]
+        }
       }));
     }
   };
@@ -109,7 +138,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
           <div className="flex justify-between items-center w-full">
             <div className="flex items-center gap-6">
               <h1 className="text-3xl md:text-4xl font-black italic text-accent-magenta tracking-widest leading-none">补给站</h1>
-              <div className="text-xl md:text-2xl font-bold text-accent-yellow leading-none">{garage.coins} ⟁</div>
+              <div className="text-xl md:text-2xl font-bold text-accent-yellow leading-none">{garage.wallet.coins} ⟁</div>
             </div>
             <button onClick={onClose} className="px-4 md:px-6 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg transition-all text-sm md:text-base whitespace-nowrap">
               返回主菜单
@@ -129,16 +158,16 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
         {tab === 'VEHICLES' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {VEHICLES_DB.map(v => {
-              const state = garage.vehicles[v.id];
-              const isPermanent = state && !state.expireTimestamp;
-              const isLeased = state && state.expireTimestamp && state.expireTimestamp > Date.now();
-              const rentPrice = Math.floor(v.price * 0.3);
-              const canAffordPerm = garage.coins >= v.price;
-              const canAffordRent = garage.coins >= rentPrice;
+              const state = garage.garage.find(c => c.carId === v.id);
+              const isPermanent = state && state.isPermanent;
+              const isLeased = state && !state.isPermanent && state.expireAt && state.expireAt > Date.now();
+              const rentPrice = v.rent ?? Math.floor(v.price * 0.3);
+              const canAffordPerm = garage.wallet.coins >= v.price;
+              const canAffordRent = garage.wallet.coins >= rentPrice;
               
               let daysLeft = 0;
               if (isLeased) {
-                 daysLeft = Math.ceil((state.expireTimestamp! - Date.now()) / (1000 * 60 * 60 * 24));
+                 daysLeft = Math.ceil((state.expireAt! - Date.now()) / (1000 * 60 * 60 * 24));
               }
 
               return (
@@ -209,8 +238,8 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                     {categoryItems.map(item => {
-                      const owned = garage.ownedItems.includes(item.id);
-                      const canAfford = garage.coins >= item.price;
+                      const owned = !!garage.inventory.parts[item.id];
+                      const canAfford = garage.wallet.coins >= item.price;
                       
                       let boostDesc = '';
                       if (item.speedBoost || item.boostValue && item.type === 'engine') boostDesc = `极速 +${item.speedBoost || item.boostValue}`;
@@ -274,8 +303,8 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {tierLiveries.map(l => {
-                      const owned = garage.ownedLiveries.includes(l.id);
-                      const canAfford = garage.coins >= l.price;
+                      const owned = garage.inventory.paints.includes(l.id);
+                      const canAfford = garage.wallet.coins >= l.price;
                       return (
                         <div key={l.id} className="neon-panel p-4 flex flex-col justify-between items-center gap-3">
                           <div className="bg-black/40 rounded p-2 mb-2 w-full flex justify-center border border-white/5">
@@ -317,8 +346,16 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
               { id: 'silverCard', name: '白银保护卡', price: 1500, desc: '冲击 +4 失败时保护不掉级', icon: '🛡️' },
               { id: 'goldenCard', name: '黄金保护卡', price: 8000, desc: '冲击 +5 失败时保护不归零', icon: '🌟' }
             ].map(mat => {
-              const count = garage.inventory[mat.id as keyof typeof garage.inventory] || 0;
-              const canAfford = garage.coins >= mat.price;
+              const getCount = (id: string) => {
+                  if (id === 'coreT1') return garage.inventory.materials.core_primary;
+                  if (id === 'coreT2') return garage.inventory.materials.core_advanced;
+                  if (id === 'coreT3') return garage.inventory.materials.core_legendary;
+                  if (id === 'silverCard') return garage.inventory.protectors.card_silver;
+                  if (id === 'goldenCard') return garage.inventory.protectors.card_gold;
+                  return 0;
+              };
+              const count = getCount(mat.id);
+              const canAfford = garage.wallet.coins >= mat.price;
               return (
                 <div key={mat.id} className="neon-panel p-4 flex flex-col justify-between gap-3 bg-zinc-900 border border-white/10 rounded-xl relative overflow-hidden">
                   <div className="flex justify-between items-start">

@@ -10,7 +10,8 @@
     "role": "player",            // "player" 或 "admin"
     "status": "active",          // 【新增】账号状态："active" (正常) | "banned" (封禁)
     "banReason": "使用加速外挂",   // 【新增】封禁详细原因，active 状态下为空
-    "registerTime": 1715000000000
+    "registerTime": 1715000000000,
+    "activeCarId": "car_basic"     // 【必须新增】当前正在驾驶/出战的车辆 ID
   },
   "wallet": {
     "coins": 0  // 游戏代币 ⟁，必须为整数，不可为负
@@ -18,18 +19,19 @@
   "garage": [
     // 玩家拥有的赛车数组
     {
-      "carId": "nova_v1",       // 车辆唯一标识 (如新星-V1)
+      "carId": "car_basic",       // 车辆唯一标识 (如新星-V1)
       "level": 0,               // 强化等级 (0 到 5)
       "durability": 100,        // 耐久度 (满分100，低于30降速)
       "isPermanent": true,      // 是否永久 (true=永久, false=租赁)
       "expireAt": null,         // 租赁到期时间戳 (isPermanent为true时为null)
       "equippedParts": {        // 装配的永久零件
         "engine": null,         // 引擎槽
-        "tire": null,           // 轮胎槽
-        "startup": null,        // 起步槽
+        "tires": null,           // 轮胎槽
+        "launch": null,        // 起步槽
         "drift": null,          // 漂移槽
         "acceleration": null    // 加速槽
-      }
+      },
+      "equippedPaint": "liv_silver" // 【必须新增】这辆车当前装配的喷漆ID，如果没装配可为 null 或 "default"
     }
   ],
   "inventory": {
