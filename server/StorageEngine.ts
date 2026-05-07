@@ -108,4 +108,84 @@ export class StorageEngine {
             throw new Error('解密失败或数据损坏');
         }
     }
+
+    /**
+     * 读取全局排行榜
+     * @returns 排行榜数据对象
+     */
+    static async readLeaderboard(): Promise<any> {
+        const filePath = path.join(DATA_DIR, 'leaderboard.json');
+        try {
+            const raw = await fs.readFile(filePath, 'utf8');
+            return JSON.parse(raw);
+        } catch (error: any) {
+            if (error.code === 'ENOENT') {
+                return {};
+            }
+            console.error(`[Storage Engine] 读取排行榜失败`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 写入全局排行榜
+     * @param dataObject 要保存的排行榜数据对象
+     */
+    static async writeLeaderboard(dataObject: any): Promise<void> {
+        const filePath = path.join(DATA_DIR, 'leaderboard.json');
+        const lockKey = 'GLOBAL_LEADERBOARD';
+        
+        while (writeLocks.has(lockKey)) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        
+        writeLocks.add(lockKey);
+        
+        try {
+            await ensureDataDir();
+            const payload = JSON.stringify(dataObject, null, 2);
+            await fs.writeFile(filePath, payload, 'utf8');
+        } catch (error) {
+            console.error(`[Storage Engine] 写入排行榜数据发生异常:`, error);
+            throw error;
+        } finally {
+            writeLocks.delete(lockKey);
+        }
+    }
+
+    /**
+     * 提交赛道成绩
+     * @param trackId 赛道ID
+     * @param laps 圈数
+     * @param recordData 成绩对象
+     */
+    static async submitRecord(trackId: string, laps: number, recordData: { uid: string; playerName: string; time: number; vehicle: string; isTeam: boolean; timestamp: number }): Promise<void> {
+        const board = await this.readLeaderboard();
+        const key = `${trackId}_${laps}`;
+        
+        if (!board[key]) board[key] = [];
+        
+        board[key].push(recordData);
+        // 按时间从小到大（从快到慢）排序
+        board[key].sort((a: any, b: any) => a.time - b.time);
+        
+        // 只保留前 50 名
+        if (board[key].length > 50) {
+            board[key] = board[key].slice(0, 50);
+        }
+        
+        await this.writeLeaderboard(board);
+    }
+
+    /**
+     * 获取指定赛道和圈数的前 50 成绩
+     * @param trackId 赛道ID
+     * @param laps 圈数
+     * @returns 成绩数组
+     */
+    static async getRecords(trackId: string, laps: number): Promise<any[]> {
+        const board = await this.readLeaderboard();
+        const key = `${trackId}_${laps}`;
+        return board[key] || [];
+    }
 }

@@ -17,7 +17,9 @@ import { requireAuth, requireAdmin } from './server/GMMiddleware';
 import { EconomyController } from './server/EconomyController';
 import { ShopController } from './server/ShopController';
 import { UpgradeService } from './server/UpgradeService';
+import { LeaderboardController } from './server/LeaderboardController';
 import dotenv from 'dotenv';
+
 
 dotenv.config();
 
@@ -105,6 +107,10 @@ async function startServer() {
   
   // 6. 硬核强化
   app.post('/api/upgrade/car', requireAuth, UpgradeService.upgradeCar);
+
+  // 7. 全网赛道排行榜
+  app.post('/api/leaderboard/submit', requireAuth, LeaderboardController.submit);
+  app.get('/api/leaderboard/:trackId/:laps', requireAuth, LeaderboardController.getTopRecords);
 
   // ================== WebSocket Server Setup ==================
   const server = http.createServer(app);
