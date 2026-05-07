@@ -63,6 +63,10 @@ async function startServer() {
       }
   });
 
+  app.post('/api/auth/logout', requireAuth, (req, res) => {
+      res.json({ success: true, message: "Logged out successfully" });
+  });
+
   // 2. 验证与生成 JWT 凭证的登录 API
   app.post('/api/auth/login', async (req, res) => {
       try {

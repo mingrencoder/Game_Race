@@ -356,6 +356,14 @@ export default function App() {
   const [volume, setVolume] = useState(() => parseFloat(localStorage.getItem('neon_volume') || '0.5'));
   const [isMuted, setIsMuted] = useState(() => localStorage.getItem('neon_muted') === 'true');
 
+  const handleLogout = () => {
+    localStorage.removeItem('neon_token');
+    localStorage.removeItem('neon_player_v4');
+    setPlayerData(initialPlayerData);
+    setGameState('LOGIN');
+    console.log("User logged out, local state cleared");
+  };
+
   React.useEffect(() => {
     import('./services/socketService').then(({ socketService }) => {
       const checkAndSetup = setInterval(() => {
@@ -911,6 +919,12 @@ export default function App() {
                   className="text-zinc-400 hover:text-white transition-colors text-xs sm:text-sm underline underline-offset-4 font-bold cursor-pointer"
                 >
                   玩法说明
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="text-red-400 hover:text-red-300 transition-colors text-xs sm:text-sm underline underline-offset-4 font-bold cursor-pointer"
+                >
+                  退出登录
                 </button>
                 <div className="font-mono opacity-60 text-[10px] md:text-[14px] hidden sm:block">系统版本: 3.0.0</div>
               </div>
