@@ -1342,7 +1342,7 @@ export default function App() {
         {gameState === 'GARAGE' && <GarageUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
         {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
 
-        {gameState === 'ONLINE_MENU' && <OnlineMenu onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
+        {gameState === 'ONLINE_MENU' && <OnlineMenu initialName={playerData.profile.nickname} onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
         {gameState === 'ONLINE_LOBBY' && <OnlineLobby onBack={() => {
           import('./services/socketService').then(({ socketService }) => {
             socketService.socket?.emit('leaveRoom');

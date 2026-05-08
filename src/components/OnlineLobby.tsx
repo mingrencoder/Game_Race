@@ -4,8 +4,8 @@ import { socketService } from '../services/socketService';
 import { VEHICLES_DB, LIVERIES_DB, ITEMS_DB, TRACKS } from '../constants';
 import VehiclePreview from './VehiclePreview';
 
-export const OnlineMenu = ({ onBack, onStartLobby }: { onBack: () => void, onStartLobby: () => void }) => {
-  const [playerName, setPlayerName] = useState('车手_' + Math.floor(Math.random() * 1000));
+export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?: string, onBack: () => void, onStartLobby: () => void }) => {
+  const [playerName, setPlayerName] = useState(initialName || '车手_' + Math.floor(Math.random() * 1000));
   const [roomIdInput, setRoomIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordEnabled, setPasswordEnabled] = useState(false);
@@ -658,7 +658,7 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
                  )}
                </div>
                {isHost ? (
-                  <button onClick={() => { socketService.disbandRoom(); onBack(); }} className="px-4 py-2 bg-red-500/20 text-red-500 rounded border border-red-500/50 hover:bg-red-500/50 hover:text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                  <button onClick={() => { socketService.disbandRoom(); }} className="px-4 py-2 bg-red-500/20 text-red-500 rounded border border-red-500/50 hover:bg-red-500/50 hover:text-white font-bold transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)]">
                     解散房间
                   </button>
                ) : (
