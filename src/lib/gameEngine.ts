@@ -81,21 +81,28 @@ export const updateCarPhysics = (
   let nextY = y + Math.sin(moveAngle) * speed * dtScale;
 
   // Off-track / Wall collision (Simplified for server, but should match client)
-  const getClosestPointOnTrack = (p: Point, track: Track) => {
+  // 必须传入 currentIndex 以实现局部滑动窗口搜索
+  const getClosestPointOnTrack = (p: Point, track: Track, currentIndex: number) => {
     let minDistance = Infinity;
     let closestPoint = { x: 0, y: 0 };
-    let minLineIndex = 0;
+    let minLineIndex = currentIndex;
+    const len = track.waypoints.length;
 
-    for (let i = 0; i < track.waypoints.length; i++) {
+    // 【核心修复】：仅在当前赛车进度的 [前3, 后5] 范围内寻找最近赛道边缘
+    // 彻底忽略距离相近但进度无关的交叉赛道段，完美解决八字赛道立体交叉导致的空气墙
+    for (let offset = -3; offset <= 5; offset++) {
+      const i = (currentIndex + offset + len) % len;
       const p1 = track.waypoints[i];
-      const p2 = track.waypoints[(i + 1) % track.waypoints.length];
+      const p2 = track.waypoints[(i + 1) % len];
       const l2 = (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2;
       if (l2 === 0) continue;
+      
       let t = ((p.x - p1.x) * (p2.x - p1.x) + (p.y - p1.y) * (p2.y - p1.y)) / l2;
       t = Math.max(0, Math.min(1, t));
       const projX = p1.x + t * (p2.x - p1.x);
       const projY = p1.y + t * (p2.y - p1.y);
       const dist = Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
+      
       if (dist < minDistance) {
         minDistance = dist;
         closestPoint = { x: projX, y: projY };
@@ -105,7 +112,7 @@ export const updateCarPhysics = (
     return { distance: minDistance, point: closestPoint, minLineIndex };
   };
 
-  const { distance, point, minLineIndex } = getClosestPointOnTrack({ x: nextX, y: nextY }, track);
+  const { distance, point, minLineIndex } = getClosestPointOnTrack({ x: nextX, y: nextY }, track, car.currentWaypointIndex);
   
   let stuckFrames = car.stuckFrames || 0;
 

@@ -271,4 +271,23 @@ export class GMController {
             }
         }
     }
+
+    /**
+     * GM接口：清空指定赛道和圈数的全网在线记录
+     */
+    static async clearLeaderboard(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const { trackId, laps } = req.body;
+            if (!trackId || typeof laps !== 'number') {
+                res.status(400).json({ error: '缺少 trackId 或 laps 参数，或者格式不正确' });
+                return;
+            }
+
+            await StorageEngine.deleteTrackRecords(trackId, laps);
+            res.status(200).json({ success: true, message: '在线记录已清空' });
+        } catch (error: any) {
+            console.error('[GMController] clearLeaderboard execution failed:', error.message);
+            res.status(500).json({ error: '清空在线记录失败', details: error.message });
+        }
+    }
 }

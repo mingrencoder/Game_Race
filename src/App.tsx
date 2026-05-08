@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { OnlineMenu, OnlineLobby } from './components/OnlineLobby';
 import PlayerInfoUI from './components/PlayerInfoUI';
 import { socketService } from './services/socketService';
@@ -333,6 +333,25 @@ export default function App() {
     }
     return {};
   });
+
+  const [onlineRecords, setOnlineRecords] = useState<LapRecord[]>([]);
+  const [isFetchingOnline, setIsFetchingOnline] = useState(false);
+
+  useEffect(() => {
+    if (showLeaderboard && leaderboardType === 'ONLINE') {
+      setIsFetchingOnline(true);
+      fetch(`/api/leaderboard/${leaderboardTrackId}/${leaderboardLapCount}`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('neon_token')}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setOnlineRecords(data.records || []);
+        else setOnlineRecords([]);
+      })
+      .catch(() => setOnlineRecords([]))
+      .finally(() => setIsFetchingOnline(false));
+    }
+  }, [showLeaderboard, leaderboardType, leaderboardTrackId, leaderboardLapCount]);
 
   const [settings, setSettings] = useState<GameSettings>({
     mode: 'SINGLE',
@@ -693,12 +712,17 @@ export default function App() {
     
     currentRedScore = totalRedRaceScore;
     currentBlueScore = totalBlueRaceScore;
-    let isTeamWin = false;
+    
+    let matchWinnerTeam: 'RED' | 'BLUE' | null = null;
     if (currentRedScore > currentBlueScore) {
-       isTeamWin = true;
-    } else if (currentRedScore === currentBlueScore && sortedResults.length > 0 && sortedResults[0].team === 'RED') {
-       isTeamWin = true;
+       matchWinnerTeam = 'RED';
+    } else if (currentBlueScore > currentRedScore) {
+       matchWinnerTeam = 'BLUE';
+    } else if (currentRedScore === currentBlueScore && sortedResults.length > 0) {
+       matchWinnerTeam = sortedResults[0].team as 'RED' | 'BLUE';
     }
+    
+    let isTeamWin = matchWinnerTeam === 'RED';
 
     sortedResults.forEach((car, index) => {
       const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
@@ -744,7 +768,7 @@ export default function App() {
     if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       setTeamScore({ RED: currentRedScore, BLUE: currentBlueScore });
       if (isFlawlessRed) {
-        setFlawlessVictoryMessage(`🔥 完胜！ 红队全员完赛并包揽前 ${sortedResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +50！`);
+        setFlawlessVictoryMessage(`🔥 完胜！全员完赛并包揽前 ${sortedResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +10！`);
       }
     } else {
       setTeamScore(null);
@@ -758,9 +782,9 @@ export default function App() {
       let newTeamWins = cupState.teamWins;
       
       if ((settings.mode === 'TEAM' || settings.isTeamMode) && newTeamWins) {
-        if (currentRedScore > currentBlueScore) {
+        if (matchWinnerTeam === 'RED') {
           newTeamWins = { ...newTeamWins, RED: newTeamWins.RED + 1 };
-        } else if (currentBlueScore > currentRedScore) {
+        } else if (matchWinnerTeam === 'BLUE') {
           newTeamWins = { ...newTeamWins, BLUE: newTeamWins.BLUE + 1 };
         }
         
@@ -1611,9 +1635,13 @@ export default function App() {
                 </motion.div>
               )}
 
-              {(settings.mode === 'TEAM' || settings.isTeamMode) && teamScore && (
+              {(settings.mode === 'TEAM' || settings.isTeamMode) && teamScore && (() => {
+                  const isRedWin = teamScore.RED > teamScore.BLUE || (teamScore.RED === teamScore.BLUE && results.length > 0 && results[0].team === 'RED');
+                  const isBlueWin = teamScore.BLUE > teamScore.RED || (teamScore.RED === teamScore.BLUE && results.length > 0 && results[0].team === 'BLUE');
+                  const isTieBreak = teamScore.RED === teamScore.BLUE;
+                  return (
                 <div className="flex justify-center items-start gap-8 mb-8 text-2xl font-black">
-                  <div className={`flex flex-col items-center min-w-[120px] ${teamScore.RED > teamScore.BLUE ? 'text-yellow-400 scale-110' : 'text-red-400'} transition-transform`}>
+                  <div className={`flex flex-col items-center min-w-[120px] ${isRedWin ? 'text-yellow-400 scale-110' : 'text-red-400'} transition-transform`}>
                     <span className="text-sm">红队</span>
                     {teamScore.RED} 分
                     
@@ -1633,12 +1661,12 @@ export default function App() {
                        })}
                     </div>
 
-                    {teamScore.RED > teamScore.BLUE && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">获胜 +20⟁</span>}
+                    {isRedWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜) +20⟁' : '获胜 +20⟁'}</span>}
                   </div>
                   
                   <div className="text-white/30 text-4xl mt-4">对决</div>
                   
-                  <div className={`flex flex-col items-center min-w-[120px] ${teamScore.BLUE > teamScore.RED ? 'text-yellow-400 scale-110' : 'text-blue-400'} transition-transform`}>
+                  <div className={`flex flex-col items-center min-w-[120px] ${isBlueWin ? 'text-yellow-400 scale-110' : 'text-blue-400'} transition-transform`}>
                     <span className="text-sm">蓝队</span>
                     {teamScore.BLUE} 分
 
@@ -1658,10 +1686,11 @@ export default function App() {
                        })}
                     </div>
 
-                    {teamScore.BLUE > teamScore.RED && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">获胜 +20⟁</span>}
+                    {isBlueWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜) +20⟁' : '获胜 +20⟁'}</span>}
                   </div>
                 </div>
-              )}
+              );
+              })()}
 
               <div className="space-y-4 mb-8">
                 {results.map((car, index) => {
@@ -1931,35 +1960,44 @@ export default function App() {
               className="neon-panel bg-[#0a0a0a] max-w-[800px] w-full max-h-[85vh] overflow-y-auto p-6 md:p-10 rounded-xl border border-white/20 shadow-2xl relative"
             >
               <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-4 mb-6 border-b border-white/10 pb-4 pt-2 sticky top-0 bg-[#0a0a0a] z-10 w-full shrink-0">
-                <h2 className="text-xl md:text-2xl font-black text-accent-yellow uppercase tracking-wider">🏆 赛道排行榜</h2>
+                <div className="flex flex-col gap-1">
+                  <h2 className="text-xl md:text-2xl font-black text-accent-yellow uppercase tracking-wider">🏆 赛道排行榜</h2>
+                  <span className="text-[10px] text-zinc-500">注：导入、导出与清空功能仅针对本地记录有效。</span>
+                </div>
                 <div className="flex flex-wrap gap-2 text-sm md:text-base w-full sm:w-auto">
-                  <button 
-                    onClick={handleExportRecords}
-                    className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
-                  >
-                    ⬇️ 导出
-                  </button>
-                  <button 
-                    onClick={handleImportRecords}
-                    className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
-                  >
-                    ⬆️ 导入
-                  </button>
-                  <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmAction({
-                          message: '确定要清空所有赛道的所有记录吗？此操作无法撤销。',
-                          onConfirm: () => {
-                            setRecords({});
-                            localStorage.removeItem('neon_lap_records');
-                          }
-                        });
-                    }}
-                    className="flex-1 sm:flex-none text-red-400 hover:text-red-300 px-3 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30 text-center"
-                  >
-                    🗑️ 清空全部
-                  </button>
+                  {leaderboardType === 'LOCAL' && (
+                    <>
+                      <button 
+                        onClick={handleExportRecords}
+                        className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
+                      >
+                        ⬇️ 导出
+                      </button>
+                      <button 
+                        onClick={handleImportRecords}
+                        className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
+                      >
+                        ⬆️ 导入
+                      </button>
+                    </>
+                  )}
+                  {leaderboardType === 'LOCAL' && (
+                    <button 
+                      onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmAction({
+                            message: '确定要清空所有赛道的所有记录吗？此操作无法撤销。',
+                            onConfirm: () => {
+                              setRecords({});
+                              localStorage.removeItem('neon_lap_records');
+                            }
+                          });
+                      }}
+                      className="flex-1 sm:flex-none text-red-400 hover:text-red-300 px-3 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30 text-center"
+                    >
+                      🗑️ 清空全部
+                    </button>
+                  )}
                   <button 
                     onClick={() => setShowLeaderboard(false)} 
                     className="flex-1 sm:flex-none text-zinc-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors border border-white/10 text-center"
@@ -2003,8 +2041,8 @@ export default function App() {
                 {/* Sub-tabs for Laps */}
                 <div className="flex gap-2 px-1">
                   {[1, 2, 3, 4, 5].map(lap => {
-                    const recordKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${lap}_online` : `${leaderboardTrackId}_${lap}`;
-                    const hasRecords = (records[recordKey] || []).length > 0;
+                    const recordKey = `${leaderboardTrackId}_${lap}`;
+                    const hasRecords = leaderboardType === 'ONLINE' ? false : (records[recordKey] || []).length > 0;
                     return (
                       <button
                         key={lap}
@@ -2024,12 +2062,12 @@ export default function App() {
                 {/* Records Listing */}
                 <div className="bg-white/5 border border-white/5 rounded-lg p-4">
                   {(() => {
-                    const currentKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${leaderboardLapCount}_online` : `${leaderboardTrackId}_${leaderboardLapCount}`;
-                    const trackRecords = records[currentKey] || [];
+                    const currentKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${leaderboardLapCount}` : `${leaderboardTrackId}_${leaderboardLapCount}`;
+                    const trackRecords = leaderboardType === 'ONLINE' ? onlineRecords : (records[currentKey] || []);
                     const trackName = TRACKS.find(t => t.id === leaderboardTrackId)?.name;
                     
                     if (trackRecords.length === 0) {
-                      return <div className="text-zinc-500 text-sm text-center py-8 bg-black/40 rounded-lg border border-white/5">{leaderboardType === 'ONLINE' ? '该赛道暂无在线对战成绩' : '该赛道/圈数暂无成绩，快去创造记录吧！'}</div>;
+                      return <div className="text-zinc-500 text-sm text-center py-8 bg-black/40 rounded-lg border border-white/5">{isFetchingOnline ? '正在获取在线记录...' : (leaderboardType === 'ONLINE' ? '该赛道暂无在线对战成绩' : '该赛道/圈数暂无成绩，快去创造记录吧！')}</div>;
                     }
                     
                     return (
@@ -2038,19 +2076,21 @@ export default function App() {
                           <h4 className="text-accent-magenta font-bold">
                             {trackName} - {leaderboardLapCount}圈记录 {leaderboardType === 'ONLINE' ? '(在线对战)' : ''}
                           </h4>
-                          <button 
-                            onClick={() => setConfirmAction({
-                              message: `确定要删除「${trackName}」的 ${leaderboardLapCount} 圈${leaderboardType === 'ONLINE' ? '在线' : ''}记录吗？`,
-                              onConfirm: () => {
-                                const newRecords = { ...records };
-                                delete newRecords[currentKey];
-                                setRecords(newRecords);
-                              }
-                            })}
-                            className="text-xs font-normal text-red-400 hover:text-red-300 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30"
-                          >
-                            🗑️ 删除此榜单记录
-                          </button>
+                          {leaderboardType === 'LOCAL' && (
+                            <button 
+                              onClick={() => setConfirmAction({
+                                message: `确定要删除「${trackName}」的 ${leaderboardLapCount} 圈记录吗？`,
+                                onConfirm: () => {
+                                  const newRecords = { ...records };
+                                  delete newRecords[currentKey];
+                                  setRecords(newRecords);
+                                }
+                              })}
+                              className="text-xs font-normal text-red-400 hover:text-red-300 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30"
+                            >
+                              🗑️ 删除此榜单记录
+                            </button>
+                          )}
                         </div>
                         
                         <div className="space-y-2">
@@ -2073,26 +2113,28 @@ export default function App() {
                                 <div className="flex items-center justify-end gap-4 ml-9 sm:ml-0">
                                   <span className="text-[10px] text-zinc-500">{dateStr}</span>
                                   <span className="font-mono font-bold text-accent-magenta text-base">{(record.time / 1000).toFixed(2)}s</span>
-                                  <button
-                                    onClick={() => setConfirmAction({
-                                      message: `确定要删除此条记录吗？`,
-                                      onConfirm: () => {
-                                        const newRecords = { ...records };
-                                        const currList = [...newRecords[currentKey]];
-                                        currList.splice(idx, 1);
-                                        if (currList.length === 0) {
-                                          delete newRecords[currentKey];
-                                        } else {
-                                          newRecords[currentKey] = currList;
+                                  {leaderboardType === 'LOCAL' && (
+                                    <button
+                                      onClick={() => setConfirmAction({
+                                        message: `确定要删除此条记录吗？`,
+                                        onConfirm: () => {
+                                          const newRecords = { ...records };
+                                          const currList = [...newRecords[currentKey]];
+                                          currList.splice(idx, 1);
+                                          if (currList.length === 0) {
+                                            delete newRecords[currentKey];
+                                          } else {
+                                            newRecords[currentKey] = currList;
+                                          }
+                                          setRecords(newRecords);
                                         }
-                                        setRecords(newRecords);
-                                      }
-                                    })}
-                                    className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/20 transition-all font-bold"
-                                    title="删除此记录"
-                                  >
-                                    ✕
-                                  </button>
+                                      })}
+                                      className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/20 transition-all font-bold"
+                                      title="删除此记录"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             );

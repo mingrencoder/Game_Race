@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PlayerData } from '../types';
-import { User, Lock, ArrowRight, KeyRound } from 'lucide-react';
+import { User, Lock, ArrowRight, KeyRound, Loader2 } from 'lucide-react';
 
 interface AuthUIProps {
   setGarage: React.Dispatch<React.SetStateAction<PlayerData>>;
@@ -13,27 +13,32 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
-      setError('用户名和密码不能为空');
+      setError('车手代号和访问密钥不能为空');
       return;
     }
     
-    // Pure frontend mock
-    const uid = 'local_' + Math.random().toString(36).substring(2, 9);
+    setIsLoading(true);
     
-    setGarage(p => ({
-      ...p,
-      profile: {
-        ...p.profile,
-        uid: isLogin ? p.profile.uid : uid, // if register, mock new uid
-        nickname: username,
-      }
-    }));
-    
-    onLoginSuccess();
+    // Pure frontend mock with simulated delay
+    setTimeout(() => {
+      const uid = 'local_' + Math.random().toString(36).substring(2, 9);
+      
+      setGarage(p => ({
+        ...p,
+        profile: {
+          ...p.profile,
+          uid: isLogin ? p.profile.uid : uid, // if register, mock new uid
+          nickname: username,
+        }
+      }));
+      
+      onLoginSuccess();
+    }, 1500);
   };
 
   return (
@@ -55,11 +60,11 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
         
         <div className="relative z-10 flex flex-col items-center">
           <h1 className="text-4xl font-black italic tracking-widest text-center mb-2 leading-none">
-            <span className="text-white">NEON</span>
-            <span className="text-[#00f2ff]"> RACING</span>
+            <span className="text-white">跑跑</span>
+            <span className="text-[#00f2ff]"> 赛车</span>
           </h1>
           <p className="text-zinc-400 text-center text-sm font-mono mb-8 opacity-60">
-            {isLogin ? 'SYSTEM.AUTH.LOGIN' : 'SYSTEM.AUTH.REGISTER'}
+            {isLogin ? '身份验证 (AUTH)' : '新车手档案录入'}
           </p>
 
           <form onSubmit={handleSubmit} className="w-full space-y-6">
@@ -68,13 +73,14 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-[#00f2ff] transition-colors" size={18} />
                 <input
                   type="text"
-                  placeholder="车手代号 (Username)"
+                  placeholder="请输入您的车手代号..."
                   value={username}
                   onChange={(e) => {
                     setUsername(e.target.value);
                     setError('');
                   }}
-                  className="w-full bg-black/50 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#00f2ff] focus:ring-1 focus:ring-[#00f2ff] transition-all font-mono"
+                  disabled={isLoading}
+                  className="w-full bg-black/50 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#00f2ff] focus:ring-1 focus:ring-[#00f2ff] transition-all font-mono disabled:opacity-50"
                 />
               </div>
 
@@ -82,13 +88,14 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-[#ff0055] transition-colors" size={18} />
                 <input
                   type="password"
-                  placeholder="访问密钥 (Password)"
+                  placeholder="请输入安全密钥..."
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setError('');
                   }}
-                  className="w-full bg-black/50 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#ff0055] focus:ring-1 focus:ring-[#ff0055] transition-all font-mono"
+                  disabled={isLoading}
+                  className="w-full bg-black/50 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#ff0055] focus:ring-1 focus:ring-[#ff0055] transition-all font-mono disabled:opacity-50"
                 />
               </div>
             </div>
@@ -108,21 +115,27 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
 
             <button
               type="submit"
-              className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all duration-300 ${
+              disabled={isLoading}
+              className={`w-full py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all duration-300 disabled:opacity-70 disabled:cursor-wait ${
                 isLogin 
                   ? 'bg-[#00f2ff]/20 text-[#00f2ff] border border-[#00f2ff] hover:bg-[#00f2ff] hover:text-black shadow-[0_0_15px_rgba(0,242,255,0.3)] hover:shadow-[0_0_25px_rgba(0,242,255,0.6)]' 
                   : 'bg-[#ff0055]/20 text-[#ff0055] border border-[#ff0055] hover:bg-[#ff0055] hover:text-white shadow-[0_0_15px_rgba(255,0,85,0.3)] hover:shadow-[0_0_25px_rgba(255,0,85,0.6)]'
               }`}
             >
-              {isLogin ? (
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  <span>系统连接中...</span>
+                </>
+              ) : isLogin ? (
                 <>
                   <KeyRound size={18} />
-                  <span>授权接入</span>
+                  <span>验证并登入系统</span>
                 </>
               ) : (
                 <>
                   <ArrowRight size={18} />
-                  <span>建立新档案</span>
+                  <span>建立车手档案</span>
                 </>
               )}
             </button>
@@ -132,20 +145,23 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
             <button
               type="button"
               onClick={() => {
-                setIsLogin(!isLogin);
-                setError('');
+                if (!isLoading) {
+                  setIsLogin(!isLogin);
+                  setError('');
+                }
               }}
-              className="group flex items-center gap-2 text-zinc-400 hover:text-white text-sm font-mono transition-colors"
+              disabled={isLoading}
+              className="group flex items-center gap-2 text-zinc-400 hover:text-white text-sm font-mono transition-colors disabled:opacity-50"
             >
               {isLogin ? (
                 <>
-                  <span>未受限人员？</span>
-                  <span className="text-[#ff0055] group-hover:underline">前往注册</span>
+                  <span>尚未拥有档案？</span>
+                  <span className="text-[#ff0055] group-hover:underline">申请成为新车手</span>
                 </>
               ) : (
                 <>
-                  <span>已有档案？</span>
-                  <span className="text-[#00f2ff] group-hover:underline">返回登录</span>
+                  <span>已有最高权限？</span>
+                  <span className="text-[#00f2ff] group-hover:underline">返回身份验证</span>
                 </>
               )}
             </button>

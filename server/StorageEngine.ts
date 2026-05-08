@@ -202,6 +202,20 @@ export class StorageEngine {
     }
 
     /**
+     * 清空指定赛道和圈数的全网在线记录
+     * @param trackId 赛道ID
+     * @param laps 圈数
+     */
+    static async deleteTrackRecords(trackId: string, laps: number): Promise<void> {
+        await this.leaderboardTransaction(async (board) => {
+            const key = `${trackId}_${laps}`;
+            if (board[key]) {
+                delete board[key];
+            }
+        });
+    }
+
+    /**
      * 提交赛道成绩，保证原子读改写操作
      * @param trackId 赛道ID
      * @param laps 圈数

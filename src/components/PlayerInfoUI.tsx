@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { PlayerData } from '../types';
 import { VEHICLES_DB, LIVERIES_DB } from '../constants';
 import { User, Lock, Save, X } from 'lucide-react';
@@ -15,6 +15,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState<{type: 'error'|'success', text: string} | null>(null);
 
   const activeCarState = playerData.garage.find(c => c.carId === playerData.profile.activeCarId);
   const baseVehicle = VEHICLES_DB.find(v => v.id === playerData.profile.activeCarId) || VEHICLES_DB[0];
@@ -24,15 +25,12 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
   const renameCardsCount = playerData.inventory?.specialItems?.rename_card || 0;
 
   const handleSaveNickname = () => {
+    setMessage(null);
     if (!nickname.trim()) return;
     if (nickname.trim() === playerData.profile.nickname) return;
     
     if (renameCardsCount <= 0) {
-      alert('缺少改名卡，请前往商店特殊分类购买');
-      return;
-    }
-    
-    if (!confirm(`您当前拥有 ${renameCardsCount} 张改名卡。确定要消耗 1 张改名卡，将昵称修改为【${nickname.trim()}】吗？`)) {
+      setMessage({ type: 'error', text: '缺少改名卡，请前往商店特殊分类购买' });
       return;
     }
 
@@ -50,24 +48,30 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
         }
       }
     }));
-    alert('昵称修改成功！');
+    setMessage({ type: 'success', text: '昵称修改成功！' });
   };
 
   const handleSavePassword = () => {
-    if (oldPassword !== 'pop123456') {
-      alert('旧密码错误！(提示: pop123456)');
+    setMessage(null);
+
+    if (!oldPassword) {
+      setMessage({ type: 'error', text: '请输入旧密码' });
       return;
     }
-    if (newPassword.length === 0) {
-      alert('请输入新密码');
+    if (oldPassword !== 'pop123456') {
+      setMessage({ type: 'error', text: '旧密码错误或新密码不一致' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setMessage({ type: 'error', text: '新密码长度至少需要 6 个字符' });
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert('两次输入的新密码不一致！');
+      setMessage({ type: 'error', text: '旧密码错误或新密码不一致' });
       return;
     }
     
-    alert('密码修改成功！');
+    setMessage({ type: 'success', text: '密码修改成功(本地模拟)' });
     setOldPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -97,6 +101,8 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
             <X size={20} />
           </button>
         </div>
+
+
         
         <div className="space-y-8">
           {/* 基础资产 */}
@@ -155,7 +161,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
                   />
                   <button
                     onClick={handleSaveNickname}
-                    disabled={renameCardsCount <= 0 || nickname.trim() === playerData.profile.nickname}
+                    disabled={nickname.trim() === playerData.profile.nickname}
                     className="bg-[#00f2ff]/20 text-[#00f2ff] px-4 rounded font-bold hover:bg-[#00f2ff] hover:text-black transition-colors flex items-center justify-center border border-[#00f2ff]/50 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Save size={16} />
@@ -190,6 +196,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
                     onChange={e => setConfirmPassword(e.target.value)}
                     className="w-full bg-black/50 border border-white/10 rounded p-2 text-white placeholder-zinc-600 focus:border-[#ff0055] outline-none font-mono text-sm"
                   />
+
                   <button
                     onClick={handleSavePassword}
                     className="w-full mt-2 bg-[#ff0055]/20 text-[#ff0055] py-2 rounded font-bold hover:bg-[#ff0055] hover:text-white transition-colors border border-[#ff0055]/50 flex items-center justify-center gap-2"
@@ -203,6 +210,47 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
           </div>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {message && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className={`neon-panel w-full max-w-sm p-6 flex flex-col gap-4 rounded-xl border bg-[#0a0a0a] ${
+                message.type === 'error' 
+                  ? 'border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)]' 
+                  : 'border-accent-cyan shadow-[0_0_20px_rgba(0,242,255,0.3)]'
+              }`}
+            >
+              <h3 className={`text-xl font-black ${message.type === 'error' ? 'text-red-500' : 'text-accent-cyan'}`}>
+                {message.type === 'error' ? '❌ 操作失败' : '✅ 操作成功'}
+              </h3>
+              <p className="text-white text-sm font-bold">
+                {message.text}
+              </p>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setMessage(null)}
+                  className={`px-6 py-2 font-bold rounded flex items-center justify-center transition-all ${
+                    message.type === 'error'
+                      ? 'bg-red-500 text-white hover:bg-red-400'
+                      : 'bg-accent-cyan text-black hover:bg-accent-cyan/80'
+                  }`}
+                >
+                  确定
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
