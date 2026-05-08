@@ -233,11 +233,14 @@ export class ShopController {
             if (!playerData.inventory.materials) playerData.inventory.materials = {};
             if (!playerData.inventory.protectors) playerData.inventory.protectors = {};
             if (!playerData.inventory.parts) playerData.inventory.parts = {};
+            if (!playerData.inventory.specialItems) playerData.inventory.specialItems = { rename_card: 0 };
             
             if (itemId.includes('core_') || itemId.includes('coreT')) {
                 playerData.inventory.materials[itemId] = (playerData.inventory.materials[itemId] || 0) + quantity;
             } else if (itemId.includes('Card') || itemId.includes('card_')) {
                 playerData.inventory.protectors[itemId] = (playerData.inventory.protectors[itemId] || 0) + quantity;
+            } else if (itemId === 'rename_card') {
+                playerData.inventory.specialItems.rename_card = (playerData.inventory.specialItems.rename_card || 0) + quantity;
             } else {
                 playerData.inventory.parts[itemId] = (playerData.inventory.parts[itemId] || 0) + quantity;
             }

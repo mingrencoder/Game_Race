@@ -45,6 +45,9 @@
       "card_silver": 0,     // 白银保护卡 (+3冲+4用)
       "card_gold": 0        // 黄金保护卡 (+4冲+5用)
     },
+    "specialItems": {
+      "rename_card": 0       // 改名卡数量
+    },
     "parts": {},            // 拥有且未装配的闲置配件计数 (如 "engine_t1": 2)
     "paints": []            // 拥有的喷漆外观 ID 数组
   }

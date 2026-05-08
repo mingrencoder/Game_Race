@@ -69,7 +69,14 @@ export class PlayerController {
                 return;
             }
 
+            if (!playerData.inventory?.specialItems?.rename_card || playerData.inventory.specialItems.rename_card <= 0) {
+                res.status(400).json({ error: '改名卡不足' });
+                return;
+            }
+
             playerData.profile.nickname = newNickname;
+            playerData.inventory.specialItems.rename_card -= 1;
+            
             await StorageEngine.writeEncrypted(uid, playerData);
 
             // 2. 双写：立刻调用AuthService更新全部记录中的索引

@@ -12,7 +12,7 @@ interface ShopProps {
 }
 
 export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
-  const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES' | 'MATERIALS'>('VEHICLES');
+  const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES' | 'MATERIALS' | 'SPECIAL'>('VEHICLES');
 
   const handlePurchaseVehicle = (id: string, price: number, isLease: boolean) => {
     if (garage.wallet.coins >= price) {
@@ -59,6 +59,24 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
   };
 
   const buyItem = (id: string, price: number) => {
+    if (id === 'rename_card') {
+       if (confirm(`⚠️ 警告：该道具价值极其昂贵，确定要消耗 ${price} ⟁ 购买吗？`)) {
+           if (garage.wallet.coins >= price) {
+               setGarage(g => ({
+                   ...g,
+                   wallet: { ...g.wallet, coins: g.wallet.coins - price },
+                   inventory: {
+                       ...g.inventory,
+                       specialItems: {
+                           ...g.inventory.specialItems,
+                           rename_card: (g.inventory.specialItems?.rename_card || 0) + 1
+                       }
+                   }
+               }));
+           }
+       }
+       return;
+    }
     if (garage.wallet.coins >= price && !garage.inventory.parts[id]) {
       setGarage(g => ({
         ...g,
@@ -150,6 +168,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
             <button onClick={() => setTab('ITEMS')} className={`shrink-0 px-6 py-2 rounded-lg font-bold transition-all ${tab === 'ITEMS' ? 'bg-accent-cyan text-black' : 'bg-white/10 text-white'}`}>零件改装</button>
             <button onClick={() => setTab('LIVERIES')} className={`shrink-0 px-6 py-2 rounded-lg font-bold transition-all ${tab === 'LIVERIES' ? 'bg-accent-cyan text-black' : 'bg-white/10 text-white'}`}>喷漆与涂装</button>
             <button onClick={() => setTab('MATERIALS')} className={`shrink-0 px-6 py-2 rounded-lg font-bold transition-all ${tab === 'MATERIALS' ? 'bg-accent-cyan text-black' : 'bg-white/10 text-white'}`}>强化素材</button>
+            <button onClick={() => setTab('SPECIAL')} className={`shrink-0 px-6 py-2 rounded-lg font-bold transition-all ${tab === 'SPECIAL' ? 'bg-accent-cyan text-black' : 'bg-white/10 text-white'}`}>特殊道具</button>
           </div>
         </div>
       </header>
@@ -373,6 +392,38 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                       className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 whitespace-nowrap transition-all hover:brightness-110 active:scale-95"
                     >
                       购买: {mat.price} ⟁
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {tab === 'SPECIAL' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {ITEMS_DB.filter(i => i.type === 'special').map(item => {
+              const count = item.id === 'rename_card' ? (garage.inventory.specialItems?.rename_card || 0) : 0;
+              const canAfford = garage.wallet.coins >= item.price;
+              
+              return (
+                <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 bg-zinc-900 border border-yellow-500/50 rounded-xl relative overflow-hidden shadow-[0_0_15px_rgba(234,179,8,0.2)]">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500" />
+                  <div className="flex justify-between items-start mt-2">
+                    <div className="text-4xl text-yellow-500">🎫</div>
+                    <div className="text-xs font-mono font-bold text-accent-yellow bg-accent-yellow/10 px-2 py-1 rounded border border-accent-yellow/30">拥有: {count}</div>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white mt-2 mb-1">{item.name}</h3>
+                    <p className="text-zinc-400 text-sm h-14">{item.description}</p>
+                  </div>
+                  <div className="mt-2">
+                    <button
+                      onClick={() => buyItem(item.id, item.price)}
+                      disabled={!canAfford}
+                      className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase text-lg rounded shadow-[0_0_15px_rgba(234,179,8,0.4)] disabled:opacity-30 transition-all active:scale-95 flex flex-col items-center leading-tight"
+                    >
+                      <span>购买特权</span>
+                      <span className="text-xs opacity-80">{item.price} ⟁</span>
                     </button>
                   </div>
                 </div>

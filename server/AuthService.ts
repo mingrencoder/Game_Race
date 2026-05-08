@@ -88,6 +88,7 @@ export class AuthService {
                 inventory: {
                     materials: {},
                     protectors: {},
+                    specialItems: { rename_card: 0 },
                     parts: {},
                     paints: []
                 }
@@ -166,6 +167,7 @@ export class AuthService {
                 inventory: {
                     materials: {},
                     protectors: {},
+                    specialItems: { rename_card: 0 },
                     parts: {},
                     paints: []
                 }

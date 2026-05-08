@@ -112,7 +112,7 @@ export type Item = {
 
   id: string;
   name: string;
-  type: 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
+  type: 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration' | 'special';
   price: number;
   speedBoost?: number;
   gripBoost?: number;
@@ -120,6 +120,7 @@ export type Item = {
   driftSpeedBoost?: number;
   accelerationBoost?: number;
   boostValue: number; // Keep for backward compatibility temporarily
+  description?: string;
 };
 
 export type Livery = {
@@ -169,6 +170,9 @@ export interface PlayerData {
     protectors: {
       card_silver: number;
       card_gold: number;
+    };
+    specialItems: {
+      rename_card: number;
     };
     parts: Record<string, number>;
     paints: string[];

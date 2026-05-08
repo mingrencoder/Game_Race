@@ -188,6 +188,7 @@ const initialPlayerData: PlayerData = (() => {
     inventory: {
       materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
       protectors: { card_silver: 0, card_gold: 0 },
+      specialItems: { rename_card: 0 },
       parts: {},
       paints: []
     }

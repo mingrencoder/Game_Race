@@ -21,13 +21,33 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
   const paintId = activeCarState?.equippedPaint;
   const currentPaint = paintId ? LIVERIES_DB.find(l => l.id === paintId)?.name || '基础涂装' : '基础涂装';
 
+  const renameCardsCount = playerData.inventory?.specialItems?.rename_card || 0;
+
   const handleSaveNickname = () => {
     if (!nickname.trim()) return;
+    if (nickname.trim() === playerData.profile.nickname) return;
+    
+    if (renameCardsCount <= 0) {
+      alert('缺少改名卡，请前往商店特殊分类购买');
+      return;
+    }
+    
+    if (!confirm(`您当前拥有 ${renameCardsCount} 张改名卡。确定要消耗 1 张改名卡，将昵称修改为【${nickname.trim()}】吗？`)) {
+      return;
+    }
+
     setPlayerData(p => ({
       ...p,
       profile: {
         ...p.profile,
         nickname: nickname.trim()
+      },
+      inventory: {
+        ...p.inventory,
+        specialItems: {
+          ...p.inventory.specialItems,
+          rename_card: (p.inventory.specialItems?.rename_card || 0) - 1
+        }
       }
     }));
     alert('昵称修改成功！');
@@ -120,7 +140,12 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
               
               {/* 昵称修改 */}
               <div className="space-y-2">
-                <label className="text-xs text-zinc-500 font-bold uppercase">修改车手代号</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-zinc-500 font-bold uppercase">修改车手代号</label>
+                  <span className="text-xs font-mono text-zinc-400">
+                    改名卡: <span className={renameCardsCount > 0 ? "text-accent-yellow font-bold" : "text-red-500"}>{renameCardsCount}</span> 张
+                  </span>
+                </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -130,7 +155,8 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
                   />
                   <button
                     onClick={handleSaveNickname}
-                    className="bg-[#00f2ff]/20 text-[#00f2ff] px-4 rounded font-bold hover:bg-[#00f2ff] hover:text-black transition-colors flex items-center justify-center border border-[#00f2ff]/50"
+                    disabled={renameCardsCount <= 0 || nickname.trim() === playerData.profile.nickname}
+                    className="bg-[#00f2ff]/20 text-[#00f2ff] px-4 rounded font-bold hover:bg-[#00f2ff] hover:text-black transition-colors flex items-center justify-center border border-[#00f2ff]/50 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Save size={16} />
                   </button>

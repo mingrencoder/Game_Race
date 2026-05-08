@@ -322,6 +322,7 @@ export const VEHICLES_DB: Vehicle[] = [
 ];
 
 export const ITEMS_DB = [
+  { id: 'rename_card', name: '改名卡', type: 'special' as const, price: 100000, boostValue: 0, description: '极其珍贵的权限卡，用于在个人信息界面修改一次车手昵称。' },
   { id: 'eng_v1', name: 'V1 涡轮增压', type: 'engine' as const, price: 300, boostValue: 0.2, speedBoost: 0.2 },
   { id: 'eng_v2', name: 'V2 离子引擎', type: 'engine' as const, price: 2500, boostValue: 0.5, speedBoost: 0.5 },
   { id: 'eng_v3', name: 'V3 反物质引擎', type: 'engine' as const, price: 12000, boostValue: 0.8, speedBoost: 0.8 },
