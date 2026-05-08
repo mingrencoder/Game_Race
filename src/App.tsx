@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { OnlineMenu, OnlineLobby } from './components/OnlineLobby';
+import PlayerInfoUI from './components/PlayerInfoUI';
 import { socketService } from './services/socketService';
 import { GameSettings, CarState, AIDifficulty, GameMode, PlayerData, LapRecord, AIStyle, TeamSetup } from './types';
 import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES } from './constants';
@@ -2108,111 +2109,13 @@ export default function App() {
 
       {/* Player Info Modal */}
       <AnimatePresence>
-        {showPlayerInfo && (() => {
-          const eqVehicle = playerData.garage.find((c: any) => c.carId === playerData.profile.activeCarId);
-          const baseVehicle = VEHICLES_DB.find(v => v.id === playerData.profile.activeCarId) || VEHICLES_DB[0];
-          const engine = ITEMS_DB.find(i => i.id === eqVehicle?.equippedParts?.engine);
-          const tires = ITEMS_DB.find(i => i.id === eqVehicle?.equippedParts?.tires);
-          
-          const finalSpeed = baseVehicle.baseSpeed + (engine?.boostValue || 0);
-          const finalGrip = baseVehicle.baseGrip + (tires?.boostValue || 0);
-
-          return (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 lg:p-10"
-            >
-              <motion.div 
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="neon-panel bg-[#0a0a0a] max-w-[500px] w-full p-6 md:p-8 rounded-xl border border-white/20 shadow-2xl relative"
-              >
-                <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
-                  <h2 className="text-xl md:text-2xl font-black text-accent-cyan uppercase tracking-wider">👤 我的信息与属性</h2>
-                  <button 
-                    onClick={() => setShowPlayerInfo(false)} 
-                    className="text-zinc-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors"
-                  >
-                    ✕
-                  </button>
-                </div>
-                
-                <div className="space-y-6">
-                  <div className="flex justify-between items-center bg-white/5 p-4 rounded-lg border border-white/10">
-                    <span className="text-zinc-400">总资产</span>
-                    <div className="flex items-center gap-4">
-                      <span className="text-accent-yellow font-black text-xl">{playerData.wallet.coins} ⟁</span>
-                      <button 
-                        onClick={() => {
-                          if (confirm('确定要清空金币吗？此操作不可撤销。')) {
-                            setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: 0 } }));
-                          }
-                        }}
-                        className="text-xs text-red-500 hover:text-red-400 border border-red-500/30 hover:bg-red-500/10 px-2 py-1 rounded transition-colors"
-                        title="清空金币"
-                      >
-                        清空
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-accent-magenta uppercase tracking-widest border-l-2 border-accent-magenta pl-2">当前赛车配置</h3>
-                    
-                    <div className="bg-black/40 p-4 rounded-lg border border-white/5 space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">已装备赛车：</span>
-                        <span className="text-white font-bold">{baseVehicle.name}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">已装备引擎：</span>
-                        <span className={engine ? "text-accent-cyan" : "text-zinc-600"}>
-                          {engine ? engine.name : '未装备 (无加成)'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">已装备轮胎：</span>
-                        <span className={tires ? "text-accent-cyan" : "text-zinc-600"}>
-                          {tires ? tires.name : '未装备 (无加成)'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-accent-yellow uppercase tracking-widest border-l-2 border-accent-yellow pl-2">综合能力数值</h3>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-zinc-400">最终极速 (Max Speed)</span>
-                          <span className="font-mono text-accent-cyan">{finalSpeed.toFixed(1)}</span>
-                        </div>
-                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-full bg-accent-cyan rounded-full" style={{ width: `${Math.min((finalSpeed / 15) * 100, 100)}%` }} />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="text-zinc-400">抓地力/操控性 (Grip)</span>
-                          <span className="font-mono text-accent-magenta">{finalGrip.toFixed(2)}</span>
-                        </div>
-                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                          <div className="h-full bg-accent-magenta rounded-full" style={{ width: `${Math.min((finalGrip / 0.3) * 100, 100)}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                </div>
-              </motion.div>
-            </motion.div>
-          );
-        })()}
+        {showPlayerInfo && (
+          <PlayerInfoUI 
+            playerData={playerData} 
+            setPlayerData={setPlayerData} 
+            onClose={() => setShowPlayerInfo(false)} 
+          />
+        )}
       </AnimatePresence>
     </div>
   );
