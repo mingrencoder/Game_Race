@@ -230,6 +230,20 @@ async function startServer() {
         room.gameData.finishCountdown -= (deltaTime / 1000);
         if (room.gameData.finishCountdown <= 0) {
           room.status = 'FINISHED';
+          
+          // 【核心修复】：为所有未冲线的赛车打上 DNF 标记，防止前端错误发放奖励
+          room.gameData.cars = room.gameData.cars.map((c: any) => {
+            if (!c.finished) {
+              return { 
+                 ...c, 
+                 finished: true, 
+                 finishTime: Infinity, 
+                 dnf: true, 
+                 lap: room.settings.laps 
+              };
+            }
+            return c;
+          });
         }
       }
 

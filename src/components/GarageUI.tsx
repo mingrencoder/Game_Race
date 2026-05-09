@@ -19,23 +19,68 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
   const equipVehicle = (id: string) => setGarage(p => ({ ...p, profile: { ...p.profile, activeCarId: id } }));
   
+  const [pendingEquip, setPendingEquip] = useState<{ id: string | null, typeKey: string, oldId: string | null, fee: number } | null>(null);
+  const [equipError, setEquipError] = useState<string | null>(null);
+
   const equipItem = (id: string) => {
     const item = ITEMS_DB.find(i => i.id === id);
     if (!item) return;
-    setGarage(p => {
-      const typeKey = item.type as 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
-      const newGarage = [...p.garage];
-      const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
-      if (targetIdx !== -1) {
-          const v = { ...newGarage[targetIdx] };
-          v.equippedParts = {
-             ...v.equippedParts,
-             [typeKey]: v.equippedParts[typeKey] === id ? null : id
-          } as any;
-          newGarage[targetIdx] = v;
+    const typeKey = item.type as 'engine' | 'tires' | 'launch' | 'drift' | 'acceleration';
+    const activeCar = garage.garage.find(v => v.carId === garage.profile.activeCarId);
+    if (!activeCar) return;
+
+    const currentEquippedId = activeCar.equippedParts?.[typeKey];
+    
+    if (currentEquippedId !== id) {
+        if (!garage.inventory?.parts?.[id] || garage.inventory.parts[id] <= 0) {
+            setEquipError("库存中没有该零件！请前往商店购买或在黑市抽取。");
+            setTimeout(() => setEquipError(null), 3000);
+            return;
+        }
+    }
+
+    if (currentEquippedId) {
+        const oldItem = ITEMS_DB.find(i => i.id === currentEquippedId);
+        const fee = oldItem ? Math.floor(oldItem.price * 0.2) : 0;
+        setPendingEquip({ id: currentEquippedId === id ? null : id, typeKey, oldId: currentEquippedId, fee });
+    } else {
+        commitEquip(id, typeKey, null, 0);
+    }
+  };
+
+  const commitEquip = (newId: string | null, typeKey: string, oldId: string | null, fee: number) => {
+      if (fee > 0 && garage.wallet.coins < fee) {
+          setEquipError("金币不足，无法拆卸零件。");
+          setTimeout(() => setEquipError(null), 3000);
+          setPendingEquip(null);
+          return;
       }
-      return { ...p, garage: newGarage };
-    });
+      
+      setGarage(p => {
+          const newData = { ...p, inventory: { ...p.inventory, parts: { ...(p.inventory?.parts || {}) } } };
+          const newGarage = [...newData.garage];
+          const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
+          if (targetIdx !== -1) {
+              const v = { ...newGarage[targetIdx] };
+              v.equippedParts = { ...v.equippedParts, [typeKey]: newId } as any;
+              newGarage[targetIdx] = v;
+              newData.garage = newGarage;
+          }
+          
+          if (fee > 0) {
+              newData.wallet = { ...newData.wallet, coins: newData.wallet.coins - fee };
+          }
+          
+          if (oldId) {
+              newData.inventory.parts[oldId] = (newData.inventory.parts[oldId] || 0) + 1;
+          }
+          if (newId) {
+              newData.inventory.parts[newId] = Math.max(0, (newData.inventory.parts[newId] || 0) - 1);
+          }
+          
+          return newData;
+      });
+      setPendingEquip(null);
   };
 
   const equipLivery = (val: string) => setGarage(p => {
@@ -102,9 +147,14 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
     >
       <header className="shrink-0 z-10 bg-[#0d0e15]/95 backdrop-blur-md border-b border-white/10 w-full">
         <div className="p-4 md:px-8 md:pt-6 md:pb-4 max-w-6xl mx-auto flex flex-col gap-4 w-full">
-          <div className="flex justify-between items-center w-full">
-            <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest shrink-0 leading-none">我的车库</h1>
-            <button onClick={onClose} className="px-4 md:px-6 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg transition-all text-sm shadow-[0_4px_10px_rgba(0,0,0,0.5)] whitespace-nowrap">返回主菜单</button>
+          <div className="flex justify-between items-start w-full">
+            <h1 className="text-3xl md:text-4xl font-black italic text-accent-cyan tracking-widest shrink-0 leading-none mt-2">我的车库</h1>
+            <div className="flex flex-col items-end gap-2 shrink-0">
+               <div className="text-accent-yellow font-mono text-sm md:text-lg font-bold bg-black/50 px-3 md:px-4 py-1.5 rounded-lg border border-accent-yellow/30">
+                 余额: {garage.wallet.coins.toLocaleString()} ⟁
+               </div>
+               <button onClick={onClose} className="w-full px-4 md:px-6 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-lg transition-all text-sm shadow-[0_4px_10px_rgba(0,0,0,0.5)] whitespace-nowrap text-center">返回主菜单</button>
+            </div>
           </div>
           
           <div className="bg-black/40 border border-white/10 rounded-lg p-3 flex gap-4 text-center flex-wrap shrink-0">
@@ -249,7 +299,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                           ) : (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 font-bold text-[10px] z-10 rounded-lg whitespace-normal text-center p-1 leading-tight border border-red-500/50">⚠️ 租期已尽请前往商店续费</div>
                           )}
-                          <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped && state?.equippedPaint?.startsWith('#') ? state.equippedPaint : '#00f2ff'} />
+                          <VehiclePreview vehicleType={v.type} width={60} height={60} color={LIVERIES_DB.find(l => l.id === state?.equippedPaint) ? '#ffffff' : (state?.equippedPaint || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === state?.equippedPaint) ? { isGradient: LIVERIES_DB.find(l => l.id === state?.equippedPaint)!.isGradient, colors: LIVERIES_DB.find(l => l.id === state?.equippedPaint)!.colors } : undefined} />
                         </div>
                         <div className="min-w-0">
                           <h3 className="text-sm font-bold text-white mb-0.5 leading-tight truncate">
@@ -279,11 +329,12 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
         {tab === 'ITEMS' && (
           <div className="flex flex-col gap-6 w-full">
             {(['engine', 'tires', 'acceleration', 'launch', 'drift'] as const).map(category => {
-              const categoryItems = Object.keys(garage.inventory.parts).filter(id => {
-                const count = garage.inventory.parts[id] || 0;
-                if (count <= 0) return false;
-                const item = ITEMS_DB.find(x => x.id === id);
-                return item?.type === category;
+              const categoryItems = Array.from(new Set([
+                 ...Object.keys(garage.inventory.parts).filter(id => garage.inventory.parts[id] > 0),
+                 ...(vState?.equippedParts ? Object.values(vState.equippedParts).filter(Boolean) as string[] : [])
+              ])).filter(id => {
+                 const item = ITEMS_DB.find(x => x.id === id);
+                 return item?.type === category;
               }).sort((a, b) => {
                 const itemA = ITEMS_DB.find(x => x.id === a);
                 const itemB = ITEMS_DB.find(x => x.id === b);
@@ -329,7 +380,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                             onClick={() => equipItem(item.id)}
                             className={`w-full py-1.5 rounded text-xs font-bold transition-all hover:scale-105 active:scale-95 ${isEquipped ? 'bg-white text-black' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                           >
-                            {isEquipped ? '已安装' : '安装'}
+                            {isEquipped ? `卸载 (库存:${garage.inventory?.parts?.[item.id] || 0})` : `安装 (库存:${garage.inventory?.parts?.[item.id] || 0})`}
                           </button>
                         </div>
                       );
@@ -420,7 +471,42 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   </div>
 </div>
       <AnimatePresence>
-        {showMaintenanceConfirm && (
+        {equipError && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+  <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-black/90 p-4 border border-red-500/50 rounded-lg shadow-[0_0_20px_rgba(239,68,68,0.3)] max-w-sm w-full">
+    <div className="text-red-500 text-center text-sm font-bold mb-4">{equipError}</div>
+    <button onClick={() => setEquipError(null)} className="w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded text-sm transition-colors">确定</button>
+  </motion.div>
+</div>
+      )}
+
+      {pendingEquip && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-black border border-white/20 p-6 rounded-xl max-w-sm w-full neon-panel">
+            <h3 className="text-xl font-bold mb-4 text-white">确认拆卸/替换零件？</h3>
+            <p className="text-zinc-300 mb-6 text-sm">
+              卸载或替换该零件将收取折旧费：<span className="text-accent-yellow font-bold">{pendingEquip.fee} ⟁</span> (原价的20%)。<br/><br/>
+              确定执行吗？拆卸后，旧零件将返还至你的库存。
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setPendingEquip(null)}
+                className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={() => commitEquip(pendingEquip.id, pendingEquip.typeKey, pendingEquip.oldId, pendingEquip.fee)}
+                className="flex-1 py-2 rounded-lg bg-accent-yellow hover:bg-[#fff000] text-black font-bold transition-colors shadow-[0_0_15px_rgba(255,223,0,0.3)]"
+              >
+                确定拆卸
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {showMaintenanceConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

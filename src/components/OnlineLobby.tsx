@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { socketService } from '../services/socketService';
-import { VEHICLES_DB, LIVERIES_DB, ITEMS_DB, TRACKS } from '../constants';
+import { VEHICLES_DB, LIVERIES_DB, ITEMS_DB, TRACKS, BASIC_COLORS } from '../constants';
 import VehiclePreview from './VehiclePreview';
 
 export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?: string, onBack: () => void, onStartLobby: () => void }) => {
@@ -346,7 +346,7 @@ export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?
 
 import { TrackSelector } from './TrackSelector';
 
-export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, onViewLeaderboard }: { activeCarId: string, coins: number, garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void }) => {
+export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, onViewLeaderboard, onUpdateActiveCar }: { activeCarId: string, coins: number, garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void, onUpdateActiveCar?: (carId: string, color: string, liveryId: string | null) => void }) => {
   const [room, setRoom] = useState(socketService.room);
   const [showTrackSelector, setShowTrackSelector] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -409,6 +409,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
 
   const isHost = myPlayer?.isHost;
   const allReady = room.players.every(p => p.isReady || p.isAI);
+  const allOthersReady = room.players.filter(p => p.id !== room.hostId).every(p => p.isReady || p.isAI);
 
   const handleVehicleChange = (dir: number) => {
     if (!myPlayer) return;
@@ -495,7 +496,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                   )}
                   <VehiclePreview 
                     vehicleType={VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.type || 'standard'} 
-                    color={LIVERIES_DB.find(l => l.id === myPlayer?.liveryId) ? '#ffffff' : '#00f2ff'} 
+                    color={LIVERIES_DB.find(l => l.id === myPlayer?.liveryId) ? '#ffffff' : (myPlayer?.liveryId || '#00f2ff')} 
                     width={160} height={160}
                     liveryData={myPlayer?.liveryId ? LIVERIES_DB.find(l => l.id === myPlayer.liveryId)! : undefined}
                   />
@@ -518,12 +519,48 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                  </button>
                </div>
 
-               <button 
-                 onClick={() => socketService.setReady(!myPlayer?.isReady)}
-                 className={`w-full py-4 rounded font-black text-xl transition-all ${myPlayer?.isReady ? 'bg-accent-cyan text-black shadow-[0_0_20px_rgba(0,242,255,0.4)]' : 'bg-white/10 text-white'}`}
-               >
-                 {myPlayer?.isReady ? '已准备' : '准备就绪'}
-               </button>
+               {isHost ? (
+                 <div className="relative w-full">
+                   {room.settings.isTeamMode && room.players.length < 4 && (
+                      <div className="absolute -top-12 left-0 right-0 text-red-500 font-bold bg-red-500/20 border border-red-500/50 rounded py-2 text-center text-sm shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                        人数不足 4 人，无法开启组队赛
+                      </div>
+                   )}
+                   <button 
+                     onClick={() => {
+                       if (room.settings.isTeamMode) {
+                         const redCount = room.players.filter(p => p.team === 'RED').length;
+                         const blueCount = room.players.filter(p => p.team === 'BLUE').length;
+                         if (redCount !== blueCount || redCount === 0 || (redCount + blueCount !== room.players.length)) {
+                           setStartGameError('无法开始：红队和蓝队的车手数量必须一致，且所有车手都必须分配队伍！');
+                           return;
+                         }
+                       }
+                       
+                       // 1. 强制将房主自身设置为 Ready，防止后端的“全员就绪强校验”拦截开赛请求
+                       socketService.setReady(true);
+                       
+                       // 2. 向服务端发送真正的开赛请求
+                       socketService.startGame();
+                       
+                       // 3. 【核心修复】：彻底删除这里的 onStartGame() 调用！
+                       // 房主必须和所有人一样，等待服务端统一广播 `gameStarted` 事件后，由 useEffect 触发跳转。
+                     }}
+                     title={!allOthersReady ? '等待其他玩家准备...' : ''}
+                     disabled={!allOthersReady || (room.settings.isTeamMode && room.players.length < 4)}
+                     className={`w-full py-4 rounded font-black text-xl transition-all ${allOthersReady && !(room.settings.isTeamMode && room.players.length < 4) ? 'bg-accent-yellow text-black shadow-[0_0_20px_rgba(255,234,0,0.4)]' : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'}`}
+                   >
+                     {!allOthersReady ? '等待其他玩家准备...' : '开始比赛'}
+                   </button>
+                 </div>
+               ) : (
+                 <button 
+                   onClick={() => socketService.setReady(!myPlayer?.isReady)}
+                   className={`w-full py-4 rounded font-black text-xl transition-all ${myPlayer?.isReady ? 'bg-accent-cyan text-black shadow-[0_0_20px_rgba(0,242,255,0.4)]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                 >
+                   {myPlayer?.isReady ? '取消准备' : '准备比赛'}
+                 </button>
+               )}
                
                {/* Map Preview */}
                <div className="w-full mt-4 bg-black/40 border border-white/10 rounded-xl p-4 flex flex-col relative overflow-hidden">
@@ -591,19 +628,20 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                        return (
                          <div 
                            key={car.carId} 
-                           onClick={() => socketService.updatePlayer({ 
-                               vehicleId: car.carId, 
+                           onClick={() => { socketService.updatePlayer({ vehicleId: car.carId, 
                                liveryId: car.equippedPaint || 'livery_basic',
                                engineId: car.equippedParts?.engine || null, 
                                tiresId: car.equippedParts?.tires || null, 
                                launchId: car.equippedParts?.launch || null, 
                                driftId: car.equippedParts?.drift || null, 
                                accelerationId: car.equippedParts?.acceleration || null 
-                           })}
+                            });
+                            if (onUpdateActiveCar) onUpdateActiveCar(car.carId, car.equippedPaint || '#00f2ff', car.equippedPaint || 'livery_basic');
+                         }}
                            className={`p-3 rounded border text-left flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${isSelected ? 'border-accent-cyan bg-accent-cyan/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                          >
                            <div className="text-xs font-mono font-bold w-full text-right text-accent-yellow">Lv.+{car.level}</div>
-                           <VehiclePreview vehicleType={vDef.type} width={60} height={60} color="#fff" />
+                           <VehiclePreview vehicleType={vDef.type} width={60} height={60} color={LIVERIES_DB.find(l => l.id === car.equippedPaint) ? '#ffffff' : (car.equippedPaint || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === car.equippedPaint)!} />
                            <div className="text-sm font-bold truncate w-full text-center">{vDef.name}</div>
                            <div className="text-[10px] text-zinc-500 truncate w-full text-center">
                              {['engine', 'tires', 'launch', 'drift', 'acceleration'].map(t => ITEMS_DB.find(i => i.id === car.equippedParts?.[t])?.name).filter(Boolean).join(' | ') || '无配件'}
@@ -613,14 +651,39 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                      })}
                    </div>
 
-                   <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2 mt-4">拥有的涂装</h3>
+                   <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2 mt-4">基础颜色</h3>
+                    <div className="flex gap-2 mb-4">
+                      {BASIC_COLORS.map(color => {
+                        const isSelected = myPlayer?.liveryId === color;
+                        return (
+                          <div 
+                            key={color} 
+                            onClick={() => {
+                               socketService.updatePlayer({ liveryId: color });
+                               if (onUpdateActiveCar && myPlayer) {
+                                  onUpdateActiveCar(myPlayer.vehicleId, color, color);
+                               }
+                            }}
+                            className={`w-10 h-10 rounded-full border-2 cursor-pointer transition-all ${isSelected ? 'border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                            style={{ backgroundColor: color, boxShadow: isSelected ? `0 0 15px ${color}` : 'none' }}
+                          ></div>
+                        );
+                      })}
+                    </div>
+
+                    <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2 mt-4">拥有的涂装</h3>
                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                      {LIVERIES_DB.filter(l => l.price === 0 || garage.some(c => c.equippedPaint === l.id /* simplify: ideally should come from unlocked liveries but for this prd we only change equipped paint */)).map(livery => {
                        const isSelected = myPlayer?.liveryId === livery.id;
                        return (
                          <div 
                            key={livery.id} 
-                           onClick={() => socketService.updatePlayer({ liveryId: livery.id })}
+                           onClick={() => {
+                              socketService.updatePlayer({ liveryId: livery.id });
+                              if (onUpdateActiveCar && myPlayer) {
+                                  onUpdateActiveCar(myPlayer.vehicleId, livery.colors[0], livery.id);
+                              }
+                            }}
                            className={`p-2 rounded border text-center cursor-pointer transition-all flex flex-col items-center gap-2 ${isSelected ? 'border-accent-magenta bg-accent-magenta/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                          >
                            <div className="w-full h-8 rounded" style={{
@@ -718,7 +781,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                {[...room.players].sort((a,b)=>((b.score||0)-(a.score||0))).map(p => (
                  <div key={p.id} className={`flex items-center justify-between p-3 rounded border ${p.isReady || p.isAI ? 'border-accent-cyan/30 bg-accent-cyan/10' : 'border-white/10 bg-white/5'}`}>
                     <div className="flex items-center gap-3">
-                       <VehiclePreview vehicleType={VEHICLES_DB.find(v => v.id === p.vehicleId)?.type || 'standard'} width={40} height={40} color="#fff" liveryData={LIVERIES_DB.find(l => l.id === p.liveryId)!} />
+                       <VehiclePreview vehicleType={VEHICLES_DB.find(v => v.id === p.vehicleId)?.type || 'standard'} width={40} height={40} color={LIVERIES_DB.find(l => l.id === p.liveryId) ? '#ffffff' : (p.liveryId || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === p.liveryId)!} />
                        <div>
                          <span className="font-bold flex items-center gap-2">
                            {p.name}
@@ -817,7 +880,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                         socketService.updateSettings({ aiDifficulty: newDiff });
                         room.players.filter(p => p.isAI).forEach(ai => socketService.updatePlayerByHost(ai.id, generateAIConfig(newDiff)));
                       }} className="px-1 hover:text-white">-</button>
-                      <span className="text-accent-cyan font-bold w-6 text-center">{room.settings.aiDifficulty === 5 ? '精英' : `L${room.settings.aiDifficulty || 2}`}</span>
+                      <span className="text-accent-cyan font-bold w-24 text-center">{['入门级(L1)', '业余级(L2)', '专业级(L3)', '大师级(L4)', '精英级(L5)'][(room.settings.aiDifficulty || 2) - 1] || '业余级(L2)'}</span>
                       <button onClick={() => {
                         const newDiff = Math.min(5, (room.settings.aiDifficulty || 2) + 1);
                         socketService.updateSettings({ aiDifficulty: newDiff });
@@ -838,36 +901,9 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
               </div>
             )}
 
-            {isHost ? (
-               <div className="relative">
-                 {room.settings.isTeamMode && room.players.length < 4 && (
-                    <div className="absolute -top-12 left-0 right-0 text-red-500 font-bold bg-red-500/20 border border-red-500/50 rounded py-2 text-center text-sm shadow-[0_0_15px_rgba(239,68,68,0.2)]">
-                      人数不足 4 人，无法开启组队赛
-                    </div>
-                 )}
-                 <button 
-                   onClick={() => {
-                     if (room.settings.isTeamMode) {
-                       const redCount = room.players.filter(p => p.team === 'RED').length;
-                       const blueCount = room.players.filter(p => p.team === 'BLUE').length;
-                       if (redCount !== blueCount || redCount === 0 || (redCount + blueCount !== room.players.length)) {
-                         setStartGameError('无法开始：红队和蓝队的车手数量必须一致，且所有车手都必须分配队伍！');
-                         return;
-                       }
-                     }
-                     socketService.startGame();
-                   }}
-                   disabled={!allReady || (room.settings.isTeamMode && room.players.length < 4)}
-                   className={`w-full py-4 rounded font-black text-xl transition-all ${allReady && !(room.settings.isTeamMode && room.players.length < 4) ? 'bg-accent-magenta text-white shadow-[0_0_20px_rgba(255,0,234,0.4)]' : 'bg-white/10 text-zinc-500 cursor-not-allowed'}`}
-                 >
-                   开始比赛
-                 </button>
-               </div>
-            ) : (
-               <div className="text-center text-zinc-500 py-4 font-bold text-sm bg-black/40 rounded border border-white/5">
-                 {allReady ? '等待房主开始比赛...' : '等待其他玩家准备...'}
-               </div>
-            )}
+            <div className="text-center text-zinc-500 py-4 font-bold text-sm bg-black/40 rounded border border-white/5">
+              {isHost ? (allOthersReady ? '所有玩家已就绪，您可以开始比赛了' : '等待其他玩家准备...') : (allOthersReady && myPlayer?.isReady ? '等待房主开始比赛...' : '等待其他玩家准备...')}
+            </div>
          </div>
       </div>
     </div>

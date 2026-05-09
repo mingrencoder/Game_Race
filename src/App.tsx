@@ -1333,22 +1333,18 @@ export default function App() {
                 <strong>驾驶警告：</strong>由于赛道抓地力限制，转弯速度过快将导致赛车撞击赛道边缘。物理碰撞会产生剧烈摩擦并大幅降低车速。
               </div>
               <div className="flex w-full md:w-auto gap-4 flex-wrap md:flex-nowrap">
-                {(settings.mode === 'SINGLE' || (settings.mode === 'TEAM' || settings.isTeamMode)) && (
-                  <>
-                    <button 
-                      onClick={() => setGameState('GARAGE')}
-                      className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
-                    >
-                      我的车库
-                    </button>
-                    <button 
-                      onClick={() => setGameState('ENHANCEMENT')}
-                      className="flex-1 md:flex-none border border-[#f4ff40]/50 text-[#f4ff40] px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-[#f4ff40] hover:text-black"
-                    >
-                      强化工坊
-                    </button>
-                  </>
-                )}
+                <button 
+                  onClick={() => setGameState('GARAGE')}
+                  className="flex-1 md:flex-none border border-accent-cyan/50 text-accent-cyan px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-cyan hover:text-black"
+                >
+                  我的车库
+                </button>
+                <button 
+                  onClick={() => setGameState('ENHANCEMENT')}
+                  className="flex-1 md:flex-none border border-[#f4ff40]/50 text-[#f4ff40] px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-[#f4ff40] hover:text-black"
+                >
+                  强化工坊
+                </button>
                 <button 
                   onClick={() => setGameState('SHOP')}
                   className="flex-1 md:flex-none bg-accent-magenta/20 text-accent-magenta border border-accent-magenta px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-accent-magenta/40"
@@ -1372,7 +1368,21 @@ export default function App() {
         {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'ONLINE_MENU' && <OnlineMenu initialName={playerData.profile.nickname} onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
-        {gameState === 'ONLINE_LOBBY' && <OnlineLobby activeCarId={playerData.profile.activeCarId} coins={playerData.wallet.coins} garage={playerData.garage} onBack={() => {
+        {gameState === 'ONLINE_LOBBY' && <OnlineLobby 
+          activeCarId={playerData.profile.activeCarId} 
+          coins={playerData.wallet.coins} 
+          garage={playerData.garage} 
+          onUpdateActiveCar={(carId, color, liveryId) => {
+            setPlayerData(p => {
+              const newGarage = [...p.garage];
+              const targetIdx = newGarage.findIndex(v => v.carId === carId);
+              if (targetIdx !== -1) {
+                newGarage[targetIdx] = { ...newGarage[targetIdx], equippedPaint: liveryId || color };
+              }
+              return { ...p, profile: { ...p.profile, activeCarId: carId }, garage: newGarage };
+            });
+          }}
+          onBack={() => {
           import('./services/socketService').then(({ socketService }) => {
             socketService.socket?.emit('leaveRoom');
           });
@@ -1710,27 +1720,25 @@ export default function App() {
                   
                   // For UI Display of purely single-match calculations:
                   let displayCoins = 0;
-                  if (settings.mode !== 'ONLINE') {
-                    const isTeamWin = teamScore && ((teamScore.RED > teamScore.BLUE && car.team === 'RED') || (teamScore.BLUE > teamScore.RED && car.team === 'BLUE'));
-                    
-                    let mvpId = '';
-                    let maxPts = -1;
-                    if (isTeamWin) {
-                       results.filter(c => c.team === car.team).forEach(c => {
-                          const pts = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
-                          if (pts > maxPts) { maxPts = pts; mvpId = c.id; }
-                       });
-                    }
-                    displayCoins = calculateCoinReward(
-                       index,
-                       results.length,
-                       settings.aiDifficulty,
-                       !!(settings.mode === 'TEAM' || settings.isTeamMode),
-                       !!isTeamWin,
-                       !!(isFlawlessResult && car.team === 'RED'),
-                       car.id === mvpId
-                    );
+                  const isTeamWin = teamScore && ((teamScore.RED > teamScore.BLUE && car.team === 'RED') || (teamScore.BLUE > teamScore.RED && car.team === 'BLUE'));
+                  
+                  let mvpId = '';
+                  let maxPts = -1;
+                  if (isTeamWin) {
+                     results.filter(c => c.team === car.team).forEach(c => {
+                        const pts = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
+                        if (pts > maxPts) { maxPts = pts; mvpId = c.id; }
+                     });
                   }
+                  displayCoins = calculateCoinReward(
+                     index,
+                     results.length,
+                     settings.aiDifficulty,
+                     !!(settings.mode === 'TEAM' || settings.isTeamMode),
+                     !!isTeamWin,
+                     !!(isFlawlessResult && isTeamWin),
+                     car.id === mvpId
+                  );
                   return (
                     <div 
                       key={car.id} 
