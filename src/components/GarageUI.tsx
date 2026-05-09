@@ -157,8 +157,19 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                  liveryData={LIVERIES_DB.find(l => l.id === vState?.equippedPaint) ? { isGradient: LIVERIES_DB.find(l => l.id === vState?.equippedPaint)!.isGradient, colors: LIVERIES_DB.find(l => l.id === vState?.equippedPaint)!.colors } : undefined}
                />
                {vState && (
-                  <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs font-mono font-bold border border-white/10">
-                     Lv. +{vState.level}
+                  <div className="absolute top-2 right-2 flex flex-col gap-1 items-end z-10">
+                    <div className="px-2 py-1 bg-black/60 rounded text-xs font-mono font-bold border border-white/10">
+                       Lv. +{vState.level}
+                    </div>
+                    {vState.isPermanent ? (
+                       <span className="text-[10px] text-accent-cyan border border-accent-cyan/30 bg-accent-cyan/10 px-1.5 py-0.5 rounded">永久</span>
+                    ) : vState.expireAt ? (
+                       Math.ceil((vState.expireAt - Date.now()) / (1000 * 60 * 60 * 24)) > 0 ? (
+                          <span className="text-[10px] text-accent-yellow bg-accent-yellow/10 px-1.5 py-0.5 rounded border border-accent-yellow/30">剩余 {Math.ceil((vState.expireAt - Date.now()) / (1000 * 60 * 60 * 24))} 天</span>
+                       ) : (
+                          <span className="text-[10px] text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/30">⚠️ 租期已尽，请前往商店续费</span>
+                       )
+                    ) : null}
                   </div>
                )}
              </div>
@@ -231,7 +242,13 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                     return (
                       <div key={v.id} className={`neon-panel p-2.5 flex flex-col justify-between gap-2 transition-colors ${isEquipped ? 'border-accent-cyan bg-accent-cyan/10' : ''} ${isExpired ? 'opacity-50 grayscale border-red-500/50' : ''}`}>
                         <div className="flex justify-center items-center bg-black/40 rounded-lg py-1.5 border border-white/5 shadow-inner min-h-[70px] relative">
-                          {isExpired && <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 font-bold text-xs z-10 rounded-lg whitespace-nowrap">租赁过期</div>}
+                          {state.isPermanent ? (
+                            <div className="absolute top-1 right-1 z-10"><span className="text-[10px] text-accent-cyan border border-accent-cyan/30 bg-accent-cyan/10 px-1.5 py-0.5 rounded">永久</span></div>
+                          ) : state.expireAt && Math.ceil((state.expireAt - Date.now()) / (1000 * 60 * 60 * 24)) > 0 ? (
+                            <div className="absolute top-1 right-1 z-10"><span className="text-[10px] text-accent-yellow bg-accent-yellow/10 px-1.5 py-0.5 rounded border border-accent-yellow/30">剩余 {Math.ceil((state.expireAt - Date.now()) / (1000 * 60 * 60 * 24))} 天</span></div>
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-red-500 font-bold text-[10px] z-10 rounded-lg whitespace-normal text-center p-1 leading-tight border border-red-500/50">⚠️ 租期已尽请前往商店续费</div>
+                          )}
                           <VehiclePreview vehicleType={v.type} width={60} height={60} color={isEquipped && state?.equippedPaint?.startsWith('#') ? state.equippedPaint : '#00f2ff'} />
                         </div>
                         <div className="min-w-0">

@@ -39,11 +39,16 @@ export class ShopController {
             const existingCar = playerData.garage.find((c: any) => c.carId === carId);
 
             if (existingCar) {
+                if (existingCar.isPermanent) {
+                    res.status(400).json({ error: '您已永久拥有该赛车' });
+                    return;
+                }
+                
                 if (isPermanent) {
                     existingCar.isPermanent = true;
                     existingCar.expireAt = null;
-                } else if (!existingCar.isPermanent) {
-                    existingCar.expireAt = (existingCar.expireAt || Date.now()) + 30 * 24 * 60 * 60 * 1000;
+                } else {
+                    existingCar.expireAt = Math.max(Date.now(), existingCar.expireAt || Date.now()) + 3 * 24 * 60 * 60 * 1000;
                 }
             } else {
                 playerData.garage.push({
@@ -51,7 +56,7 @@ export class ShopController {
                     level: 0,
                     durability: 100,
                     isPermanent,
-                    expireAt: isPermanent ? null : Date.now() + 30 * 24 * 60 * 60 * 1000,
+                    expireAt: isPermanent ? null : Date.now() + 3 * 24 * 60 * 60 * 1000,
                     equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
                 });
             }

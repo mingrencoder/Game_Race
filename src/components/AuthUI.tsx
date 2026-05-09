@@ -22,6 +22,11 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
       return;
     }
     
+    if (password.length < 6 || password.length > 16) {
+      setError('访问密钥长度必须在6到16位之间');
+      return;
+    }
+    
     setIsLoading(true);
     
     // Pure frontend mock with simulated delay
@@ -88,12 +93,14 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-[#ff0055] transition-colors" size={18} />
                 <input
                   type="password"
-                  placeholder="请输入安全密钥..."
+                  placeholder="请输入安全密钥(6-16位)..."
                   value={password}
                   onChange={(e) => {
                     setPassword(e.target.value);
                     setError('');
                   }}
+                  minLength={6}
+                  maxLength={16}
                   disabled={isLoading}
                   className="w-full bg-black/50 border border-white/10 rounded-lg py-3 pl-10 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-[#ff0055] focus:ring-1 focus:ring-[#ff0055] transition-all font-mono disabled:opacity-50"
                 />

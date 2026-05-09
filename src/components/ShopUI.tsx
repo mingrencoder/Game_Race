@@ -20,14 +20,14 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
         const newGarage = [...g.garage];
         const vIndex = newGarage.findIndex(c => c.carId === id);
         const now = Date.now();
-        const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+        const leaseMs = 3 * 24 * 60 * 60 * 1000;
         
         let newExpireTimestamp: number | null = null;
         if (isLease) {
           if (vIndex !== -1 && newGarage[vIndex].expireAt && newGarage[vIndex].expireAt > now) {
-            newExpireTimestamp = newGarage[vIndex].expireAt! + thirtyDaysMs;
+            newExpireTimestamp = newGarage[vIndex].expireAt! + leaseMs;
           } else {
-            newExpireTimestamp = now + thirtyDaysMs;
+            newExpireTimestamp = now + leaseMs;
           }
         }
 
@@ -220,7 +220,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                            disabled={!canAffordRent}
                            className="flex-1 py-1.5 bg-accent-cyan text-black font-bold rounded text-xs disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
                          >
-                           {isLeased ? '续租30天' : '租赁30天'}<br/>{rentPrice} ⟁
+                           {isLeased ? '续费 (累计时长)' : '租赁 3 天'}<br/>{rentPrice} ⟁
                          </button>
                          <button 
                            onClick={() => handlePurchaseVehicle(v.id, v.price, false)}
