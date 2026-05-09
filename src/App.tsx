@@ -1372,7 +1372,7 @@ export default function App() {
         {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'ONLINE_MENU' && <OnlineMenu initialName={playerData.profile.nickname} onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
-        {gameState === 'ONLINE_LOBBY' && <OnlineLobby garage={playerData.garage} onBack={() => {
+        {gameState === 'ONLINE_LOBBY' && <OnlineLobby activeCarId={playerData.profile.activeCarId} coins={playerData.wallet.coins} garage={playerData.garage} onBack={() => {
           import('./services/socketService').then(({ socketService }) => {
             socketService.socket?.emit('leaveRoom');
           });
@@ -1666,7 +1666,7 @@ export default function App() {
                        })}
                     </div>
 
-                    {isRedWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜) +20⟁' : '获胜 +20⟁'}</span>}
+                    {isRedWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜)' : '获胜'}</span>}
                   </div>
                   
                   <div className="text-white/30 text-4xl mt-4">对决</div>
@@ -1691,7 +1691,7 @@ export default function App() {
                        })}
                     </div>
 
-                    {isBlueWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜) +20⟁' : '获胜 +20⟁'}</span>}
+                    {isBlueWin && <span className="text-xs text-yellow-400 mt-2 bg-yellow-400/10 px-2 py-1 rounded">{isTieBreak ? '险胜(冠军决胜)' : '获胜'}</span>}
                   </div>
                 </div>
               );
@@ -1762,7 +1762,7 @@ export default function App() {
                         <div className="font-mono text-xl text-accent-cyan">
                           {car.dnf ? <span className="text-red-500 text-sm">DNF</span> : `${(car.finishTime! / 1000).toFixed(2)}s`}
                         </div>
-                        {isLocalPlayer && !car.dnf && settings.mode !== 'ONLINE' && (
+                        {isLocalPlayer && !car.dnf && (
                           <div className="font-mono text-sm text-accent-yellow bg-accent-yellow/10 px-3 py-1 rounded-full border border-accent-yellow/30 flex items-center gap-1">
                              奖励 💰 +{displayCoins}
                           </div>

@@ -346,10 +346,12 @@ export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?
 
 import { TrackSelector } from './TrackSelector';
 
-export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: { garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void }) => {
+export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, onViewLeaderboard }: { activeCarId: string, coins: number, garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void }) => {
   const [room, setRoom] = useState(socketService.room);
   const [showTrackSelector, setShowTrackSelector] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
   const [startGameError, setStartGameError] = useState<string | null>(null);
+  const hasSyncedInitVehicle = React.useRef(false);
   
   useEffect(() => {
     setRoom(socketService.room);
@@ -386,6 +388,25 @@ export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: 
   if (!room) return <div className="p-8 text-center">Loading...</div>;
 
   const myPlayer = room.players.find(p => p.id === socketService.playerId);
+
+  React.useEffect(() => {
+    if (myPlayer && !hasSyncedInitVehicle.current) {
+        hasSyncedInitVehicle.current = true;
+        const activeCar = garage.find(c => c.carId === activeCarId);
+        if (activeCar) {
+            socketService.updatePlayer({ 
+                vehicleId: activeCar.carId, 
+                liveryId: activeCar.equippedPaint || 'livery_basic', 
+                engineId: activeCar.equippedParts?.engine || null, 
+                tiresId: activeCar.equippedParts?.tires || null, 
+                launchId: activeCar.equippedParts?.launch || null, 
+                driftId: activeCar.equippedParts?.drift || null, 
+                accelerationId: activeCar.equippedParts?.acceleration || null 
+            });
+        }
+    }
+  }, [myPlayer, garage, activeCarId]);
+
   const isHost = myPlayer?.isHost;
   const allReady = room.players.every(p => p.isReady || p.isAI);
 
@@ -456,39 +477,45 @@ export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: 
           🏆 排行榜
         </button>
       </div>
-      <div className="absolute top-16 right-4 z-[100] text-white text-sm bg-black/50 px-4 py-2 rounded backdrop-blur border border-white/10">
-        您的昵称: <span className="text-accent-cyan font-bold">{myPlayer?.name || '您'}</span>
+      <div className="absolute top-16 right-4 z-[100] text-white text-sm bg-black/50 px-4 py-2 rounded backdrop-blur border border-white/10 flex flex-col items-end gap-1">
+        <div>您的昵称: <span className="text-accent-cyan font-bold">{myPlayer?.name || '您'}</span></div>
+        <div className="text-accent-yellow font-mono text-xs">金币: {coins.toLocaleString()} ⟁</div>
       </div>
       <div className="neon-panel max-w-5xl w-full flex flex-col md:flex-row gap-6 p-6">
          {/* Left Side: My Settings */}
          <div className="flex-1 border-r border-white/10 pr-6">
-            <h2 className="text-xl font-bold mb-2">在线对战</h2>
-            <p className="text-sm text-zinc-400 mb-6 border-b border-white/10 pb-4">
-              这里可以使用所有车辆、道具和涂装，无需金币。
-            </p>
+            <h2 className="text-xl font-bold mb-6">在线对战</h2>
 
             <div className="flex flex-col items-center gap-4">
-               <div className="bg-black/40 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center w-full">
+               <div className="bg-black/40 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center w-full relative">
+                  {garage.find(c => c.carId === myPlayer?.vehicleId) && (
+                     <div className="absolute top-4 right-4 text-xs font-mono font-bold text-accent-yellow bg-black/50 px-2 py-1 rounded border border-accent-yellow/30">
+                        Lv.+{garage.find(c => c.carId === myPlayer?.vehicleId)?.level || 0}
+                     </div>
+                  )}
                   <VehiclePreview 
                     vehicleType={VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.type || 'standard'} 
                     color={LIVERIES_DB.find(l => l.id === myPlayer?.liveryId) ? '#ffffff' : '#00f2ff'} 
                     width={160} height={160}
                     liveryData={myPlayer?.liveryId ? LIVERIES_DB.find(l => l.id === myPlayer.liveryId)! : undefined}
                   />
+                  <div className="mt-4 text-center">
+                     <div className="font-bold text-lg">{VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.name || '未知车辆'}</div>
+                     <div className="text-xs text-zinc-500 mt-1">
+                        {['engine', 'tires', 'launch', 'drift', 'acceleration']
+                           .map(t => ITEMS_DB.find(i => i.id === garage.find(c => c.carId === myPlayer?.vehicleId)?.equippedParts?.[t as any])?.name)
+                           .filter(Boolean).join(' | ') || '无配件'}
+                     </div>
+                  </div>
                </div>
                
                <div className="w-full">
-                 <div className={`flex justify-between items-center bg-white/5 rounded p-2 mb-2 ${myPlayer?.isReady ? 'opacity-50 pointer-events-none' : ''}`}>
-                   <button onClick={() => handleVehicleChange(-1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&lt;</button>
-                   <span className="font-bold">车辆: {VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.name}</span>
-                   <button onClick={() => handleVehicleChange(1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&gt;</button>
-                 </div>
-                 
-                 <div className={`flex justify-between items-center bg-white/5 rounded p-2 mb-2 ${myPlayer?.isReady ? 'opacity-50 pointer-events-none' : ''}`}>
-                   <button onClick={() => handleLiveryChange(-1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&lt;</button>
-                   <span>涂装: {LIVERIES_DB.find(l => l.id === myPlayer?.liveryId)?.name}</span>
-                   <button onClick={() => handleLiveryChange(1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&gt;</button>
-                 </div>
+                 <button 
+                   onClick={() => setShowConfigModal(true)}
+                   className={`w-full py-2 mb-4 bg-white/10 hover:bg-white/20 text-white font-bold rounded border border-white/20 transition-all ${myPlayer?.isReady ? 'opacity-50 pointer-events-none' : ''}`}
+                 >
+                   更改配置
+                 </button>
                </div>
 
                <button 
@@ -533,6 +560,86 @@ export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: 
                </div>
             </div>
          </div>
+
+         {/* Settings Modal */}
+         <AnimatePresence>
+           {showConfigModal && (
+             <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur"
+             >
+               <motion.div 
+                 initial={{ scale: 0.9, y: 20 }}
+                 animate={{ scale: 1, y: 0 }}
+                 exit={{ scale: 0.9, y: 20 }}
+                 className="neon-panel max-w-3xl w-full p-6 flex flex-col bg-black/80 max-h-[80vh]"
+               >
+                 <div className="flex justify-between items-center mb-6">
+                   <h2 className="text-xl font-bold text-accent-cyan">选择车辆与涂装配置</h2>
+                   <button onClick={() => setShowConfigModal(false)} className="text-zinc-500 hover:text-white">✕</button>
+                 </div>
+                 
+                 <div className="flex-1 overflow-y-auto pr-2 gap-4 flex flex-col">
+                   <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2">我的车库</h3>
+                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                     {garage.map(car => {
+                       const vDef = VEHICLES_DB.find(v => v.id === car.carId);
+                       if (!vDef) return null;
+                       const isSelected = myPlayer?.vehicleId === car.carId;
+                       return (
+                         <div 
+                           key={car.carId} 
+                           onClick={() => socketService.updatePlayer({ 
+                               vehicleId: car.carId, 
+                               liveryId: car.equippedPaint || 'livery_basic',
+                               engineId: car.equippedParts?.engine || null, 
+                               tiresId: car.equippedParts?.tires || null, 
+                               launchId: car.equippedParts?.launch || null, 
+                               driftId: car.equippedParts?.drift || null, 
+                               accelerationId: car.equippedParts?.acceleration || null 
+                           })}
+                           className={`p-3 rounded border text-left flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${isSelected ? 'border-accent-cyan bg-accent-cyan/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                         >
+                           <div className="text-xs font-mono font-bold w-full text-right text-accent-yellow">Lv.+{car.level}</div>
+                           <VehiclePreview vehicleType={vDef.type} width={60} height={60} color="#fff" />
+                           <div className="text-sm font-bold truncate w-full text-center">{vDef.name}</div>
+                           <div className="text-[10px] text-zinc-500 truncate w-full text-center">
+                             {['engine', 'tires', 'launch', 'drift', 'acceleration'].map(t => ITEMS_DB.find(i => i.id === car.equippedParts?.[t])?.name).filter(Boolean).join(' | ') || '无配件'}
+                           </div>
+                         </div>
+                       );
+                     })}
+                   </div>
+
+                   <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2 mt-4">拥有的涂装</h3>
+                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                     {LIVERIES_DB.filter(l => l.price === 0 || garage.some(c => c.equippedPaint === l.id /* simplify: ideally should come from unlocked liveries but for this prd we only change equipped paint */)).map(livery => {
+                       const isSelected = myPlayer?.liveryId === livery.id;
+                       return (
+                         <div 
+                           key={livery.id} 
+                           onClick={() => socketService.updatePlayer({ liveryId: livery.id })}
+                           className={`p-2 rounded border text-center cursor-pointer transition-all flex flex-col items-center gap-2 ${isSelected ? 'border-accent-magenta bg-accent-magenta/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                         >
+                           <div className="w-full h-8 rounded" style={{
+                              background: livery.isGradient 
+                                ? `linear-gradient(135deg, ${livery.colors[0]} 0%, ${livery.colors[1]} 50%, ${livery.colors[2] || livery.colors[1]} 100%)`
+                                : livery.colors[0],
+                              border: '1px solid rgba(255,255,255,0.1)'
+                           }}></div>
+                           <div className="text-xs font-bold truncate w-full">{livery.name}</div>
+                         </div>
+                       );
+                     })}
+                     <div className="col-span-full mt-2 text-xs text-zinc-500 opacity-60">* 暂不支持在这里购买新涂装，可更换已持有或默认涂装。</div>
+                   </div>
+                 </div>
+               </motion.div>
+             </motion.div>
+           )}
+         </AnimatePresence>
 
          {/* Track Selector Modal */}
          <AnimatePresence>
@@ -671,7 +778,14 @@ export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: 
                  <h4 className="text-xs text-zinc-400 mb-2">房主设置</h4>
                  <div className="flex gap-4 text-xs items-center flex-wrap">
                     <button 
-                      onClick={() => socketService.updateSettings({ isTeamMode: !room.settings.isTeamMode })}
+                      onClick={() => {
+                        if (!room.settings.isTeamMode && room.players.length < 4) {
+                           setStartGameError('人数不足 4 人，无法开启组队赛');
+                           setTimeout(() => setStartGameError(null), 3000);
+                           return;
+                        }
+                        socketService.updateSettings({ isTeamMode: !room.settings.isTeamMode });
+                      }}
                       className={`px-3 py-1.5 rounded font-bold transition-all ${room.settings.isTeamMode ? 'bg-accent-yellow text-black' : 'bg-white/10 hover:bg-white/20'}`}
                     >
                       组队模式: {room.settings.isTeamMode ? '已开启' : '关闭'}
@@ -718,30 +832,37 @@ export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: 
             )}
 
             {startGameError && (
-              <div className="text-red-500 bg-red-500/10 p-2 text-sm rounded mb-4 border border-red-500/20 text-center">
-                {startGameError}
+              <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/90 p-4 border border-red-500/50 rounded shadow-[0_0_20px_rgba(239,68,68,0.3)] z-[200] max-w-sm w-full">
+                <div className="text-red-500 text-center text-sm font-bold mb-4">{startGameError}</div>
+                <button onClick={() => setStartGameError(null)} className="w-full py-2 bg-white/10 hover:bg-white/20 text-white rounded text-sm transition-colors">确定</button>
               </div>
             )}
 
             {isHost ? (
-               <button 
-                 onClick={() => {
-                   if (room.settings.isTeamMode) {
-                     const redCount = room.players.filter(p => p.team === 'RED').length;
-                     const blueCount = room.players.filter(p => p.team === 'BLUE').length;
-                     if (redCount !== blueCount || redCount === 0 || (redCount + blueCount !== room.players.length)) {
-                       setStartGameError('无法开始：红队和蓝队的车手数量必须一致，且所有车手都必须分配队伍！');
-                       setTimeout(() => setStartGameError(null), 3000);
-                       return;
+               <div className="relative">
+                 {room.settings.isTeamMode && room.players.length < 4 && (
+                    <div className="absolute -top-12 left-0 right-0 text-red-500 font-bold bg-red-500/20 border border-red-500/50 rounded py-2 text-center text-sm shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+                      人数不足 4 人，无法开启组队赛
+                    </div>
+                 )}
+                 <button 
+                   onClick={() => {
+                     if (room.settings.isTeamMode) {
+                       const redCount = room.players.filter(p => p.team === 'RED').length;
+                       const blueCount = room.players.filter(p => p.team === 'BLUE').length;
+                       if (redCount !== blueCount || redCount === 0 || (redCount + blueCount !== room.players.length)) {
+                         setStartGameError('无法开始：红队和蓝队的车手数量必须一致，且所有车手都必须分配队伍！');
+                         return;
+                       }
                      }
-                   }
-                   socketService.startGame();
-                 }}
-                 disabled={!allReady}
-                 className={`w-full py-4 rounded font-black text-xl transition-all ${allReady ? 'bg-accent-magenta text-white shadow-[0_0_20px_rgba(255,0,234,0.4)]' : 'bg-white/10 text-zinc-500 cursor-not-allowed'}`}
-               >
-                 开始比赛
-               </button>
+                     socketService.startGame();
+                   }}
+                   disabled={!allReady || (room.settings.isTeamMode && room.players.length < 4)}
+                   className={`w-full py-4 rounded font-black text-xl transition-all ${allReady && !(room.settings.isTeamMode && room.players.length < 4) ? 'bg-accent-magenta text-white shadow-[0_0_20px_rgba(255,0,234,0.4)]' : 'bg-white/10 text-zinc-500 cursor-not-allowed'}`}
+                 >
+                   开始比赛
+                 </button>
+               </div>
             ) : (
                <div className="text-center text-zinc-500 py-4 font-bold text-sm bg-black/40 rounded border border-white/5">
                  {allReady ? '等待房主开始比赛...' : '等待其他玩家准备...'}
