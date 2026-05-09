@@ -659,7 +659,6 @@ export default function App() {
     
     let currentRedScore = 0;
     let currentBlueScore = 0;
-    let isFlawlessRed = false;
     const playerCount = sortedResults.length;
     
     const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
@@ -673,22 +672,6 @@ export default function App() {
     };
     const racePoints = RACE_POINTS_BY_COUNT[playerCount] || [10, 8, 6, 5, 4, 3, 2, 1];
 
-    if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
-      const redTeamResults = sortedResults.filter(r => r.team === 'RED');
-      const totalRedMembers = redTeamResults.length;
-      
-      const allRedFinished = redTeamResults.every(r => !r.dnf);
-      const currentTopSweep = sortedResults.slice(0, totalRedMembers).every(r => r.team === 'RED');
-
-      if (allRedFinished && currentTopSweep) {
-        isFlawlessRed = true;
-      }
-    }
-
-    setIsFlawlessResult(isFlawlessRed);
-    
-    let redMvpId = '';
-    let maxRedScore = -1;
     let totalRedRaceScore = 0;
     let totalBlueRaceScore = 0;
 
@@ -699,10 +682,6 @@ export default function App() {
       if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
         if (car.team === 'RED') {
            totalRedRaceScore += earned;
-           if (newScores[car.id] > maxRedScore) {
-             maxRedScore = newScores[car.id];
-             redMvpId = car.id;
-           }
         }
         if (car.team === 'BLUE') {
            totalBlueRaceScore += earned;
@@ -721,8 +700,31 @@ export default function App() {
     } else if (currentRedScore === currentBlueScore && sortedResults.length > 0) {
        matchWinnerTeam = sortedResults[0].team as 'RED' | 'BLUE';
     }
-    
-    let isTeamWin = matchWinnerTeam === 'RED';
+
+    let isFlawlessWin = false;
+    let mvpId = '';
+    let maxTeamScore = -1;
+
+    if (matchWinnerTeam && (settings.mode === 'TEAM' || settings.isTeamMode)) {
+      const winnerTeamResults = sortedResults.filter(r => r.team === matchWinnerTeam);
+      const totalWinnerMembers = winnerTeamResults.length;
+      
+      const allFinished = winnerTeamResults.every(r => !r.dnf);
+      const currentTopSweep = sortedResults.slice(0, totalWinnerMembers).every(r => r.team === matchWinnerTeam);
+
+      if (allFinished && currentTopSweep) {
+        isFlawlessWin = true;
+      }
+
+      winnerTeamResults.forEach((car) => {
+        if (newScores[car.id] > maxTeamScore) {
+          maxTeamScore = newScores[car.id];
+          mvpId = car.id;
+        }
+      });
+    }
+
+    setIsFlawlessResult(isFlawlessWin);
 
     sortedResults.forEach((car, index) => {
       const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
@@ -746,14 +748,16 @@ export default function App() {
            }
            
            if (!car.dnf) {
-             const isMVP = car.id === redMvpId && isTeamWin;
+             const localPlayerTeam = settings.mode === 'ONLINE' ? sortedResults.find(r => r.id === socketService.playerId)?.team : 'RED';
+             const isTeamWin = matchWinnerTeam === localPlayerTeam;
+             const isMVP = car.id === mvpId && isTeamWin;
              const totalCoins = calculateCoinReward(
                index,
                playerCount, 
                settings.aiDifficulty, 
                !!(settings.mode === 'TEAM' || settings.isTeamMode), 
                isTeamWin, 
-               isFlawlessRed, 
+               isFlawlessWin, 
                isMVP
              );
              return { ...p, wallet: { ...p.wallet, coins: p.wallet.coins + totalCoins }, garage: newGarage };
@@ -767,8 +771,9 @@ export default function App() {
     setFlawlessVictoryMessage(null);
     if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
       setTeamScore({ RED: currentRedScore, BLUE: currentBlueScore });
-      if (isFlawlessRed) {
-        setFlawlessVictoryMessage(`🔥 完胜！全员完赛并包揽前 ${sortedResults.filter(r => r.team === 'RED').length} 名！🔥 额外奖励 +10！`);
+      if (isFlawlessWin && matchWinnerTeam) {
+        const winnerTeamName = matchWinnerTeam === 'RED' ? '红队' : '蓝队';
+        setFlawlessVictoryMessage(`🔥 完胜！${winnerTeamName}全员完赛并包揽前 ${sortedResults.filter(r => r.team === matchWinnerTeam).length} 名！🔥 额外奖励 +10！`);
       }
     } else {
       setTeamScore(null);
@@ -1367,7 +1372,7 @@ export default function App() {
         {gameState === 'ENHANCEMENT' && <EnhancementUI garage={playerData} setGarage={setPlayerData} onClose={() => setGameState('MENU')} />}
 
         {gameState === 'ONLINE_MENU' && <OnlineMenu initialName={playerData.profile.nickname} onBack={() => setGameState('MENU')} onStartLobby={() => setGameState('ONLINE_LOBBY')} />}
-        {gameState === 'ONLINE_LOBBY' && <OnlineLobby onBack={() => {
+        {gameState === 'ONLINE_LOBBY' && <OnlineLobby garage={playerData.garage} onBack={() => {
           import('./services/socketService').then(({ socketService }) => {
             socketService.socket?.emit('leaveRoom');
           });

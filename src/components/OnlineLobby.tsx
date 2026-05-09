@@ -346,9 +346,8 @@ export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?
 
 import { TrackSelector } from './TrackSelector';
 
-export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void }) => {
+export const OnlineLobby = ({ garage, onBack, onStartGame, onViewLeaderboard }: { garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void }) => {
   const [room, setRoom] = useState(socketService.room);
-  const [showItemSelector, setShowItemSelector] = useState<string>('NONE');
   const [showTrackSelector, setShowTrackSelector] = useState(false);
   const [startGameError, setStartGameError] = useState<string | null>(null);
   
@@ -392,9 +391,13 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
 
   const handleVehicleChange = (dir: number) => {
     if (!myPlayer) return;
-    const vIdx = VEHICLES_DB.findIndex(v => v.id === myPlayer.vehicleId);
-    let nextIdx = (vIdx + dir + VEHICLES_DB.length) % VEHICLES_DB.length;
-    socketService.updatePlayer({ vehicleId: VEHICLES_DB[nextIdx].id });
+    const ownedCarIds = Array.from(new Set(garage.map(g => g.carId)));
+    if (ownedCarIds.length === 0) return; // 防御性判断
+    const vIdx = ownedCarIds.indexOf(myPlayer.vehicleId);
+    let nextIdx = (vIdx + dir + ownedCarIds.length) % ownedCarIds.length;
+    // 如果当前选的没在车库里(比如刚进来默认的)，强制给第一个
+    if (vIdx === -1) nextIdx = 0; 
+    socketService.updatePlayer({ vehicleId: ownedCarIds[nextIdx] });
   };
 
   const handleLiveryChange = (dir: number) => {
@@ -485,83 +488,6 @@ export const OnlineLobby = ({ onBack, onStartGame, onViewLeaderboard }: { onBack
                    <button onClick={() => handleLiveryChange(-1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&lt;</button>
                    <span>涂装: {LIVERIES_DB.find(l => l.id === myPlayer?.liveryId)?.name}</span>
                    <button onClick={() => handleLiveryChange(1)} disabled={myPlayer?.isReady} className="px-3 hover:text-accent-cyan">&gt;</button>
-                 </div>
-                 
-                 <div className={`flex justify-between items-center bg-white/5 rounded p-2 relative ${myPlayer?.isReady ? 'opacity-50 pointer-events-none' : ''}`}>
-                   <span className="pl-3">道具:</span>
-                   <div className="flex-1 flex flex-wrap justify-end gap-1.5 px-2">
-                      {[
-                        { id: 'ENGINE', key: 'engineId' as const, label: '引擎' },
-                        { id: 'TIRES', key: 'tiresId' as const, label: '轮胎' },
-                        { id: 'LAUNCH', key: 'launchId' as const, label: '弹射' },
-                        { id: 'DRIFT', key: 'driftId' as const, label: '漂移' },
-                        { id: 'ACCELERATION', key: 'accelerationId' as const, label: '加速' }
-                      ].map(type => (
-                        <button 
-                           key={type.id}
-                           onClick={() => setShowItemSelector(s => s === type.id ? 'NONE' : type.id)}
-                           disabled={myPlayer?.isReady}
-                           className={`px-2 py-1 text-[10px] rounded border transition-colors ${showItemSelector === type.id ? 'bg-accent-yellow/20 border-accent-yellow text-accent-yellow' : 'bg-black/40 border-white/20 text-zinc-400 hover:text-white'}`}
-                        >
-                           {ITEMS_DB.find(i => i.id === myPlayer?.[type.key])?.name || `选择${type.label}`}
-                        </button>
-                      ))}
-                   </div>
-                   
-                   {/* Popups */}
-                   <AnimatePresence>
-                     {showItemSelector !== 'NONE' && (() => {
-                       const activeTypeObj = [
-                         { id: 'ENGINE', key: 'engineId' as const, label: '引擎' },
-                         { id: 'TIRES', key: 'tiresId' as const, label: '轮胎' },
-                         { id: 'LAUNCH', key: 'launchId' as const, label: '弹射' },
-                         { id: 'DRIFT', key: 'driftId' as const, label: '漂移' },
-                         { id: 'ACCELERATION', key: 'accelerationId' as const, label: '加速' }
-                       ].find(t => t.id === showItemSelector);
-                       if (!activeTypeObj) return null;
-                       
-                       return (
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute left-0 right-0 top-full mt-2 bg-black/90 p-3 rounded border border-accent-yellow shadow-[0_0_15px_rgba(244,255,64,0.3)] z-10"
-                        >
-                           <div className="text-xs uppercase text-accent-yellow mb-2 text-center">选择 {activeTypeObj.label}</div>
-                           <div className="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto">
-                              <button 
-                                onClick={() => {
-                                   socketService.updatePlayer({ [activeTypeObj.key]: null as any });
-                                   setShowItemSelector('NONE');
-                                }}
-                                className="text-left px-2 py-1.5 text-xs text-zinc-400 hover:text-white hover:bg-white/10 rounded"
-                              >
-                                取下装备
-                              </button>
-                              {ITEMS_DB.filter(i => i.type.toUpperCase() === showItemSelector).map(item => (
-                                 <button 
-                                   key={item.id}
-                                   onClick={() => {
-                                      socketService.updatePlayer({ [activeTypeObj.key]: item.id });
-                                      setShowItemSelector('NONE');
-                                   }}
-                                   className={`p-2 text-[10px] rounded text-left transition-colors ${myPlayer?.[activeTypeObj.key] === item.id ? 'bg-accent-yellow/20 border border-accent-yellow/50 text-white' : 'bg-white/5 border border-white/10 hover:bg-white/10 text-zinc-300'}`}
-                                 >
-                                    <div className="font-bold mb-1">{item.name}</div>
-                                    <div className="text-[10px] text-zinc-500 line-clamp-1">
-                                      {item.speedBoost ? `速度+${item.speedBoost} ` : ''}
-                                      {item.gripBoost ? `抓地+${item.gripBoost} ` : ''}
-                                      {item.launchBoost ? `初速+${item.launchBoost} ` : ''}
-                                      {item.driftSpeedBoost ? `漂移速度+${item.driftSpeedBoost} ` : ''}
-                                      {item.accelerationBoost ? `加速+${item.accelerationBoost} ` : ''}
-                                    </div>
-                                 </button>
-                              ))}
-                           </div>
-                        </motion.div>
-                       );
-                     })()}
-                   </AnimatePresence>
                  </div>
                </div>
 
