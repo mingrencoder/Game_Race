@@ -158,6 +158,7 @@ import AuthUI from './components/AuthUI';
 import ShopUI from './components/ShopUI';
 import GarageUI from './components/GarageUI';
 import EnhancementUI from './components/EnhancementUI';
+import GMConsoleUI from './components/GMConsoleUI';
 import { TrackSelector } from './components/TrackSelector';
 import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -165,7 +166,12 @@ import { audioService } from './services/audioService';
 
 const initialPlayerData: PlayerData = (() => {
   const savedV4 = localStorage.getItem('neon_player_v4');
-  if (savedV4) return JSON.parse(savedV4);
+  if (savedV4) {
+    const data = JSON.parse(savedV4);
+    if (!data.profile) data.profile = {};
+    data.profile.role = 'admin'; // Force admin for testing
+    return data;
+  }
 
   const savedV3 = localStorage.getItem('neon_garage_v3');
   const savedV2 = localStorage.getItem('neon_garage_v2');
@@ -177,7 +183,7 @@ const initialPlayerData: PlayerData = (() => {
     profile: {
       uid: 'local_user',
       nickname: 'Local Player',
-      role: 'player',
+      role: 'admin',
       status: 'active',
       banReason: '',
       registerTime: Date.now(),
@@ -314,6 +320,7 @@ export default function App() {
   const [leaderboardLapCount, setLeaderboardLapCount] = useState<number>(2);
   const [leaderboardType, setLeaderboardType] = useState<'LOCAL' | 'ONLINE'>('LOCAL');
   const [showPlayerInfo, setShowPlayerInfo] = useState(false);
+  const [showGMConsole, setShowGMConsole] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{message: string, onConfirm: () => void, confirmText?: string} | null>(null);
   
   const [records, setRecords] = useState<Record<string, LapRecord[]>>(() => {
@@ -935,6 +942,14 @@ export default function App() {
                 >
                   我的信息
                 </button>
+                {playerData.profile.role === 'admin' && (
+                  <button
+                    onClick={() => setShowGMConsole(true)}
+                    className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500 hover:text-white px-2 py-1 rounded text-xs font-black animate-pulse cursor-pointer"
+                  >
+                    🎛️ GM 控制台
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setLeaderboardTrackId(settings.trackId);
@@ -2170,6 +2185,25 @@ export default function App() {
             playerData={playerData} 
             setPlayerData={setPlayerData} 
             onClose={() => setShowPlayerInfo(false)} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* GM Console Modal */}
+      <AnimatePresence>
+        {showGMConsole && (
+          <GMConsoleUI 
+            playerData={playerData} 
+            setPlayerData={setPlayerData} 
+            onClose={() => setShowGMConsole(false)}
+            onClearLeaderboard={(trackId: string, laps: number) => {
+               setRecords(prev => {
+                  const copy = { ...prev };
+                  delete copy[`${trackId}_${laps}`];
+                  delete copy[`${trackId}_${laps}_online`];
+                  return copy;
+               });
+            }}
           />
         )}
       </AnimatePresence>
