@@ -86,12 +86,14 @@ export class UpgradeService {
             await StorageEngine.writeEncrypted(uid, playerData);
 
             res.json({
-                success: isSuccess,
+                success: true,
+                isSuccess: isSuccess,
                 message,
                 carId,
                 newLevel: vehicle.level,
                 usedMaterial: materialKey,
-                usedProtectionCard: protectionItem || 'none'
+                usedProtectionCard: protectionItem || 'none',
+                playerData
             });
         } catch (error: any) {
             console.error('[UpgradeService] upgradeCar error:', error);

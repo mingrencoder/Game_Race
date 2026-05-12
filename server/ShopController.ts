@@ -62,7 +62,7 @@ export class ShopController {
             }
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: 'Vehicle purchased successfully', carId, isPermanent, currentCoins: playerData.wallet.coins });
+            res.json({ success: true, message: 'Vehicle purchased successfully', carId, isPermanent, currentCoins: playerData.wallet.coins, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyCar error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -96,7 +96,7 @@ export class ShopController {
             playerData.inventory.parts[partId] = (playerData.inventory.parts[partId] || 0) + 1;
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '储备入库成功 (Added to inventory)', partId, currentCoins: playerData.wallet.coins, partsInventory: playerData.inventory.parts });
+            res.json({ success: true, message: '储备入库成功 (Added to inventory)', partId, currentCoins: playerData.wallet.coins, partsInventory: playerData.inventory.parts, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyPart error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -171,7 +171,8 @@ export class ShopController {
                 unequipCost,
                 currentCoins: playerData.wallet.coins,
                 partsInventory: playerData.inventory.parts,
-                vehicleParts: vehicle.equippedParts
+                vehicleParts: vehicle.equippedParts,
+                playerData
             });
         } catch (error: any) {
             console.error('[ShopController] equipPart error:', error);
@@ -209,7 +210,7 @@ export class ShopController {
             vehicle.durability = 100;
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: 'Vehicle repaired successfully', currentDurability: 100, currentCoins: playerData.wallet.coins });
+            res.json({ success: true, message: 'Vehicle repaired successfully', currentDurability: 100, currentCoins: playerData.wallet.coins, playerData });
         } catch (error: any) {
             console.error('[ShopController] repairCar error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -251,7 +252,7 @@ export class ShopController {
             }
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '购买成功', itemId, quantity, currentCoins: playerData.wallet.coins, inventory: playerData.inventory });
+            res.json({ success: true, message: '购买成功', itemId, quantity, currentCoins: playerData.wallet.coins, inventory: playerData.inventory, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyItem error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -287,7 +288,7 @@ export class ShopController {
             playerData.inventory.paints.push(liveryId);
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '涂装购买成功', liveryId, currentCoins: playerData.wallet.coins, paints: playerData.inventory.paints });
+            res.json({ success: true, message: '涂装购买成功', liveryId, currentCoins: playerData.wallet.coins, paints: playerData.inventory.paints, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyLivery error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -323,7 +324,7 @@ export class ShopController {
             vehicle.equippedPaint = liveryId === 'default' ? null : liveryId;
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '涂装装备成功', carId, equippedPaint: vehicle.equippedPaint });
+            res.json({ success: true, message: '涂装装备成功', carId, equippedPaint: vehicle.equippedPaint, playerData });
         } catch (error: any) {
             console.error('[ShopController] equipLivery error:', error);
             res.status(500).json({ error: 'Internal Server Error' });

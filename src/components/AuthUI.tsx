@@ -38,37 +38,45 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
     })
     .then(res => {
       if (!res.ok) {
-        return res.json().then(err => { throw new Error(err.error || err.message || '认证失败'); });
+        return res.json().then(err => { throw new Error(err.error || err.message || '认证请求遭到驳回'); });
       }
       return res.json();
     })
     .then(data => {
-      // 1. 严格匹配后端实际返回的字段 (仅校验 success 和 token)
+      // 1. 校验首层登录凭证回执
       if (data.success && data.token) {
         localStorage.setItem('neon_token', data.token);
         
-        // 2. 遵循 SSOT 原则：立即通过远端专线拉取该玩家的全量真实档案快照
+        // 2. 携带凭证强拉取底层档案快照
         return fetch('/api/player/profile', {
-          headers: { 'Authorization': `Bearer ${data.token}` }
+          headers: { 
+            'Authorization': `Bearer ${data.token}`,
+            'Content-Type': 'application/json'
+          }
         })
         .then(profileRes => {
-          if (!profileRes.ok) throw new Error('拉取车手底层档案失败');
+          if (!profileRes.ok) {
+            return profileRes.json().then(err => {
+              throw new Error(err.error || `档案握手失败 (HTTP ${profileRes.status})`);
+            });
+          }
           return profileRes.json();
         })
         .then(profileData => {
-          if (profileData.success && profileData.playerData) {
-            setGarage(profileData.playerData); // 全量覆写前端 playerData 大盘
+          // 3. 【核心修复】严格对齐后端 PlayerController 下发的 data 键名
+          if (profileData.success && profileData.data) {
+            setGarage(profileData.data); // 将底层档案全量同步至前端大盘
             onLoginSuccess();
           } else {
-            throw new Error(profileData.error || '档案快照解析失败');
+            throw new Error(profileData.error || '底层数据包负载缺失，大盘重构中断');
           }
         });
       } else {
-        throw new Error(data.error || data.message || '认证凭证解析异常');
+        throw new Error(data.error || data.message || '服务端未返回有效访问令牌');
       }
     })
     .catch(err => {
-      setError(err.message || '网络连接异常');
+      setError(err.message || '系统连接超时或中断');
       setIsLoading(false);
     });
   };

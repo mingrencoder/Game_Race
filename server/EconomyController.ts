@@ -111,7 +111,8 @@ export class EconomyController {
                     carId,
                     durabilityLoss: loss,
                     currentDurability
-                }
+                },
+                playerData
             });
 
         } catch (error: any) {
@@ -152,11 +153,43 @@ export class EconomyController {
             res.json({
                 success: true,
                 feePaid: fee,
-                wallet: playerData.wallet
+                coins: playerData.wallet.coins,
+                wallet: playerData.wallet,
+                playerData
             });
 
         } catch (error: any) {
             console.error('[EconomyController] payCupEntryFee error:', error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+    }
+
+    /**
+     * 杯赛夺冠结算
+     */
+    static async settleCup(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const uid = req.user?.uid;
+            if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+            let playerData = await StorageEngine.readEncrypted(uid);
+            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+
+            if (!playerData.wallet) playerData.wallet = { coins: 0 };
+            
+            // Basic simplistic reward, you can extend this
+            const reward = 50; 
+            playerData.wallet.coins += reward;
+
+            await StorageEngine.writeEncrypted(uid, playerData);
+
+            res.json({
+                success: true,
+                coins: playerData.wallet.coins,
+                playerData
+            });
+        } catch (error: any) {
+            console.error('[EconomyController] settleCup error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
         }
     }

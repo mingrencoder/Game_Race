@@ -373,8 +373,8 @@ export default function App() {
       return res.json();
     })
     .then(data => {
-      if (data.success && data.playerData) {
-        setPlayerData(data.playerData);
+      if (data.success && data.data) {
+        setPlayerData(data.data);
         setGameState('MENU'); // Added to correctly transition to MENU
       } else {
         throw new Error('获取档案失败');

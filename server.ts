@@ -102,6 +102,7 @@ async function startServer() {
   // 4. 经济与比赛结算
   app.post('/api/economy/calculate', requireAuth, EconomyController.calculateRaceReward);
   app.post('/api/economy/payEntryFee', requireAuth, EconomyController.payCupEntryFee);
+  app.post('/api/economy/settleCup', requireAuth, EconomyController.settleCup);
   
   // 5. 商店与车库消费
   app.post('/api/shop/buyCar', requireAuth, ShopController.buyCar);
