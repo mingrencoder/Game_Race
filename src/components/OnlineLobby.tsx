@@ -498,7 +498,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                     vehicleType={VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.type || 'standard'} 
                     color={LIVERIES_DB.find(l => l.id === myPlayer?.liveryId) ? '#ffffff' : (myPlayer?.liveryId || '#00f2ff')} 
                     width={160} height={160}
-                    liveryData={myPlayer?.liveryId ? LIVERIES_DB.find(l => l.id === myPlayer.liveryId)! : undefined}
+                    liveryData={LIVERIES_DB.find(l => l.id === myPlayer?.liveryId) || undefined}
                   />
                   <div className="mt-4 text-center">
                      <div className="font-bold text-lg">{VEHICLES_DB.find(v => v.id === myPlayer?.vehicleId)?.name || '未知车辆'}</div>
@@ -641,7 +641,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                            className={`p-3 rounded border text-left flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${isSelected ? 'border-accent-cyan bg-accent-cyan/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
                          >
                            <div className="text-xs font-mono font-bold w-full text-right text-accent-yellow">Lv.+{car.level}</div>
-                           <VehiclePreview vehicleType={vDef.type} width={60} height={60} color={LIVERIES_DB.find(l => l.id === car.equippedPaint) ? '#ffffff' : (car.equippedPaint || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === car.equippedPaint)!} />
+                           <VehiclePreview vehicleType={vDef.type} width={60} height={60} color={LIVERIES_DB.find(l => l.id === car.equippedPaint) ? '#ffffff' : (car.equippedPaint || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === car.equippedPaint) || undefined} />
                            <div className="text-sm font-bold truncate w-full text-center">{vDef.name}</div>
                            <div className="text-[10px] text-zinc-500 truncate w-full text-center">
                              {['engine', 'tires', 'launch', 'drift', 'acceleration'].map(t => ITEMS_DB.find(i => i.id === car.equippedParts?.[t])?.name).filter(Boolean).join(' | ') || '无配件'}
@@ -781,7 +781,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                {[...room.players].sort((a,b)=>((b.score||0)-(a.score||0))).map(p => (
                  <div key={p.id} className={`flex items-center justify-between p-3 rounded border ${p.isReady || p.isAI ? 'border-accent-cyan/30 bg-accent-cyan/10' : 'border-white/10 bg-white/5'}`}>
                     <div className="flex items-center gap-3">
-                       <VehiclePreview vehicleType={VEHICLES_DB.find(v => v.id === p.vehicleId)?.type || 'standard'} width={40} height={40} color={LIVERIES_DB.find(l => l.id === p.liveryId) ? '#ffffff' : (p.liveryId || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === p.liveryId)!} />
+                       <VehiclePreview vehicleType={VEHICLES_DB.find(v => v.id === p.vehicleId)?.type || 'standard'} width={40} height={40} color={LIVERIES_DB.find(l => l.id === p.liveryId) ? '#ffffff' : (p.liveryId || '#00f2ff')} liveryData={LIVERIES_DB.find(l => l.id === p.liveryId) || undefined} />
                        <div>
                          <span className="font-bold flex items-center gap-2">
                            {p.name}

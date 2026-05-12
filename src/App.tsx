@@ -517,7 +517,16 @@ export default function App() {
               .then(res => res.json())
               .then(data => {
                 if (data.success) {
-                  setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: data.coins } }));
+                  // 通过拉取全量档案或更新对齐后端下发的结构
+                  const token = localStorage.getItem('neon_token');
+                  if (token) {
+                    fetch('/api/player/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+                    .then(r => r.json())
+                    .then(profile => {
+                      if (profile.success && profile.data) setPlayerData(profile.data);
+                    });
+                  }
+                  
                   const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
                   const selectedTracks = availableTracks.slice(0, cupTracksCount);
                   
@@ -734,21 +743,48 @@ export default function App() {
         
         const token = localStorage.getItem('neon_token');
         if (token) {
+          // 严格映射后端 EconomyController 要求的中文难度字符串
+          const diffStr = ['入门', '进阶', '专家', '专业', '精英'][settings.aiDifficulty - 1] || '进阶';
+          
+          // 精准判断是否为杯赛的最后一局完赛，以触发后端固定的完赛大奖逻辑
+          const isCurrentRaceLast = settings.isCupMode && cupState ? (cupState.currentRaceIndex + 1 >= cupState.tracks.length) : false;
+          
+          let reqMode = settings.isCupMode ? (isCurrentRaceLast ? 'cup_single' : 'single') : 'single';
+          if (settings.mode === 'TEAM' || settings.isTeamMode) {
+            reqMode = settings.isCupMode ? (isCurrentRaceLast ? 'cup_team' : 'team') : 'team';
+          }
+
           fetch('/api/economy/calculate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({
-              rank: index,
-              playerCount,
-              difficulty: settings.aiDifficulty,
-              isTeamMode: !!(settings.mode === 'TEAM' || settings.isTeamMode),
+              mode: reqMode,
+              carId: playerData.profile.activeCarId,
+              players: playerCount,
+              difficulty: diffStr,
+              rank: car.dnf ? 99 : index + 1, // 转换为基于 1 的真实有效名次
               isTeamWin,
-              isFlawlessWin,
+              isFlawless: isFlawlessWin,
               isMVP,
-              dnf: car.dnf,
-              carId: playerData.profile.activeCarId
+              matches: settings.cupNumTracks || 4
             })
-          }).catch(() => {});
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              // 遵循 SSOT 原则：拉取底层档案刷新大盘，确保钱包与耐久度双向闭环同步
+              fetch('/api/player/profile', {
+                headers: { 'Authorization': `Bearer ${token}` }
+              })
+              .then(r => r.json())
+              .then(profile => {
+                if (profile.success && profile.data) {
+                  setPlayerData(profile.data);
+                }
+              });
+            }
+          })
+          .catch(err => console.error('比赛收益落盘异常:', err));
         }
       }
     });
@@ -1372,6 +1408,13 @@ export default function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ carId })
+              }).catch(() => {});
+              
+              // 补充调用保存涂装/颜色配置接口
+              fetch('/api/shop/equipLivery', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ carId, liveryId: liveryId || color })
               }).catch(() => {});
             }
             setPlayerData(p => {

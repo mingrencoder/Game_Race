@@ -59,13 +59,22 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       })
       .then(res => res.json())
       .then(data => {
-          if (data.success && data.playerData) {
-              setGarage(data.playerData);
+          const latestData = data.data || data.playerData;
+          if (data.success && latestData) {
+              setGarage(latestData);
               setPendingEquip(null);
           } else {
               setEquipError(data.message || '拆装失败');
               setTimeout(() => setEquipError(null), 3000);
                setPendingEquip(null);
+              // 远端拉取兜底同步
+              fetch('/api/player/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+              .then(r => r.json())
+              .then(profile => {
+                  if (profile.success && profile.data) {
+                      setGarage(profile.data);
+                  }
+              });
           }
       })
       .catch(err => {
@@ -79,6 +88,12 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       const token = localStorage.getItem('neon_token');
       if (!token) return;
 
+      // 表现层先行即时响应更新
+      setGarage(p => ({
+          ...p,
+          garage: p.garage.map(c => c.carId === p.profile.activeCarId ? { ...c, equippedPaint: val } : c)
+      }));
+
       fetch('/api/shop/equipLivery', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -86,13 +101,23 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       })
       .then(res => res.json())
       .then(data => {
-          if (data.success && data.playerData) {
-              setGarage(data.playerData);
+          const latestData = data.data || data.playerData;
+          if (data.success && latestData) {
+              setGarage(latestData);
           } else {
-              console.error(data.message || '装备涂装失败');
+              // 远端拉取兜底同步
+              fetch('/api/player/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+              .then(r => r.json())
+              .then(profile => {
+                  if (profile.success && profile.data) {
+                      const merged = { ...profile.data };
+                      merged.garage = merged.garage.map((c: any) => c.carId === garage.profile.activeCarId ? { ...c, equippedPaint: val } : c);
+                      setGarage(merged);
+                  }
+              });
           }
       })
-      .catch(err => console.error('网络请求异常:', err));
+      .catch(err => console.error('涂装同步异常:', err));
   };
 
   const getItemIcon = (type: string, size: number = 32) => {
@@ -134,11 +159,20 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
     })
     .then(res => res.json())
     .then(data => {
-        if (data.success && data.playerData) {
-            setGarage(data.playerData);
+        const latestData = data.data || data.playerData;
+        if (data.success && latestData) {
+            setGarage(latestData);
             setShowMaintenanceConfirm(false);
         } else {
              console.error(data.message || '保养失败');
+             // 远端拉取兜底同步
+             fetch('/api/player/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+             .then(r => r.json())
+             .then(profile => {
+                 if (profile.success && profile.data) {
+                     setGarage(profile.data);
+                 }
+             });
         }
     })
     .catch(err => console.error('网络请求异常:', err));
