@@ -151,6 +151,14 @@ class SocketService {
   sendInputs(inputs: string[]) {
     this.socket?.emit('sendInputs', inputs);
   }
+
+  gameFinished(results: any[]) {
+    this.socket?.emit('gameFinished', results);
+  }
+
+  returnToLobby() {
+    this.socket?.emit('returnToLobby');
+  }
 }
 
 export const socketService = new SocketService();

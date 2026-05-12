@@ -15,123 +15,85 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES' | 'MATERIALS' | 'SPECIAL'>('VEHICLES');
 
   const handlePurchaseVehicle = (id: string, price: number, isLease: boolean) => {
-    if (garage.wallet.coins >= price) {
-      setGarage(g => {
-        const newGarage = [...g.garage];
-        const vIndex = newGarage.findIndex(c => c.carId === id);
-        const now = Date.now();
-        const leaseMs = 3 * 24 * 60 * 60 * 1000;
-        
-        let newExpireTimestamp: number | null = null;
-        if (isLease) {
-          if (vIndex !== -1 && newGarage[vIndex].expireAt && newGarage[vIndex].expireAt > now) {
-            newExpireTimestamp = newGarage[vIndex].expireAt! + leaseMs;
-          } else {
-            newExpireTimestamp = now + leaseMs;
-          }
-        }
-
-        if (vIndex !== -1) {
-            newGarage[vIndex] = {
-                ...newGarage[vIndex],
-                isPermanent: !isLease ? true : newGarage[vIndex].isPermanent,
-                expireAt: !isLease ? null : (newGarage[vIndex].isPermanent ? null : newExpireTimestamp)
-            };
-        } else {
-            newGarage.push({
-                carId: id,
-                level: 0,
-                durability: 100,
-                isPermanent: !isLease,
-                expireAt: newExpireTimestamp,
-                equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
-                equippedPaint: null
-            });
-        }
-
-        return {
-          ...g,
-          wallet: { ...g.wallet, coins: g.wallet.coins - price },
-          garage: newGarage
-        };
-      });
-    }
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+    fetch('/api/shop/buyCar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ carId: id, isPermanent: !isLease })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.playerData) setGarage(data.playerData);
+      else console.error(data.message || '购买失败');
+    })
+    .catch(err => console.error('网络请求异常:', err));
   };
 
   const buyItem = (id: string, price: number) => {
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+    
     if (id === 'rename_card') {
        if (confirm(`⚠️ 警告：该道具价值极其昂贵，确定要消耗 ${price} ⟁ 购买吗？`)) {
-           if (garage.wallet.coins >= price) {
-               setGarage(g => ({
-                   ...g,
-                   wallet: { ...g.wallet, coins: g.wallet.coins - price },
-                   inventory: {
-                       ...g.inventory,
-                       specialItems: {
-                           ...g.inventory.specialItems,
-                           rename_card: (g.inventory.specialItems?.rename_card || 0) + 1
-                       }
-                   }
-               }));
-           }
+          fetch('/api/shop/buyItem', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ itemId: 'rename_card', amount: 1 })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.playerData) setGarage(data.playerData);
+            else console.error(data.message || '购买失败');
+          })
+          .catch(err => console.error('网络请求异常:', err));
        }
        return;
     }
-    if (garage.wallet.coins >= price && !garage.inventory.parts[id]) {
-      setGarage(g => ({
-        ...g,
-        wallet: { ...g.wallet, coins: g.wallet.coins - price },
-        inventory: {
-            ...g.inventory,
-            parts: {
-                ...g.inventory.parts,
-                [id]: 1
-            }
-        }
-      }));
-    }
+
+    fetch('/api/shop/buyPart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ partId: id })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.playerData) setGarage(data.playerData);
+      else console.error(data.message || '购买失败');
+    })
+    .catch(err => console.error('网络请求异常:', err));
   };
 
   const buyMaterial = (id: string, price: number) => {
-    if (garage.wallet.coins >= price) {
-      setGarage(g => {
-        const isMaterial = id.startsWith('core');
-        const isProtector = id.includes('Card');
-        
-        let newMaterials = { ...g.inventory.materials };
-        let newProtectors = { ...g.inventory.protectors };
-        
-        if (id === 'coreT1') newMaterials.core_primary++;
-        if (id === 'coreT2') newMaterials.core_advanced++;
-        if (id === 'coreT3') newMaterials.core_legendary++;
-        
-        if (id === 'silverCard') newProtectors.card_silver++;
-        if (id === 'goldenCard') newProtectors.card_gold++;
-
-        return {
-          ...g,
-          wallet: { ...g.wallet, coins: g.wallet.coins - price },
-          inventory: {
-            ...g.inventory,
-            materials: newMaterials,
-            protectors: newProtectors
-          }
-        };
-      });
-    }
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+    fetch('/api/shop/buyItem', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ itemId: id, amount: 1 })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.playerData) setGarage(data.playerData);
+      else console.error(data.message || '购买失败');
+    })
+    .catch(err => console.error('网络请求异常:', err));
   };
 
   const buyLivery = (id: string, price: number) => {
-    if (garage.wallet.coins >= price && !garage.inventory.paints.includes(id)) {
-      setGarage(g => ({
-        ...g,
-        wallet: { ...g.wallet, coins: g.wallet.coins - price },
-        inventory: {
-           ...g.inventory,
-           paints: [...g.inventory.paints, id]
-        }
-      }));
-    }
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+    fetch('/api/shop/buyLivery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ liveryId: id })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.playerData) setGarage(data.playerData);
+      else console.error(data.message || '购买失败');
+    })
+    .catch(err => console.error('网络请求异常:', err));
   };
 
   const getItemIcon = (type: string) => {

@@ -29,21 +29,48 @@ export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
     
     setIsLoading(true);
     
-    // Pure frontend mock with simulated delay
-    setTimeout(() => {
-      const uid = 'local_' + Math.random().toString(36).substring(2, 9);
-      
-      setGarage(p => ({
-        ...p,
-        profile: {
-          ...p.profile,
-          uid: isLogin ? p.profile.uid : uid, // if register, mock new uid
-          nickname: username,
-        }
-      }));
-      
-      onLoginSuccess();
-    }, 1500);
+    const url = isLogin ? '/api/auth/login' : '/api/auth/register';
+    
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.trim(), password: password.trim() })
+    })
+    .then(res => {
+      if (!res.ok) {
+        return res.json().then(err => { throw new Error(err.error || err.message || '认证失败'); });
+      }
+      return res.json();
+    })
+    .then(data => {
+      // 1. 严格匹配后端实际返回的字段 (仅校验 success 和 token)
+      if (data.success && data.token) {
+        localStorage.setItem('neon_token', data.token);
+        
+        // 2. 遵循 SSOT 原则：立即通过远端专线拉取该玩家的全量真实档案快照
+        return fetch('/api/player/profile', {
+          headers: { 'Authorization': `Bearer ${data.token}` }
+        })
+        .then(profileRes => {
+          if (!profileRes.ok) throw new Error('拉取车手底层档案失败');
+          return profileRes.json();
+        })
+        .then(profileData => {
+          if (profileData.success && profileData.playerData) {
+            setGarage(profileData.playerData); // 全量覆写前端 playerData 大盘
+            onLoginSuccess();
+          } else {
+            throw new Error(profileData.error || '档案快照解析失败');
+          }
+        });
+      } else {
+        throw new Error(data.error || data.message || '认证凭证解析异常');
+      }
+    })
+    .catch(err => {
+      setError(err.message || '网络连接异常');
+      setIsLoading(false);
+    });
   };
 
   return (

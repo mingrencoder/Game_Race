@@ -49,50 +49,51 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   };
 
   const commitEquip = (newId: string | null, typeKey: string, oldId: string | null, fee: number) => {
-      if (fee > 0 && garage.wallet.coins < fee) {
-          setEquipError("金币不足，无法拆卸零件。");
+      const token = localStorage.getItem('neon_token');
+      if (!token) return;
+
+      fetch('/api/shop/equipPart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ carId: garage.profile.activeCarId, partId: newId, targetSlot: typeKey })
+      })
+      .then(res => res.json())
+      .then(data => {
+          if (data.success && data.playerData) {
+              setGarage(data.playerData);
+              setPendingEquip(null);
+          } else {
+              setEquipError(data.message || '拆装失败');
+              setTimeout(() => setEquipError(null), 3000);
+               setPendingEquip(null);
+          }
+      })
+      .catch(err => {
+          setEquipError('网络异常');
           setTimeout(() => setEquipError(null), 3000);
           setPendingEquip(null);
-          return;
-      }
-      
-      setGarage(p => {
-          const newData = { ...p, inventory: { ...p.inventory, parts: { ...(p.inventory?.parts || {}) } } };
-          const newGarage = [...newData.garage];
-          const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
-          if (targetIdx !== -1) {
-              const v = { ...newGarage[targetIdx] };
-              v.equippedParts = { ...v.equippedParts, [typeKey]: newId } as any;
-              newGarage[targetIdx] = v;
-              newData.garage = newGarage;
-          }
-          
-          if (fee > 0) {
-              newData.wallet = { ...newData.wallet, coins: newData.wallet.coins - fee };
-          }
-          
-          if (oldId) {
-              newData.inventory.parts[oldId] = (newData.inventory.parts[oldId] || 0) + 1;
-          }
-          if (newId) {
-              newData.inventory.parts[newId] = Math.max(0, (newData.inventory.parts[newId] || 0) - 1);
-          }
-          
-          return newData;
       });
-      setPendingEquip(null);
   };
 
-  const equipLivery = (val: string) => setGarage(p => {
-      const newGarage = [...p.garage];
-      const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
-      if (targetIdx !== -1) {
-          const v = { ...newGarage[targetIdx] };
-          v.equippedPaint = val;
-          newGarage[targetIdx] = v;
-      }
-      return { ...p, garage: newGarage };
-  });
+  const equipLivery = (val: string) => {
+      const token = localStorage.getItem('neon_token');
+      if (!token) return;
+
+      fetch('/api/shop/equipLivery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ carId: garage.profile.activeCarId, liveryId: val })
+      })
+      .then(res => res.json())
+      .then(data => {
+          if (data.success && data.playerData) {
+              setGarage(data.playerData);
+          } else {
+              console.error(data.message || '装备涂装失败');
+          }
+      })
+      .catch(err => console.error('网络请求异常:', err));
+  };
 
   const getItemIcon = (type: string, size: number = 32) => {
     if (type === 'engine') return <Cpu size={size} className="text-[#00f2ff]" />;
@@ -122,19 +123,25 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
   const handleMaintenance = () => {
     if (!vState || vState.durability >= 100) return;
-    const cost = currentVehicleData.maintenanceFee;
-    if (garage.wallet.coins >= cost) {
-       setGarage(p => {
-          const newGarage = [...p.garage];
-          const targetIdx = newGarage.findIndex(v => v.carId === p.profile.activeCarId);
-          if (targetIdx !== -1) {
-              const v = { ...newGarage[targetIdx], durability: 100 };
-              newGarage[targetIdx] = v;
-          }
-          return { ...p, wallet: { ...p.wallet, coins: p.wallet.coins - cost }, garage: newGarage };
-       });
-       setShowMaintenanceConfirm(false);
-    }
+    
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+
+    fetch('/api/shop/repairCar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ carId: garage.profile.activeCarId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            setShowMaintenanceConfirm(false);
+        } else {
+             console.error(data.message || '保养失败');
+        }
+    })
+    .catch(err => console.error('网络请求异常:', err));
   };
 
   return (

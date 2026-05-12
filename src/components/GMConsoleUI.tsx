@@ -52,25 +52,41 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
       showModal('error', '请先输入目标车手 UID 或昵称进行查询');
       return;
     }
-    // Mock loading data
-    setTargetProfile({
-      uid: targetIdentifier,
-      nickname: targetIdentifier === 'local_user' ? 'Local Player' : `Player_${targetIdentifier.substring(0, 4)}`,
-      status: 'active',
-      banReason: '',
-      coins: targetIdentifier === 'local_user' && playerData ? playerData.wallet.coins : 10000
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/queryPlayer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ targetUid: targetIdentifier })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.targetData) {
+        const pd = data.targetData;
+        setTargetProfile({
+          uid: pd.profile.uid,
+          nickname: pd.profile.nickname,
+          status: pd.profile.status,
+          banReason: pd.profile.banReason || '',
+          coins: pd.wallet.coins
+        });
+        setTargetGarage(pd.garage || []);
+        setTargetInventory(pd.inventory || {
+          materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
+          protectors: { card_silver: 0, card_gold: 0 },
+          specialItems: { rename_card: 0 },
+          parts: {},
+          paints: []
+        });
+        setInventoryDeltas({});
+        showModal('success', `成功查询到目标车手 [${pd.profile.uid}] 的全局数据快照。`);
+      } else {
+        showModal('error', data.message || '查询失败');
+      }
+    })
+    .catch(err => {
+      showModal('error', '网络连接异常');
+      console.error(err);
     });
-    setTargetGarage(targetIdentifier === 'local_user' && playerData ? playerData.garage : []);
-    setTargetInventory(targetIdentifier === 'local_user' && playerData ? playerData.inventory : {
-      materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
-      protectors: { card_silver: 0, card_gold: 0 },
-      specialItems: { rename_card: 0 },
-      parts: {},
-      paints: []
-    });
-    setInventoryDeltas({});
-    
-    showModal('success', `成功查询到目标车手 [${targetIdentifier}] 的全局数据快照。`);
   };
 
   const validateTarget = () => {
@@ -111,7 +127,29 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
   // ACTION A: Profile & Wallet
   const handleActionA = () => {
     if (!validateTarget()) return;
-    showModal('success', `✅ 成功将特定车手 [ ${targetIdentifier} ] 的状态更新为: ${targetProfile.status}，当前金币覆写为 ${targetProfile.coins} ⟁`);
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/updateProfile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        targetUid: targetProfile.uid,
+        updates: {
+          status: targetProfile.status,
+          banReason: targetProfile.banReason,
+          nickname: targetProfile.nickname,
+          coins: targetProfile.coins
+        }
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showModal('success', `✅ 成功将特定车手 [ ${targetProfile.uid} ] 的状态更新为: ${targetProfile.status}，当前金币覆写为 ${targetProfile.coins} ⟁`);
+      } else {
+        showModal('error', data.message || '更新失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   // ACTION B: Garage New Car Form
@@ -125,15 +163,52 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
       showModal('error', '请先从车辆库中选择一辆车！');
       return;
     }
-    const carTemplate = VEHICLES_DB.find(v => v.id === selectedNewCarId);
-    showModal('success', `✅ 成功向车手 [ ${targetIdentifier} ] 的车库强制下发赛车配置 (名称: ${carTemplate?.name}, 等级: ${newCarLevel})`);
-    setTargetGarage(prev => [...prev, { id: Date.now().toString(), defaultVehicleId: selectedNewCarId, level: newCarLevel, durability: newCarDurability, type: 'owned' }]);
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/manageVehicle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        targetUid: targetProfile.uid,
+        action: 'add',
+        vehicleData: { carId: selectedNewCarId, level: newCarLevel, durability: newCarDurability }
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.targetData) {
+        const carTemplate = VEHICLES_DB.find(v => v.id === selectedNewCarId);
+        showModal('success', `✅ 成功向车手 [ ${targetIdentifier} ] 的车库强制下发赛车配置 (名称: ${carTemplate?.name}, 等级: ${newCarLevel})`);
+        setTargetGarage(data.targetData.garage || []);
+      } else {
+        showModal('error', data.message || '下发失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   const handleActionB_Delete = (idx: number) => {
     if (!validateTarget()) return;
-    setTargetGarage(prev => prev.filter((_, i) => i !== idx));
-    showModal('success', `✅ 成功销毁目标的指定车辆。`);
+    const token = localStorage.getItem('neon_token');
+    const carId = targetGarage[idx].carId || targetGarage[idx].defaultVehicleId;
+    fetch('/api/gm/manageVehicle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        targetUid: targetProfile.uid,
+        action: 'delete',
+        vehicleData: { carId }
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.targetData) {
+        setTargetGarage(data.targetData.garage || []);
+        showModal('success', `✅ 成功销毁目标的指定车辆。`);
+      } else {
+        showModal('error', data.message || '销毁失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   const handleActionB_Update = (idx: number, field: string, val: any) => {
@@ -146,7 +221,26 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
 
   const handleActionB_SaveUpdate = () => {
      if (!validateTarget()) return;
-     showModal('success', `✅ 成功同步目标车库属性变更！`);
+     const token = localStorage.getItem('neon_token');
+     fetch('/api/gm/manageVehicle', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+       body: JSON.stringify({
+         targetUid: targetProfile.uid,
+         action: 'update',
+         vehicleData: targetGarage // Backend handles the array of changes
+       })
+     })
+     .then(res => res.json())
+     .then(data => {
+       if (data.success && data.targetData) {
+         setTargetGarage(data.targetData.garage || []);
+         showModal('success', `✅ 成功同步目标车库属性变更！`);
+       } else {
+         showModal('error', data.message || '保存失败');
+       }
+     })
+     .catch(err => showModal('error', '网络异常'));
   };
 
   // ACTION C: Inventory
@@ -157,48 +251,40 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
       showModal('error', '未检测到任何物资流水变化！');
       return;
     }
-
-    let logs: string[] = [];
-    items.forEach(([id, delta]) => {
-      let displayName = id;
-      if (id === 'core_primary') displayName = '强化核心(初级)';
-      else if (id === 'core_advanced') displayName = '强化核心(高级)';
-      else if (id === 'core_legendary') displayName = '强化核心(传说)';
-      else if (id === 'card_silver') displayName = '白银保卡';
-      else if (id === 'card_gold') displayName = '黄金保卡';
-      else if (id === 'rename_card') displayName = '改名卡';
-      else if (ITEMS_DB.find(i => i.id === id)) displayName = ITEMS_DB.find(i => i.id === id)!.name;
-      else if (LIVERIES_DB.find(l => l.id === id)) displayName = LIVERIES_DB.find(l => l.id === id)!.name;
-
-      logs.push(`${displayName}: ${delta > 0 ? '+' : ''}${delta}`);
-    });
     
-    showModal('success', `✅ 成功提交物资流水并校验入库:\n${logs.join('\n')}`);
-    
-    // Applying pseudo changes
-    setTargetInventory(prev => {
-       const copy = JSON.parse(JSON.stringify(prev)) as PlayerData['inventory'];
-       items.forEach(([id, delta]) => {
-          if (id === 'core_primary') copy.materials.core_primary = Math.max(0, copy.materials.core_primary + delta);
-          else if (id === 'core_advanced') copy.materials.core_advanced = Math.max(0, copy.materials.core_advanced + delta);
-          else if (id === 'core_legendary') copy.materials.core_legendary = Math.max(0, copy.materials.core_legendary + delta);
-          else if (id === 'card_silver') copy.protectors.card_silver = Math.max(0, copy.protectors.card_silver + delta);
-          else if (id === 'card_gold') copy.protectors.card_gold = Math.max(0, copy.protectors.card_gold + delta);
-          else if (id === 'rename_card') copy.specialItems.rename_card = Math.max(0, copy.specialItems.rename_card + delta);
-          else if (LIVERIES_DB.find(l => l.id === id)) {
-             const current = copy.paints.includes(id) ? 1 : 0;
-             const final = Math.max(0, current + delta);
-             if (final > 0 && current === 0) copy.paints.push(id);
-             else if (final === 0 && current > 0) copy.paints = copy.paints.filter(p => p !== id);
-          } else {
-             const current = copy.parts[id] || 0;
-             copy.parts[id] = Math.max(0, current + delta);
-          }
-       });
-       return copy;
-    });
-
-    setInventoryDeltas({}); // reset
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/modifyInventory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        targetUid: targetProfile.uid,
+        deltas: inventoryDeltas
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success && data.targetData) {
+        let logs: string[] = [];
+        items.forEach(([id, delta]) => {
+          let displayName = id;
+          if (id === 'core_primary') displayName = '强化核心(初级)';
+          else if (id === 'core_advanced') displayName = '强化核心(高级)';
+          else if (id === 'core_legendary') displayName = '强化核心(传说)';
+          else if (id === 'card_silver') displayName = '白银保卡';
+          else if (id === 'card_gold') displayName = '黄金保卡';
+          else if (id === 'rename_card') displayName = '改名卡';
+          else if (ITEMS_DB.find(i => i.id === id)) displayName = ITEMS_DB.find(i => i.id === id)!.name;
+          else if (LIVERIES_DB.find(l => l.id === id)) displayName = LIVERIES_DB.find(l => l.id === id)!.name;
+          logs.push(`${displayName}: ${delta > 0 ? '+' : ''}${delta}`);
+        });
+        showModal('success', `✅ 成功提交物资流水并校验入库:\n${logs.join('\n')}`);
+        setTargetInventory(data.targetData.inventory || targetInventory);
+        setInventoryDeltas({});
+      } else {
+        showModal('error', data.message || '提交物资修改失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   // ACTION D: Security
@@ -212,17 +298,51 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
       showModal('error', '请提供新的访问密钥');
       return;
     }
-    showModal('success', `强制重置车手 [ ${targetIdentifier} ] 的登录密钥成功`);
-    setNewKey('');
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/resetPassword', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        targetUid: targetProfile.uid,
+        newPassword: newKey
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showModal('success', `强制重置车手 [ ${targetIdentifier} ] 的登录密钥成功`);
+        setNewKey('');
+      } else {
+        showModal('error', data.message || '重置密码失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   const handleActionD_ClearBoard = () => {
     if (!clearTrackId) return;
-    if (onClearLeaderboard) {
-       onClearLeaderboard(clearTrackId, clearLaps);
-    }
-    const track = TRACKS.find(t => t.id === clearTrackId);
-    showModal('success', `⚠️ 成功清洗赛道 [${track?.name || clearTrackId}] ${clearLaps}圈 的全量榜单记录！`);
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/gm/clearLeaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({
+        trackId: clearTrackId,
+        laps: clearLaps
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (onClearLeaderboard) {
+           onClearLeaderboard(clearTrackId, clearLaps);
+        }
+        const track = TRACKS.find(t => t.id === clearTrackId);
+        showModal('success', `⚠️ 成功清洗赛道 [${track?.name || clearTrackId}] ${clearLaps}圈 的全量榜单记录！`);
+      } else {
+        showModal('error', data.message || '清榜失败');
+      }
+    })
+    .catch(err => showModal('error', '网络异常'));
   };
 
   return (

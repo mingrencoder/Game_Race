@@ -34,21 +34,40 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
       return;
     }
 
-    setPlayerData(p => ({
-      ...p,
-      profile: {
-        ...p.profile,
-        nickname: nickname.trim()
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/player/nickname', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
-      inventory: {
-        ...p.inventory,
-        specialItems: {
-          ...p.inventory.specialItems,
-          rename_card: (p.inventory.specialItems?.rename_card || 0) - 1
-        }
+      body: JSON.stringify({ nickname: nickname.trim() })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        setPlayerData(p => ({
+          ...p,
+          profile: {
+            ...p.profile,
+            nickname: nickname.trim()
+          },
+          inventory: {
+            ...p.inventory,
+            specialItems: {
+              ...p.inventory.specialItems,
+              rename_card: (p.inventory.specialItems?.rename_card || 0) - 1
+            }
+          }
+        }));
+        setMessage({ type: 'success', text: '昵称修改成功！' });
+      } else {
+        setMessage({ type: 'error', text: data.message || '修改失败' });
       }
-    }));
-    setMessage({ type: 'success', text: '昵称修改成功！' });
+    })
+    .catch(err => {
+      setMessage({ type: 'error', text: '网络请求失败' });
+    });
   };
 
   const handleSavePassword = () => {
@@ -58,23 +77,38 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
       setMessage({ type: 'error', text: '请输入旧密码' });
       return;
     }
-    if (oldPassword !== 'pop123456') {
-      setMessage({ type: 'error', text: '旧密码错误或新密码不一致' });
-      return;
-    }
     if (newPassword.length < 6) {
       setMessage({ type: 'error', text: '新密码长度至少需要 6 个字符' });
       return;
     }
     if (newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: '旧密码错误或新密码不一致' });
+      setMessage({ type: 'error', text: '新密码不一致' });
       return;
     }
     
-    setMessage({ type: 'success', text: '密码修改成功(本地模拟)' });
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    const token = localStorage.getItem('neon_token');
+    fetch('/api/player/password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ oldPassword, newPassword })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        setMessage({ type: 'success', text: '密码修改成功' });
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setMessage({ type: 'error', text: data.message || '修改失败' });
+      }
+    })
+    .catch(err => {
+      setMessage({ type: 'error', text: '网络请求失败' });
+    });
   };
 
   return (

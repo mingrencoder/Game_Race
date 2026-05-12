@@ -81,64 +81,25 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
   const handleUpgrade = () => {
     if (vehicleState.level >= 5) return;
     
-    const hasCore = garage.inventory.materials[req.coreType] >= req.amount;
-    if (!hasCore) {
-      setResultMsg({ msg: `材料不足！需要 ${req.amount} 个 ${req.name}，目前只有 ${garage.inventory.materials[req.coreType]} 个。`, success: false });
-      return;
-    }
-    
-    let consumedShield = false;
-    let buyShieldWithCoins = false;
-    
-    if (useShield && shield) {
-       if (garage.inventory.protectors[shield.shieldType] > 0) {
-          consumedShield = true;
-       } else if (garage.wallet.coins >= shield.cost) {
-          buyShieldWithCoins = true;
-       } else {
-          setResultMsg({ msg: `货币和材料不足！缺少 ${shield.name} 且 ⟁不足。`, success: false });
-          return;
-       }
-    }
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
 
-    const rand = Math.random();
-    const isSuccess = rand <= successRate;
-
-    setGarage(g => {
-      const draft = { ...g, garage: [...g.garage], inventory: { ...g.inventory, materials: { ...g.inventory.materials }, protectors: { ...g.inventory.protectors } }, wallet: { ...g.wallet } };
-      
-      draft.inventory.materials[req.coreType] -= req.amount;
-      
-      if (buyShieldWithCoins) {
-         draft.wallet.coins -= shield!.cost;
-      } else if (consumedShield) {
-         draft.inventory.protectors[shield!.shieldType] -= 1;
-      }
-      
-      const vIndex = draft.garage.findIndex(v => v.carId === vehicleState.carId);
-      if (vIndex !== -1) {
-          const v = { ...draft.garage[vIndex] };
-          if (isSuccess) {
-             v.level += 1;
-             setResultMsg({ msg: '强化成功！性能突破！', success: true });
-          } else {
-             if (useShield && shield) {
-                setResultMsg({ msg: '强化失败！保护卡抵消了惩罚。', success: false });
-             } else {
-                if (v.level === 3) {
-                   v.level -= 1;
-                   setResultMsg({ msg: '强化失败！车辆掉级...', success: false });
-                } else if (v.level === 4) {
-                   v.level = 0;
-                   setResultMsg({ msg: '强化失败！强化层级归零...', success: false });
-                } else {
-                   setResultMsg({ msg: '强化失败！没有任何影响。', success: false });
-                }
-             }
-          }
-          draft.garage[vIndex] = v;
-      }
-      return draft;
+    fetch('/api/upgrade/car', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ carId: vehicleState.carId, useProtectionCard: useShield })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            setResultMsg({ msg: data.message || '操作成功', success: data.isSuccess !== false });
+        } else {
+            setResultMsg({ msg: data.message || '强化失败！', success: false });
+        }
+    })
+    .catch(err => {
+        setResultMsg({ msg: '网络异常，强化失败。', success: false });
     });
   };
 

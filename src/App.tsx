@@ -164,101 +164,36 @@ import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from './services/audioService';
 
-const initialPlayerData: PlayerData = (() => {
-  const savedV4 = localStorage.getItem('neon_player_v4');
-  if (savedV4) {
-    const data = JSON.parse(savedV4);
-    if (!data.profile) data.profile = {};
-    data.profile.role = 'admin'; // Force admin for testing
-    return data;
+const initialPlayerData: PlayerData = {
+  profile: {
+    uid: '',
+    nickname: '',
+    role: 'player',
+    status: 'active',
+    banReason: '',
+    registerTime: Date.now(),
+    activeCarId: 'car_basic'
+  },
+  wallet: { coins: 0 },
+  garage: [
+    {
+      carId: 'car_basic',
+      level: 0,
+      durability: 100,
+      isPermanent: true,
+      expireAt: null,
+      equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
+      equippedPaint: null
+    }
+  ],
+  inventory: {
+    materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
+    protectors: { card_silver: 0, card_gold: 0 },
+    specialItems: { rename_card: 0 },
+    parts: {},
+    paints: []
   }
-
-  const savedV3 = localStorage.getItem('neon_garage_v3');
-  const savedV2 = localStorage.getItem('neon_garage_v2');
-  let oldData: any = null;
-  if (savedV3) oldData = JSON.parse(savedV3);
-  else if (savedV2) oldData = JSON.parse(savedV2);
-
-  const newData: PlayerData = {
-    profile: {
-      uid: 'local_user',
-      nickname: 'Local Player',
-      role: 'admin',
-      status: 'active',
-      banReason: '',
-      registerTime: Date.now(),
-      activeCarId: 'car_basic'
-    },
-    wallet: { coins: 0 },
-    garage: [],
-    inventory: {
-      materials: { core_primary: 0, core_advanced: 0, core_legendary: 0 },
-      protectors: { card_silver: 0, card_gold: 0 },
-      specialItems: { rename_card: 0 },
-      parts: {},
-      paints: []
-    }
-  };
-
-  if (oldData) {
-    newData.wallet.coins = oldData.coins || 0;
-    newData.profile.activeCarId = oldData.equippedVehicle || 'car_basic';
-    
-    if (oldData.vehicles) {
-      newData.garage = Object.keys(oldData.vehicles).map(vId => {
-        const oldV = oldData.vehicles[vId];
-        return {
-          carId: oldV.id || vId,
-          level: oldV.level || 0,
-          durability: oldV.durability ?? 100,
-          isPermanent: !oldV.expireTimestamp,
-          expireAt: oldV.expireTimestamp || null,
-          equippedParts: {
-            engine: oldV.equippedParts?.engine || oldData.equippedItems?.engine || null,
-            tires: oldV.equippedParts?.tires || oldData.equippedItems?.tires || null,
-            launch: oldV.equippedParts?.launch || oldData.equippedItems?.launch || null,
-            drift: oldV.equippedParts?.drift || oldData.equippedItems?.drift || null,
-            acceleration: oldV.equippedParts?.acceleration || oldData.equippedItems?.acceleration || null
-          },
-          equippedPaint: newData.profile.activeCarId === (oldV.id || vId) ? (oldData.equippedLivery || null) : null
-        };
-      });
-    }
-
-    if (oldData.inventory) {
-      newData.inventory.materials.core_primary = oldData.inventory.coreT1 || 0;
-      newData.inventory.materials.core_advanced = oldData.inventory.coreT2 || 0;
-      newData.inventory.materials.core_legendary = oldData.inventory.coreT3 || 0;
-      newData.inventory.protectors.card_silver = oldData.inventory.silverCard || 0;
-      newData.inventory.protectors.card_gold = oldData.inventory.goldenCard || 0;
-    }
-    
-    if (oldData.ownedLiveries) newData.inventory.paints = oldData.ownedLiveries;
-    if (oldData.ownedItems) {
-      oldData.ownedItems.forEach((itemId: string) => {
-        newData.inventory.parts[itemId] = 1;
-      });
-    }
-  }
-
-  if (!newData.garage.find(c => c.carId === newData.profile.activeCarId)) {
-    if (newData.garage.length > 0) {
-      newData.profile.activeCarId = newData.garage[0].carId;
-    } else {
-      newData.profile.activeCarId = 'car_basic';
-      newData.garage.push({
-        carId: 'car_basic',
-        level: 0,
-        durability: 100,
-        isPermanent: true,
-        expireAt: null,
-        equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
-        equippedPaint: null
-      });
-    }
-  }
-  return newData;
-})();
+};
 
 const OnlineRoomsPreview = () => {
   const [rooms, setRooms] = useState<any[]>([]);
@@ -421,12 +356,36 @@ export default function App() {
   }, [isMuted]);
 
   React.useEffect(() => {
-    localStorage.setItem('neon_player_v4', JSON.stringify(playerData));
-  }, [playerData]);
-
-  React.useEffect(() => {
     localStorage.setItem('neon_lap_records', JSON.stringify(records));
   }, [records]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('neon_token');
+    if (!token) {
+      setGameState('LOGIN');
+      return;
+    }
+    fetch('/api/player/profile', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => {
+      if (!res.ok) throw new Error('会话过期');
+      return res.json();
+    })
+    .then(data => {
+      if (data.success && data.playerData) {
+        setPlayerData(data.playerData);
+        setGameState('MENU'); // Added to correctly transition to MENU
+      } else {
+        throw new Error('获取档案失败');
+      }
+    })
+    .catch(err => {
+      console.error("线上强校验阻断:", err);
+      localStorage.removeItem('neon_token');
+      setGameState('LOGIN');
+    });
+  }, []);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -548,23 +507,47 @@ export default function App() {
         setConfirmAction({
            message: `进入杯赛将扣除 ${entryFee} ⟁ 作为报名费（中途退出不予退还），确定进入吗？`,
            onConfirm: () => {
-              setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: p.wallet.coins - entryFee } }));
-              const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
-              const selectedTracks = availableTracks.slice(0, cupTracksCount);
-              
-              setCupState({
-                isActive: true,
-                tracks: selectedTracks,
-                currentRaceIndex: 0,
-                finished: false,
-                teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+              const token = localStorage.getItem('neon_token');
+              if (!token) return;
+              fetch('/api/economy/payEntryFee', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ cupTracksCount })
+              })
+              .then(res => res.json())
+              .then(data => {
+                if (data.success) {
+                  setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: data.coins } }));
+                  const availableTracks = [...TRACKS].map(t => t.id).sort(() => Math.random() - 0.5);
+                  const selectedTracks = availableTracks.slice(0, cupTracksCount);
+                  
+                  setCupState({
+                    isActive: true,
+                    tracks: selectedTracks,
+                    currentRaceIndex: 0,
+                    finished: false,
+                    teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+                  });
+                  setScores({});
+                  setTeamScore(null);
+                  setNewRecordInfo(null);
+                  setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
+                  
+                  setGameState('CUP_STANDINGS');
+                } else {
+                  setConfirmAction({
+                    message: data.message || '报名失败，金币不足。',
+                    onConfirm: () => setConfirmAction(null),
+                    confirmText: '我知道了'
+                  });
+                }
+              }).catch(() => {
+                setConfirmAction({
+                  message: '网络异常，报名失败。',
+                  onConfirm: () => setConfirmAction(null),
+                  confirmText: '我知道了'
+                });
               });
-              setScores({});
-              setTeamScore(null);
-              setNewRecordInfo(null);
-              setSettings(s => ({ ...s, trackId: selectedTracks[0] }));
-              
-              setGameState('CUP_STANDINGS');
            },
            confirmText: '支付并进入'
         });
@@ -640,6 +623,15 @@ export default function App() {
              diff: bestPreviousTime === Infinity ? 0 : bestPreviousTime - car.finishTime
           });
           bestPreviousTime = car.finishTime;
+          
+          const token = localStorage.getItem('neon_token');
+          if (token) {
+            fetch('/api/leaderboard/submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ trackId: settings.trackId, laps: settings.laps, time: car.finishTime, vehicleId: car.vehicleType })
+            }).catch(() => {});
+          }
         }
 
         trackRecords.push({
@@ -736,42 +728,28 @@ export default function App() {
     sortedResults.forEach((car, index) => {
       const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
       if (isLocalPlayer) {
-        setPlayerData(p => {
-           let newGarage = [...p.garage];
-           const eqId = p.profile.activeCarId;
-           const targetIdx = newGarage.findIndex(v => v.carId === eqId);
-           if (targetIdx !== -1) {
-              const eqDef = VEHICLES_DB.find(v => v.id === eqId) || { tier: 'T0' };
-              let loss = 1;
-              if (eqDef.tier === 'T0') loss = 0;
-              else if (eqDef.tier === 'T1') loss = 1;
-              else if (eqDef.tier === 'T2') loss = 0.8;
-              else if (eqDef.tier === 'T3') loss = 0.5;
-              
-              newGarage[targetIdx] = {
-                 ...newGarage[targetIdx],
-                 durability: Math.max(0, Number((newGarage[targetIdx].durability - loss).toFixed(3)))
-              };
-           }
-           
-           if (!car.dnf) {
-             const localPlayerTeam = settings.mode === 'ONLINE' ? sortedResults.find(r => r.id === socketService.playerId)?.team : 'RED';
-             const isTeamWin = matchWinnerTeam === localPlayerTeam;
-             const isMVP = car.id === mvpId && isTeamWin;
-             const totalCoins = calculateCoinReward(
-               index,
-               playerCount, 
-               settings.aiDifficulty, 
-               !!(settings.mode === 'TEAM' || settings.isTeamMode), 
-               isTeamWin, 
-               isFlawlessWin, 
-               isMVP
-             );
-             return { ...p, wallet: { ...p.wallet, coins: p.wallet.coins + totalCoins }, garage: newGarage };
-           }
-           
-           return { ...p, garage: newGarage };
-        });
+        const localPlayerTeam = settings.mode === 'ONLINE' ? sortedResults.find(r => r.id === socketService.playerId)?.team : 'RED';
+        const isTeamWin = matchWinnerTeam === localPlayerTeam;
+        const isMVP = car.id === mvpId && isTeamWin;
+        
+        const token = localStorage.getItem('neon_token');
+        if (token) {
+          fetch('/api/economy/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+              rank: index,
+              playerCount,
+              difficulty: settings.aiDifficulty,
+              isTeamMode: !!(settings.mode === 'TEAM' || settings.isTeamMode),
+              isTeamWin,
+              isFlawlessWin,
+              isMVP,
+              dnf: car.dnf,
+              carId: playerData.profile.activeCarId
+            })
+          }).catch(() => {});
+        }
       }
     });
 
@@ -1388,6 +1366,14 @@ export default function App() {
           coins={playerData.wallet.coins} 
           garage={playerData.garage} 
           onUpdateActiveCar={(carId, color, liveryId) => {
+            const token = localStorage.getItem('neon_token');
+            if (token) {
+              fetch('/api/player/activeCar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ carId })
+              }).catch(() => {});
+            }
             setPlayerData(p => {
               const newGarage = [...p.garage];
               const targetIdx = newGarage.findIndex(v => v.carId === carId);
@@ -1549,30 +1535,21 @@ export default function App() {
                 {cupState.finished ? (
                    <button 
                      onClick={() => {
-                       let isWin = false;
-                       let reward = 0;
-                       const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
-                       const tracks = settings.cupNumTracks || 4;
-
-                       if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
-                          isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
-                          if (isWin) {
-                             reward += tracks * 15;
-                             const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                             const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
-                             if (entries.length > 0 && isLocal(entries[0].id)) {
-                                reward += tracks * 10;
-                             }
-                          }
-                       } else {
-                          const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                          const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
-                          const rank = entries.findIndex(e => isLocal(e.id));
-                          if (rank === 0) reward = tracks * 20;
-                          else if (rank === 1 || rank === 2) reward = tracks * 10;
+                       const token = localStorage.getItem('neon_token');
+                       if (token) {
+                         fetch('/api/economy/settleCup', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+                         })
+                         .then(res => res.json())
+                         .then(data => {
+                           if (data.success && data.coins !== undefined) {
+                             setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: data.coins } }));
+                           }
+                         })
+                         .catch(() => {});
                        }
-
-                       setPlayerData(p => ({...p, wallet: {...p.wallet, coins: p.wallet.coins + Math.floor(reward)}}));
+                       
                        setCupState(null);
                        setScores({});
                        setTeamScore(null);
