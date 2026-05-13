@@ -375,7 +375,7 @@ export default function App() {
     .then(data => {
       if (data.success && data.data) {
         setPlayerData(data.data);
-        setGameState('MENU'); // Added to correctly transition to MENU
+        setGameState(prev => prev === 'LOGIN' ? 'MENU' : prev); // Added to correctly transition to MENU only from LOGIN
       } else {
         throw new Error('获取档案失败');
       }
@@ -623,6 +623,16 @@ export default function App() {
         // Only save human player records for leaderboard
         const playerName = settings.mode === 'ONLINE' ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
         
+        // 解析要求：无条件上报
+        const token = localStorage.getItem('neon_token');
+        if (token) {
+          fetch('/api/leaderboard/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ trackId: settings.trackId, laps: settings.laps, time: car.finishTime, vehicleId: car.vehicleType })
+          }).catch(() => {});
+        }
+
         if (car.finishTime < bestPreviousTime) {
           brokeRecord = true;
           setNewRecordInfo({
@@ -632,15 +642,6 @@ export default function App() {
              diff: bestPreviousTime === Infinity ? 0 : bestPreviousTime - car.finishTime
           });
           bestPreviousTime = car.finishTime;
-          
-          const token = localStorage.getItem('neon_token');
-          if (token) {
-            fetch('/api/leaderboard/submit', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ trackId: settings.trackId, laps: settings.laps, time: car.finishTime, vehicleId: car.vehicleType })
-            }).catch(() => {});
-          }
         }
 
         trackRecords.push({

@@ -353,6 +353,13 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
   const [startGameError, setStartGameError] = useState<string | null>(null);
   const hasSyncedInitVehicle = React.useRef(false);
   
+  const onStartGameRef = React.useRef(onStartGame);
+  const onBackRef = React.useRef(onBack);
+  React.useEffect(() => {
+    onStartGameRef.current = onStartGame;
+    onBackRef.current = onBack;
+  }, [onStartGame, onBack]);
+
   useEffect(() => {
     setRoom(socketService.room);
     const unsub = socketService.subscribe(() => {
@@ -362,7 +369,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
     });
 
     socketService.socket?.on('gameStarted', () => {
-       onStartGame();
+       onStartGameRef.current();
     });
 
     // Auto update status if returning to LOBBY
@@ -374,7 +381,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
     });
 
     socketService.socket?.on('kicked', () => {
-      onBack(); // Go back to room list or menu
+      onBackRef.current(); // Go back to room list or menu
     });
 
     return () => {
@@ -383,7 +390,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
       socketService.socket?.off('returnedToLobby');
       socketService.socket?.off('kicked');
     }
-  }, [onStartGame, onBack]);
+  }, []);
 
   if (!room) return <div className="p-8 text-center">Loading...</div>;
 
