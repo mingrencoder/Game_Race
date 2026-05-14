@@ -623,13 +623,21 @@ export default function App() {
         // Only save human player records for leaderboard
         const playerName = settings.mode === 'ONLINE' ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
         
+        const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : (car.id === 'p1');
+        
         // 解析要求：无条件上报
         const token = localStorage.getItem('neon_token');
-        if (token) {
+        if (token && isLocalPlayer) {
           fetch('/api/leaderboard/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ trackId: settings.trackId, laps: settings.laps, time: car.finishTime, vehicleId: car.vehicleType })
+            body: JSON.stringify({ 
+              trackId: settings.trackId, 
+              laps: settings.laps, 
+              time: car.finishTime, 
+              vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
+              isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode)
+            })
           }).catch(() => {});
         }
 
