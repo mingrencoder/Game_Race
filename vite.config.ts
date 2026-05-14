@@ -24,6 +24,7 @@ export default defineConfig(({mode}) => {
       // allowedHosts: ['demo.mengya.cloud'],
       // allowedHosts: ['race.mengya.cloud'],
       allowedHosts: true,
+      watch: { ignored: ['**/data/**', '**/*.json'] },
     },
   };
 });

@@ -876,22 +876,32 @@ export default function App() {
     setGameState('RESULT');
   };
 
-  const handleExit = () => {
-    audioService.stopBGM();
-    setCupState(null);
-    setScores({});
-    setTeamScore(null);
-    setSettings(s => ({ ...s, isTeamMode: false }));
-    if (settings.mode === 'ONLINE') {
-      import('./services/socketService').then(({ socketService }) => {
-         if (socketService.playerId === socketService.room?.hostId) {
-            socketService.socket?.emit('returnToLobby');
-         }
-      });
-      setGameState('ONLINE_LOBBY');
-    } else {
-      setGameState('MENU');
-    }
+  const handleExit = (isManual: boolean = false) => {
+    setGameState(current => {
+      // 如果不是玩家手动点击退出按钮触发的操作（即画板自动卸载触发的 onExit），且当前正处于 RESULT 或 CUP_STANDINGS 结算状态，则强制拦截跳转！
+      if (!isManual && (current === 'RESULT' || current === 'CUP_STANDINGS')) {
+        return current; 
+      }
+      
+      audioService.stopBGM();
+      if (isManual) {
+        setCupState(null);
+        setScores({});
+        setTeamScore(null);
+        setSettings(s => ({ ...s, isTeamMode: false }));
+      }
+      
+      if (settings.mode === 'ONLINE') {
+        import('./services/socketService').then(({ socketService }) => {
+           if (socketService.playerId === socketService.room?.hostId) {
+              socketService.socket?.emit('returnToLobby');
+           }
+        });
+        return 'ONLINE_LOBBY';
+      } else {
+        return 'MENU';
+      }
+    });
   };
 
   return (
@@ -1453,7 +1463,7 @@ export default function App() {
               cupState={cupState}
               scores={scores}
               onFinish={handleFinish} 
-              onExit={handleExit} 
+              onExit={() => handleExit(false)} 
             />
           </motion.div>
         )}
@@ -1846,7 +1856,7 @@ export default function App() {
                 ) : (
                    <>
                      <button 
-                       onClick={handleExit}
+                       onClick={() => handleExit(true)}
                        className="flex-1 h-12 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-lg transition-all"
                      >
                        {settings.mode === 'ONLINE' ? '返回房间' : '返回主菜单'}

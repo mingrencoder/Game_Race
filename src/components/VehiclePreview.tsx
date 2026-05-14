@@ -34,21 +34,26 @@ export default function VehiclePreview({
     // Rotate to point right or up? Up looks better in UI
     ctx.rotate(-Math.PI / 2);
 
-    let fillStyle: string | CanvasGradient = color || '#ffffff';
-    if (liveryData && Array.isArray(liveryData.colors) && liveryData.colors.length > 0) {
-      if (liveryData.isGradient) {
-        const grad = ctx.createLinearGradient(-30, -16, 30, 16);
-        const colors = liveryData.colors;
-        colors.forEach((c, idx) => {
-          if (c) grad.addColorStop(idx / (colors.length - 1 || 1), c);
-        });
-        fillStyle = grad;
-      } else {
-        fillStyle = liveryData.colors[0] || color || '#ffffff';
+    let fillStyle: string | CanvasGradient = typeof color === 'string' ? color : '#ffffff';
+    let fallbackShadow = typeof color === 'string' ? color : '#ffffff';
+
+    if (liveryData && typeof liveryData === 'object') {
+      const colors = liveryData.colors;
+      if (Array.isArray(colors) && colors.length > 0) {
+        if (liveryData.isGradient) {
+          const grad = ctx.createLinearGradient(-30, -16, 30, 16);
+          colors.forEach((c, idx) => {
+            if (c) grad.addColorStop(idx / (colors.length - 1 || 1), c);
+          });
+          fillStyle = grad;
+        } else {
+          fillStyle = colors[0] || fallbackShadow;
+        }
+        fallbackShadow = colors[0] || fallbackShadow;
       }
     }
 
-    ctx.shadowColor = (liveryData && Array.isArray(liveryData.colors) && liveryData.colors.length > 0 && liveryData.colors[0]) ? liveryData.colors[0] : (color || '#ffffff');
+    ctx.shadowColor = fallbackShadow;
     ctx.shadowBlur = 15;
 
     const drawWheels = () => {
@@ -147,7 +152,9 @@ export default function VehiclePreview({
       ctx.closePath();
       ctx.fill();
       ctx.shadowColor = typeof color === 'string' ? color : '#fff';
-      if (liveryData && Array.isArray(liveryData.colors) && liveryData.colors.length > 0) ctx.shadowColor = liveryData.colors[0];
+      if (liveryData && typeof liveryData === 'object' && Array.isArray(liveryData.colors) && liveryData.colors.length > 0) {
+        ctx.shadowColor = liveryData.colors[0];
+      }
       ctx.shadowBlur = 15;
       ctx.fillStyle = '#fff';
       ctx.beginPath();

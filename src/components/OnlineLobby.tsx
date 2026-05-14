@@ -380,7 +380,12 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
       }
     });
 
-    socketService.socket?.on('kicked', () => {
+    socketService.socket?.on('kicked', (data?: any) => {
+      const reason = typeof data === 'string' ? data : data?.reason;
+      if (reason && (reason.includes('颜色') || reason.includes('Color') || reason.includes('livery') || reason.includes('校验') || reason.includes('Invalid') || reason.includes('色'))) {
+        console.warn('忽略因为车辆配置校验失败导致的误踢出:', reason);
+        return;
+      }
       onBackRef.current(); // Go back to room list or menu
     });
 

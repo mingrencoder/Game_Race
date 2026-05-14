@@ -224,7 +224,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       return () => {
         socketService.socket?.off('playerInputs', handleInputs);
         socketService.socket?.off('carsUpdate', handleCarsUpdate);
+        socketService.socket?.off('gameStarted', handleGameStarted);
         socketService.socket?.off('gameFinished', handleGameFinished);
+        socketService.socket?.off('kicked', handleKicked);
         clearInterval(inputInterval);
       };
     }
@@ -1334,21 +1336,26 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
       ctx.translate(car.x, car.y);
       ctx.rotate(car.angle);
 
-      let fillStyle: string | CanvasGradient = car.color;
-      if (car.liveryData) {
-        if (car.liveryData.isGradient) {
-          const grad = ctx.createLinearGradient(-30, -16, 30, 16);
-          const colors = car.liveryData.colors;
-          colors.forEach((c, idx) => {
-            grad.addColorStop(idx / (colors.length - 1 || 1), c);
-          });
-          fillStyle = grad;
-        } else if (car.liveryData.colors && car.liveryData.colors.length > 0) {
-          fillStyle = car.liveryData.colors[0];
+      let fillStyle: string | CanvasGradient = typeof car.color === 'string' ? car.color : '#ffffff';
+      let fallbackShadow = fillStyle;
+
+      if (car.liveryData && typeof car.liveryData === 'object') {
+        const colors = car.liveryData.colors;
+        if (Array.isArray(colors) && colors.length > 0) {
+          if (car.liveryData.isGradient) {
+            const grad = ctx.createLinearGradient(-30, -16, 30, 16);
+            colors.forEach((c, idx) => {
+              if (c) grad.addColorStop(idx / (colors.length - 1 || 1), c);
+            });
+            fillStyle = grad;
+          } else {
+            fillStyle = colors[0] || fallbackShadow;
+          }
+          fallbackShadow = colors[0] || fallbackShadow;
         }
       }
 
-      ctx.shadowColor = car.liveryData ? car.liveryData.colors[0] : car.color;
+      ctx.shadowColor = fallbackShadow;
       ctx.shadowBlur = 15;
 
       const drawWheels = () => {
