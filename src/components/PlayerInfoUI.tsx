@@ -145,8 +145,12 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
         <div className="space-y-8">
           {/* 基础资产 */}
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-accent-magenta uppercase tracking-widest border-l-2 border-accent-magenta pl-2">基础资产</h3>
+            <h3 className="text-sm font-bold text-accent-magenta uppercase tracking-widest border-l-2 border-accent-magenta pl-2">基础资产与身份</h3>
             <div className="bg-white/5 p-4 rounded-lg border border-white/10 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-400">账号ID (UID)</span>
+                <span className="text-white font-mono text-sm select-all">{playerData.profile.uid}</span>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-zinc-400">总资产</span>
                 <span className="text-accent-yellow font-black text-xl">{playerData.wallet.coins} ⟁</span>

@@ -352,7 +352,7 @@ import { TrackSelector } from './TrackSelector';
  * 房间内部等候大厅界面
  * 负责组织玩家队伍、配置赛道圈数、更换出战车辆及属性同步，并在所有人准备就绪后由房主开始局域对决
  */
-export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, onViewLeaderboard, onUpdateActiveCar }: { activeCarId: string, coins: number, garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void, onUpdateActiveCar?: (carId: string, color: string, liveryId: string | null) => void }) => {
+export const OnlineLobby = ({ activeCarId, coins, garage, inventoryPaints, onBack, onStartGame, onViewLeaderboard, onUpdateActiveCar }: { activeCarId: string, coins: number, garage: any[], inventoryPaints?: string[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void, onUpdateActiveCar?: (carId: string, color: string, liveryId: string | null) => void }) => {
   const [room, setRoom] = useState(socketService.room);
   const [showTrackSelector, setShowTrackSelector] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -695,7 +695,30 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
 
                     <h3 className="text-white text-sm font-bold opacity-80 border-b border-white/10 pb-2 mt-4">拥有的涂装</h3>
                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                     {LIVERIES_DB.filter(l => l.price === 0 || garage.some(c => c.equippedPaint === l.id /* simplify: ideally should come from unlocked liveries but for this prd we only change equipped paint */)).map(livery => {
+                     {BASIC_COLORS.map(color => {
+                       const isSelected = myPlayer?.liveryId === color;
+                       return (
+                         <div 
+                           key={color} 
+                           onClick={() => {
+                               socketService.updatePlayer({ liveryId: color });
+                               if (onUpdateActiveCar && myPlayer) {
+                                   onUpdateActiveCar(myPlayer.vehicleId, color, color);
+                               }
+                             }}
+                           className={`p-2 rounded border text-center cursor-pointer transition-all flex flex-col items-center gap-2 ${isSelected ? 'border-accent-magenta bg-accent-magenta/20' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                         >
+                           <div className="w-full h-8 rounded" style={{
+                               background: color,
+                               border: '1px solid rgba(255,255,255,0.1)'
+                           }}></div>
+                           <div className="text-xs font-bold truncate w-full flex items-center justify-center gap-1">
+                               出厂原色 <span className="w-2 h-2 rounded-full border border-white/50" style={{ backgroundColor: color }}></span>
+                           </div>
+                         </div>
+                       );
+                     })}
+                     {LIVERIES_DB.filter(l => (inventoryPaints || []).includes(l.id) || garage.some(c => c.equippedPaint === l.id)).map(livery => {
                        const isSelected = myPlayer?.liveryId === livery.id;
                        return (
                          <div 

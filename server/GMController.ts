@@ -145,7 +145,7 @@ export class GMController {
                         durability: vehicleData.durability !== undefined ? vehicleData.durability : SYS_CONFIG.MAX_DURABILITY,
                         isPermanent: vehicleData.isPermanent !== undefined ? vehicleData.isPermanent : true,
                         expireAt: vehicleData.expireAt || null,
-                        equippedPaint: vehicleData.equippedPaint || null,
+                        equippedPaint: vehicleData.equippedPaint !== undefined ? vehicleData.equippedPaint : '#ffffff',
                         equippedParts: vehicleData.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null }
                     };
                     playerData.garage.push(newVehicle);

@@ -162,7 +162,7 @@ export class AuthService {
                             drift: null,
                             acceleration: null
                         },
-                        equippedPaint: null
+                        equippedPaint: '#ffffff'
                     }
                 ],
                 inventory: {

@@ -328,7 +328,14 @@ export const AI_TIER_COLORS = {
   ELITE: ['#ff00ff', '#00ffff', '#ffff00', '#ff00aa', '#00aa00', '#ff3300', '#ccff00', '#7fff00']
 };
 
-export const BASIC_COLORS = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff2222'];
+export const BASIC_COLORS = [
+  '#ffffff', // 珍珠白
+  '#b0b0b0', // 普通银灰
+  '#333333', // 碳黑
+  '#aa0000', // 暗红
+  '#0033aa', // 深蓝
+  '#226622'  // 墨绿
+];
 
 export const AI_STYLE_CONFIG: Record<string, { apexFactor: number, lookaheadBonus: number, brakingAngle: number, driftAngle: number, driftSpeedRate: number, steerGrip: number }> = {
   AGGRESSIVE: { apexFactor: 0.35, lookaheadBonus: 0.8, brakingAngle: 0.8, driftAngle: 0.7, driftSpeedRate: 0.5, steerGrip: 1.0 },
@@ -453,16 +460,19 @@ export type LiveryTier = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'ELITE';
 
 /** 游戏喷漆皮肤大全 */
 export const LIVERIES_DB: { id: string, name: string, price: number, isGradient: boolean, colors: string[], tier: LiveryTier }[] = [
-  { id: 'liv_silver', name: '液态白银', price: 500, isGradient: true, colors: ['#ffffff', '#888888'], tier: 'INTERMEDIATE' },
-  { id: 'liv_orange', name: '风暴赛道橙', price: 500, isGradient: false, colors: ['#ff4500'], tier: 'INTERMEDIATE' },
-  { id: 'liv_gold', name: '尊贵土豪金', price: 500, isGradient: true, colors: ['#ffdf00', '#d4af37'], tier: 'INTERMEDIATE' },
-  { id: 'liv_matte_black', name: '哑光黑', price: 500, isGradient: false, colors: ['#222222'], tier: 'INTERMEDIATE' },
-  { id: 'liv_magma', name: '地狱岩浆', price: 5000, isGradient: true, colors: ['#ff0000', '#ff8800', '#ffff00'], tier: 'ADVANCED' },
-  { id: 'liv_neon_pink', name: '荧光霓虹粉', price: 5000, isGradient: false, colors: ['#ff00ff'], tier: 'ADVANCED' },
-  { id: 'liv_cyan_pulse', name: '赛博脉冲蓝', price: 5000, isGradient: false, colors: ['#00ffff'], tier: 'ADVANCED' },
-  { id: 'liv_toxic_green', name: '生化辐射绿', price: 5000, isGradient: false, colors: ['#ccff00'], tier: 'ADVANCED' },
-  { id: 'liv_prism', name: '全息折射', price: 20000, isGradient: true, colors: ['#ff0000', '#00ff00', '#0000ff', '#ff00ff'], tier: 'ELITE' },
-  { id: 'liv_flare_red', name: '烈焰猩红', price: 20000, isGradient: false, colors: ['#ff0033'], tier: 'ELITE' },
-  { id: 'liv_neon_yellow', name: '炫彩电光黄', price: 20000, isGradient: false, colors: ['#ffff00'], tier: 'ELITE' },
-  { id: 'liv_galaxy', name: '深邃星空', price: 20000, isGradient: true, colors: ['#0b0033', '#4b0082', '#000000'], tier: 'ELITE' }
+  // 中级 (物理材质，弱化发光)
+  { id: 'liv_silver', name: '液态白银', price: 500, isGradient: true, colors: ['#a0a0a0', '#ffffff', '#666666'], tier: 'INTERMEDIATE' },
+  { id: 'liv_orange', name: '风暴赛道橙', price: 500, isGradient: false, colors: ['#ff5500'], tier: 'INTERMEDIATE' },
+  { id: 'liv_gold', name: '尊贵土豪金', price: 500, isGradient: true, colors: ['#b8860b', '#ffd700', '#8b6508'], tier: 'INTERMEDIATE' },
+  { id: 'liv_matte_black', name: '哑光黑', price: 500, isGradient: false, colors: ['#181818'], tier: 'INTERMEDIATE' },
+  // 高阶 (赛博霓虹，强化发光)
+  { id: 'liv_magma', name: '地狱岩浆', price: 5000, isGradient: true, colors: ['#4a0000', '#ff0000', '#ff8800'], tier: 'ADVANCED' },
+  { id: 'liv_neon_pink', name: '荧光霓虹粉', price: 5000, isGradient: false, colors: ['#ff00aa'], tier: 'ADVANCED' },
+  { id: 'liv_cyan_pulse', name: '赛博脉冲蓝', price: 5000, isGradient: false, colors: ['#00e5ff'], tier: 'ADVANCED' },
+  { id: 'liv_toxic_green', name: '生化辐射绿', price: 5000, isGradient: false, colors: ['#39ff14'], tier: 'ADVANCED' },
+  // 典藏 (顶级幻彩，带有专属后处理)
+  { id: 'liv_prism', name: '全息折射', price: 20000, isGradient: true, colors: ['#ff0055', '#00ffcc', '#bf00ff', '#f4ff40'], tier: 'ELITE' },
+  { id: 'liv_flare_red', name: '烈焰猩红', price: 20000, isGradient: false, colors: ['#ff0000', '#ff5555', '#660000'], tier: 'ELITE' },
+  { id: 'liv_neon_yellow', name: '炫彩电光黄', price: 20000, isGradient: false, colors: ['#ffff00', '#ffffff', '#cccc00'], tier: 'ELITE' },
+  { id: 'liv_galaxy', name: '深邃星空', price: 20000, isGradient: true, colors: ['#050011', '#4b0082', '#ff00ff'], tier: 'ELITE' }
 ];

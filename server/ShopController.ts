@@ -57,7 +57,8 @@ export class ShopController {
                     durability: SYS_CONFIG.MAX_DURABILITY,
                     isPermanent,
                     expireAt: isPermanent ? null : Date.now() + SYS_CONFIG.RENTAL_DURATION_MS,
-                    equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
+                    equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
+                    equippedPaint: '#ffffff'
                 });
             }
 

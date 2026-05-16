@@ -134,12 +134,40 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
   };
 
   const renderItemCard = (id: string, name: string, stock: number, desc?: string, isBooleanType?: boolean) => {
+     if (isBooleanType) {
+        const currentDelta = inventoryDeltas[id];
+        const isOwned = stock > 0;
+        const currentVal = currentDelta !== undefined ? (isOwned ? currentDelta !== -1 : currentDelta === 1) : isOwned;
+
+        return (
+          <div key={id} className="border border-yellow-900/40 bg-black/40 p-3 flex flex-col gap-2">
+             <div className="text-yellow-400 font-bold text-xs truncate" title={name}>{name}</div>
+             <div className="text-[10px] text-yellow-700">当前状态: {isOwned ? '已拥有' : '未拥有'} {desc ? `| ${desc}` : ''}</div>
+             <div className="flex items-center mt-2 group">
+                <button 
+                  onClick={() => setInventoryDeltas(p => {
+                    const nextVal = !currentVal;
+                    const newDelta = nextVal ? (1 - stock) : -stock;
+                    return { ...p, [id]: newDelta };
+                  })} 
+                  className={`flex-1 py-1 text-xs font-bold transition-all border ${currentVal ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-black text-yellow-600 border-yellow-900/50 hover:border-yellow-600'}`}
+                >
+                  {currentVal ? '拥有' : '未拥有'}
+                </button>
+             </div>
+             <div className={`text-[10px] mt-1 font-bold ${currentVal && !isOwned ? 'text-green-500' : !currentVal && isOwned ? 'text-red-500' : 'text-transparent'}`}>
+                {currentVal !== isOwned ? '状态已修改' : '-'}
+             </div>
+          </div>
+        );
+     }
+
      const delta = inventoryDeltas[id] || 0;
      const final = Math.max(0, stock + delta);
      return (
       <div key={id} className="border border-yellow-900/40 bg-black/40 p-3 flex flex-col gap-2">
          <div className="text-yellow-400 font-bold text-xs truncate" title={name}>{name}</div>
-         <div className="text-[10px] text-yellow-700">当前拥有: {isBooleanType ? (stock ? '是' : '否') : stock} {desc ? `| ${desc}` : ''}</div>
+         <div className="text-[10px] text-yellow-700">当前拥有: {stock} {desc ? `| ${desc}` : ''}</div>
          <div className="flex items-center mt-2 group">
             <button onClick={() => setInventoryDeltas(p => {
                const currentDelta = p[id] || 0;
@@ -154,7 +182,7 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
             <button onClick={() => setInventoryDeltas(p => ({...p, [id]: (p[id]||0)+1}))} className="w-6 h-6 bg-yellow-900/30 text-yellow-500 hover:bg-yellow-500 hover:text-black font-bold flex items-center justify-center">+</button>
          </div>
          <div className={`text-[10px] mt-1 font-bold ${final > stock ? 'text-green-500' : final < stock ? 'text-red-500' : 'text-yellow-600'}`}>
-            最终结果: {isBooleanType ? (final > 0 ? '是' : '否') : final}
+            最终结果: {final}
          </div>
       </div>
      );

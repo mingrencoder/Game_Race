@@ -1438,6 +1438,7 @@ export default function App() {
           activeCarId={playerData.profile.activeCarId} 
           coins={playerData.wallet.coins} 
           garage={playerData.garage} 
+          inventoryPaints={playerData.inventory?.paints || []}
           onUpdateActiveCar={(carId, color, liveryId) => {
             const token = localStorage.getItem('neon_token');
             if (token) {
