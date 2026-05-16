@@ -21,9 +21,9 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
 
       // 👇 新增这一行，允许你的自定义域名访问开发服务器
-      // allowedHosts: ['demo.mengya.cloud'],
+      allowedHosts: ['beta516.mengya.cloud'],
       // allowedHosts: ['race.mengya.cloud'],
-      allowedHosts: true,
+      // allowedHosts: true,
       watch: { ignored: ['**/data/**', '**/*.json'] },
     },
   };
