@@ -592,8 +592,26 @@ export default function App() {
             })
             .then(res => res.json())
             .then(data => {
-                if (data.success && data.records && data.records.length > 0) {
-                    setCurrentOnlineTopRecord(data.records[0]);
+                if (data.success) {
+                    const fetchedTop = (data.records && data.records.length > 0) ? data.records[0] : null;
+                    const bestHuman = sortedResults.find(c => !c.dnf && c.finishTime && !c.isAI);
+                    
+                    if (bestHuman && bestHuman.finishTime && (!fetchedTop || bestHuman.finishTime < fetchedTop.time)) {
+                        // The current race's best time is better than the database's record (or db is empty)
+                        setCurrentOnlineTopRecord({
+                            playerName: bestHuman.name,
+                            time: bestHuman.finishTime,
+                            vehicle: VEHICLES_DB.find(v => v.type === bestHuman.vehicleType)?.name || bestHuman.vehicleType || 'Unknown'
+                        });
+                        setNewRecordInfo(prev => prev || {
+                            playerName: bestHuman.name,
+                            oldTime: fetchedTop ? fetchedTop.time : Infinity,
+                            newTime: bestHuman.finishTime!,
+                            diff: fetchedTop ? fetchedTop.time - bestHuman.finishTime! : 0
+                        });
+                    } else if (fetchedTop) {
+                        setCurrentOnlineTopRecord(fetchedTop);
+                    }
                 }
             })
             .catch(() => {});
@@ -623,7 +641,12 @@ export default function App() {
             }).then(res => res.json())
               .then(data => {
                   if (data.success) {
-                      if (data.topRecord) setCurrentOnlineTopRecord(data.topRecord);
+                      if (data.topRecord) {
+                          setCurrentOnlineTopRecord(prev => {
+                              if (!prev || data.topRecord.time < prev.time) return data.topRecord;
+                              return prev;
+                          });
+                      }
                       
                       if (data.isTopRecord) {
                          setNewRecordInfo({
