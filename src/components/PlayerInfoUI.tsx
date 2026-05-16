@@ -152,6 +152,10 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
                 <span className="text-white font-mono text-sm select-all">{playerData.profile.uid}</span>
               </div>
               <div className="flex justify-between items-center">
+                <span className="text-zinc-400">车手昵称</span>
+                <span className="text-white font-bold">{playerData.profile.nickname}</span>
+              </div>
+              <div className="flex justify-between items-center">
                 <span className="text-zinc-400">总资产</span>
                 <span className="text-accent-yellow font-black text-xl">{playerData.wallet.coins} ⟁</span>
               </div>
