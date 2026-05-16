@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Terminal, ShieldAlert, Cpu, Key, Database, ChevronRight, Hash, Search, Trash2, Edit, Check } from 'lucide-react';
-import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, TRACKS } from '../constants';
+import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, TRACKS, SYS_CONFIG } from '../constants';
 import { PlayerData } from '../types';
 
 interface GMConsoleUIProps {
@@ -11,6 +11,11 @@ interface GMConsoleUIProps {
   onClearLeaderboard?: (trackId: string, laps: number) => void;
 }
 
+/**
+ * 开发者与管理员 (GM) 专属终端控制台
+ * 必须鉴权 (uid === 'admin') 才能使用对应的服务端特权 API
+ * 支持发放货币、车辆、配件以及管理全服玩家和排行榜
+ */
 export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClearLeaderboard }: GMConsoleUIProps) {
   const [targetIdentifier, setTargetIdentifier] = useState('');
   const [activeTab, setActiveTab] = useState<'A' | 'B' | 'C' | 'D'>('A');
@@ -137,7 +142,9 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
           status: targetProfile.status,
           banReason: targetProfile.banReason,
           nickname: targetProfile.nickname,
-          coins: targetProfile.coins
+          wallet: {
+            coins: targetProfile.coins
+          }
         }
       })
     })
@@ -155,7 +162,7 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
   // ACTION B: Garage New Car Form
   const [selectedNewCarId, setSelectedNewCarId] = useState<string>(VEHICLES_DB[0]?.id || '');
   const [newCarLevel, setNewCarLevel] = useState<number>(1);
-  const [newCarDurability, setNewCarDurability] = useState<number>(100);
+  const [newCarDurability, setNewCarDurability] = useState<number>(SYS_CONFIG.MAX_DURABILITY);
 
   const handleActionB_Add = () => {
     if (!validateTarget()) return;
@@ -505,7 +512,7 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
                         </div>
                         <div className="flex flex-col gap-1 w-32">
                           <label className="text-cyan-600 text-xs">耐久度</label>
-                          <input type="number" min="0" max="100" value={newCarDurability} onChange={e => setNewCarDurability(Number(e.target.value))} className="bg-black border border-cyan-500/30 text-cyan-400 p-2 outline-none" />
+                          <input type="number" min="0" max={SYS_CONFIG.MAX_DURABILITY} value={newCarDurability} onChange={e => setNewCarDurability(Number(e.target.value))} className="bg-black border border-cyan-500/30 text-cyan-400 p-2 outline-none" />
                         </div>
                         <div className="flex items-end">
                            <button onClick={handleActionB_Add} className="px-6 py-2 bg-cyan-600/20 text-cyan-300 border border-cyan-500 hover:bg-cyan-500 hover:text-black transition-all uppercase tracking-wider font-bold whitespace-nowrap">
@@ -574,8 +581,8 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
                                           <input type="number" value={car.level||1} onChange={e=>handleActionB_Update(idx, 'level', Number(e.target.value))} className="w-12 bg-black border border-cyan-700/50 p-1 text-center font-bold text-cyan-300" />
                                        </label>
                                        <label className="flex items-center gap-1 text-cyan-500">耐久度:
-                                          <input type="range" min="0" max="100" value={car.durability ?? 100} onChange={e=>handleActionB_Update(idx, 'durability', Number(e.target.value))} className="w-24 accent-cyan-500" />
-                                          <span className="w-8 text-right font-bold text-cyan-300">{car.durability ?? 100}</span>
+                                          <input type="range" min="0" max={SYS_CONFIG.MAX_DURABILITY} value={car.durability ?? SYS_CONFIG.MAX_DURABILITY} onChange={e=>handleActionB_Update(idx, 'durability', Number(e.target.value))} className="w-24 accent-cyan-500" />
+                                          <span className="w-8 text-right font-bold text-cyan-300">{car.durability ?? SYS_CONFIG.MAX_DURABILITY}</span>
                                        </label>
                                        <label className="flex items-center gap-1 text-cyan-500 ml-2">喷漆:
                                           <select

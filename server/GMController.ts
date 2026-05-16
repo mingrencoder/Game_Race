@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
 import { AuthService } from './AuthService';
+import { SYS_CONFIG } from '../src/constants';
 
 /**
  * Game Master / Admin 功能控制器
@@ -14,11 +15,12 @@ export class GMController {
      */
     static async queryPlayer(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const targetUid = req.body.targetUid || req.body.uid;
+            let targetUid = req.body.targetUid || req.body.uid;
             if (!targetUid) {
                 res.status(400).json({ error: '缺少 targetUid 参数' });
                 return;
             }
+            targetUid = await AuthService.resolveUid(targetUid);
 
             const playerData = await StorageEngine.readEncrypted(targetUid);
             if (!playerData) {
@@ -26,7 +28,7 @@ export class GMController {
                 return;
             }
 
-            res.status(200).json({ success: true, data: playerData });
+            res.status(200).json({ success: true, targetData: playerData });
         } catch (error: any) {
             console.error('[GMController] queryPlayer execution failed:', error.message);
             res.status(500).json({ error: '读取玩家数据失败', details: error.message });
@@ -39,12 +41,13 @@ export class GMController {
      */
     static async updateProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const targetUid = req.body.targetUid || req.body.uid;
+            let targetUid = req.body.targetUid || req.body.uid;
             const updates = req.body.updates || req.body;
             if (!targetUid || !updates || typeof updates !== 'object') {
                 res.status(400).json({ error: '缺少 targetUid 参数或 updates 字段格式错误' });
                 return;
             }
+            targetUid = await AuthService.resolveUid(targetUid);
 
             if (req.user?.uid === targetUid && updates.status === 'banned') {
                 res.status(403).json({ error: '管理员不能封禁自己' });
@@ -104,14 +107,14 @@ export class GMController {
      */
     static async manageVehicle(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const targetUid = req.body.targetUid || req.body.uid;
+            let targetUid = req.body.targetUid || req.body.uid;
             const action = req.body.action;
-            const vehicleId = req.body.vehicleId;
-            const updates = req.body.updates || req.body;
-            if (!targetUid || !action || !vehicleId) {
-                res.status(400).json({ error: '缺少 targetUid, action 或 vehicleId 参数' });
+            const vehicleData = req.body.vehicleData;
+            if (!targetUid || !action || !vehicleData) {
+                res.status(400).json({ error: '缺少 targetUid, action 或 vehicleData 参数' });
                 return;
             }
+            targetUid = await AuthService.resolveUid(targetUid);
 
             const playerData = await StorageEngine.readEncrypted(targetUid);
             if (!playerData) {
@@ -120,45 +123,53 @@ export class GMController {
             }
 
             if (!playerData.garage) playerData.garage = [];
-            const vehicleIndex = playerData.garage.findIndex((v: any) => v.carId === vehicleId);
 
-            if (action === 'add') {
-                if (vehicleIndex >= 0) {
-                    res.status(400).json({ error: '该车辆已存在，无法重复添加' });
-                    return;
-                }
-                const newVehicle = {
-                    carId: vehicleId,
-                    level: updates?.level || 0,
-                    durability: updates?.durability ?? 100,
-                    isPermanent: updates?.isPermanent ?? true,
-                    expireAt: updates?.expireAt || null,
-                    equippedParts: updates?.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null }
-                };
-                playerData.garage.push(newVehicle);
-            } else if (action === 'update') {
-                if (vehicleIndex < 0) {
-                    res.status(404).json({ error: '未找到指定车辆' });
-                    return;
-                }
-                const vehicle = playerData.garage[vehicleIndex];
-                if (updates?.level !== undefined) vehicle.level = updates.level;
-                if (updates?.durability !== undefined) vehicle.durability = updates.durability;
-                if (updates?.isPermanent !== undefined) vehicle.isPermanent = updates.isPermanent;
-                if (updates?.expireAt !== undefined) vehicle.expireAt = updates.expireAt;
-            } else if (action === 'delete') {
-                if (vehicleIndex < 0) {
-                    res.status(404).json({ error: '未找到指定车辆' });
-                    return;
-                }
-                playerData.garage.splice(vehicleIndex, 1);
+            if (action === 'update' && Array.isArray(vehicleData)) {
+                playerData.garage = vehicleData;
             } else {
-                res.status(400).json({ error: `不支持的 action: ${action}` });
-                return;
+                const vehicleId = vehicleData.carId;
+                if (!vehicleId) {
+                    res.status(400).json({ error: '缺少 vehicleData.carId 参数' });
+                    return;
+                }
+                const vehicleIndex = playerData.garage.findIndex((v: any) => v.carId === vehicleId);
+
+                if (action === 'add') {
+                    if (vehicleIndex >= 0) {
+                        res.status(400).json({ error: '该车辆已存在，无法重复添加' });
+                        return;
+                    }
+                    const newVehicle = {
+                        carId: vehicleId,
+                        level: vehicleData.level || 0,
+                        durability: vehicleData.durability !== undefined ? vehicleData.durability : SYS_CONFIG.MAX_DURABILITY,
+                        isPermanent: vehicleData.isPermanent !== undefined ? vehicleData.isPermanent : true,
+                        expireAt: vehicleData.expireAt || null,
+                        equippedPaint: vehicleData.equippedPaint || null,
+                        equippedParts: vehicleData.equippedParts || { engine: null, tires: null, launch: null, drift: null, acceleration: null }
+                    };
+                    playerData.garage.push(newVehicle);
+                } else if (action === 'delete') {
+                    if (vehicleIndex < 0) {
+                        res.status(404).json({ error: '未找到指定车辆' });
+                        return;
+                    }
+                    playerData.garage.splice(vehicleIndex, 1);
+                } else {
+                    res.status(400).json({ error: `不支持的 action 或 vehicleData 格式: ${action}` });
+                    return;
+                }
+            }
+
+            if (!playerData.profile) {
+                playerData.profile = { uid: targetUid, nickname: `user_${targetUid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() };
+            }
+            if (!playerData.profile.activeCarId && playerData.garage.length > 0) {
+                playerData.profile.activeCarId = playerData.garage[0].carId;
             }
 
             await StorageEngine.writeEncrypted(targetUid, playerData);
-            res.status(200).json({ success: true, message: `车辆 ${action} 操作成功`, garage: playerData.garage });
+            res.status(200).json({ success: true, message: `车辆 ${action} 操作成功`, targetData: { garage: playerData.garage } });
         } catch (error: any) {
             console.error('[GMController] manageVehicle execution failed:', error.message);
             res.status(500).json({ error: '车辆管理操作失败', details: error.message });
@@ -171,12 +182,13 @@ export class GMController {
      */
     static async modifyInventory(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const targetUid = req.body.targetUid || req.body.uid;
-            const delta = req.body.delta || req.body;
+            let targetUid = req.body.targetUid || req.body.uid;
+            const delta = req.body.deltas || req.body.delta || req.body;
             if (!targetUid || !delta || typeof delta !== 'object') {
                 res.status(400).json({ error: '缺少 targetUid 或差值更新对象 (delta)' });
                 return;
             }
+            targetUid = await AuthService.resolveUid(targetUid);
 
             const playerData = await StorageEngine.readEncrypted(targetUid);
             if (!playerData) {
@@ -187,57 +199,60 @@ export class GMController {
             if (!playerData.inventory) {
                 playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
             }
-            if (!playerData.inventory.materials) playerData.inventory.materials = {};
-            if (!playerData.inventory.protectors) playerData.inventory.protectors = {};
+            if (!playerData.inventory.materials) playerData.inventory.materials = { core_primary: 0, core_advanced: 0, core_legendary: 0 };
+            if (!playerData.inventory.protectors) playerData.inventory.protectors = { card_silver: 0, card_gold: 0 };
+            if (!playerData.inventory.specialItems) playerData.inventory.specialItems = { rename_card: 0 };
             if (!playerData.inventory.parts) playerData.inventory.parts = {};
+            if (!playerData.inventory.paints) playerData.inventory.paints = [];
 
             // 预校验差值，确保扣除时数量充足
-            const categories = ['materials', 'protectors', 'parts'];
-            for (const category of categories) {
-                if (delta[category]) {
-                    for (const [key, diffStr] of Object.entries(delta[category])) {
-                        const diff = Number(diffStr);
-                        if (isNaN(diff)) continue;
+            for (const [key, diffStr] of Object.entries(delta)) {
+                if (key === 'paints') continue; // array logic handled later
+                const diff = Number(diffStr);
+                if (isNaN(diff)) continue;
 
-                        const currentVal = playerData.inventory[category][key] || 0;
-                        if (diff < 0 && currentVal + diff < 0) {
-                            res.status(400).json({ error: `背包道具不足: [${category}] ${key} 余量为 ${currentVal}，无法扣除 ${Math.abs(diff)}` });
-                            return;
-                        }
+                let category = 'parts';
+                if (['core_primary', 'core_advanced', 'core_legendary'].includes(key)) category = 'materials';
+                else if (['card_silver', 'card_gold'].includes(key)) category = 'protectors';
+                else if (['rename_card'].includes(key)) category = 'specialItems';
+                else if (key.startsWith('liv_') || key.startsWith('#')) category = 'paints';
+
+                if (category !== 'paints') {
+                    const currentVal = (playerData.inventory as any)[category][key] || 0;
+                    if (diff < 0 && currentVal + diff < 0) {
+                        res.status(400).json({ error: `背包道具不足: [${category}] ${key} 余量为 ${currentVal}，无法扣除 ${Math.abs(diff)}` });
+                        return;
                     }
                 }
             }
 
             // 执行修改
-            for (const category of categories) {
-                if (delta[category]) {
-                    for (const [key, diffStr] of Object.entries(delta[category])) {
-                        const diff = Number(diffStr);
-                        if (isNaN(diff)) continue;
-                        
-                        const currentVal = playerData.inventory[category][key] || 0;
-                        playerData.inventory[category][key] = currentVal + diff;
+            for (const [key, diffStr] of Object.entries(delta)) {
+                if (key === 'paints') continue; 
+                const diff = Number(diffStr);
+                if (isNaN(diff)) continue;
+
+                let category = 'parts';
+                if (['core_primary', 'core_advanced', 'core_legendary'].includes(key)) category = 'materials';
+                else if (['card_silver', 'card_gold'].includes(key)) category = 'protectors';
+                else if (['rename_card'].includes(key)) category = 'specialItems';
+                else if (key.startsWith('liv_') || key.startsWith('#')) category = 'paints'; // rough paint check
+
+                if (category === 'paints') {
+                    if (diff > 0 && !playerData.inventory.paints.includes(key)) {
+                        playerData.inventory.paints.push(key);
+                    } else if (diff < 0) {
+                        const idx = playerData.inventory.paints.indexOf(key);
+                        if (idx >= 0) playerData.inventory.paints.splice(idx, 1);
                     }
+                } else {
+                    const currentVal = (playerData.inventory as any)[category][key] || 0;
+                    (playerData.inventory as any)[category][key] = currentVal + diff;
                 }
             }
 
-            // 若涉及到 paints (paints 采用数组存储) 我们仅做演示：若不传暂时忽略，如果需要增发特定 string 推入即可。
-            if (Array.isArray(delta.paints)) {
-                delta.paints.forEach((paintId: string) => {
-                    const idx = playerData.inventory.paints.indexOf(paintId);
-                    // 假设传入带 "-" 前缀删，否则加。这只是个示例。
-                    if (paintId.startsWith('-')) {
-                        const actualId = paintId.slice(1);
-                        const i = playerData.inventory.paints.indexOf(actualId);
-                        if (i >= 0) playerData.inventory.paints.splice(i, 1);
-                    } else {
-                        if (idx < 0) playerData.inventory.paints.push(paintId);
-                    }
-                });
-            }
-
             await StorageEngine.writeEncrypted(targetUid, playerData);
-            res.status(200).json({ success: true, message: '背包更新成功', inventory: playerData.inventory });
+            res.status(200).json({ success: true, message: '背包更新成功', targetData: { inventory: playerData.inventory } });
         } catch (error: any) {
             console.error('[GMController] modifyInventory execution failed:', error.message);
             res.status(500).json({ error: '修改背包失败', details: error.message });
@@ -249,13 +264,15 @@ export class GMController {
      */
     static async resetUserPassword(req: AuthenticatedRequest, res: Response): Promise<void> {
         try {
-            const targetUid = req.body.targetUid || req.body.uid;
+            let targetUid = req.body.targetUid || req.body.uid;
             const newPassword = req.body.newPassword;
 
             if (!targetUid || !newPassword) {
                 res.status(400).json({ error: '缺少 targetUid 或 newPassword 参数' });
                 return;
             }
+
+            targetUid = await AuthService.resolveUid(targetUid);
 
             // 调用 AuthService 中新增的管理方法强制改密码
             await AuthService.adminResetPassword(targetUid, newPassword);

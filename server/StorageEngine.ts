@@ -116,6 +116,17 @@ export class StorageEngine {
         const filePath = path.join(DATA_DIR, `UID_${uid}.json`);
         try {
             const raw = await fs.readFile(filePath, 'utf8');
+            
+            if (raw.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    console.log(`[Storage Engine] 兼容旧版本格式，UID ${uid} 数据作为明文读取成功。`);
+                    return parsed;
+                } catch (e) {
+                    // Ignore parse error and proceed to encrypted logic
+                }
+            }
+
             const parts = raw.split(':');
             
             if (parts.length !== 3) {

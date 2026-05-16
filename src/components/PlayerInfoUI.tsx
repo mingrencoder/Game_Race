@@ -10,6 +10,10 @@ interface PlayerInfoUIProps {
   onClose: () => void;
 }
 
+/**
+ * 个人资料中心前端 UI 组件
+ * 提供修改昵称（消耗改名卡）、修改密码及预览当前战车等功能
+ */
 export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: PlayerInfoUIProps) {
   const [nickname, setNickname] = useState(playerData.profile.nickname);
   const [oldPassword, setOldPassword] = useState('');
@@ -41,7 +45,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ nickname: nickname.trim() })
+      body: JSON.stringify({ newNickname: nickname.trim() })
     })
     .then(res => res.json())
     .then(data => {
@@ -62,7 +66,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
         }));
         setMessage({ type: 'success', text: '昵称修改成功！' });
       } else {
-        setMessage({ type: 'error', text: data.message || '修改失败' });
+        setMessage({ type: 'error', text: data.error || data.message || '修改失败' });
       }
     })
     .catch(err => {
@@ -103,7 +107,7 @@ export default function PlayerInfoUI({ playerData, setPlayerData, onClose }: Pla
         setNewPassword('');
         setConfirmPassword('');
       } else {
-        setMessage({ type: 'error', text: data.message || '修改失败' });
+        setMessage({ type: 'error', text: data.error || data.message || '修改失败' });
       }
     })
     .catch(err => {

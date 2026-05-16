@@ -1,5 +1,9 @@
 import { Track, Point } from './types';
 
+/**
+ * 原始赛道数据定义
+ * 所有的坐标 waypoint 表示赛道分段检测点，物理引擎与 AI 将基于此数据进行运动
+ */
 const RAW_TRACKS: Track[] = [
   {
     id: 'oval',
@@ -243,6 +247,10 @@ const RAW_TRACKS: Track[] = [
   }
 ];
 
+/**
+ * 处理赛道路线直角或锐角的算法（增加切角缓冲区域）
+ * 主要是为了使一些直角赛道的过弯更加平滑自然
+ */
 const bevelCorners = (waypoints: Point[]): Point[] => {
   const newPts: Point[] = [];
   for (let i = 0; i < waypoints.length; i++) {
@@ -278,6 +286,9 @@ const bevelCorners = (waypoints: Point[]): Point[] => {
   return newPts;
 };
 
+/** 
+ * 经过圆滑插值处理后的正式游戏赛道列表 
+ */
 export const TRACKS: Track[] = RAW_TRACKS.map(t => {
   if (t.id === 'star_breaker' || t.id === 'crossover_bridge' || t.id === 'neon_labyrinth') {
     return { ...t, waypoints: bevelCorners(t.waypoints) };
@@ -285,17 +296,21 @@ export const TRACKS: Track[] = RAW_TRACKS.map(t => {
   return t;
 });
 
+/**
+ * 核心基础物理常量（服务端同步基准）
+ */
 export const PHYSICS = {
-  ACCELERATION: 0.15,
-  BRAKE: 0.3,
-  FRICTION: 0.03,
-  MAX_SPEED: 9,
-  STEER_SPEED: 0.025,
-  CAR_SIZE: 40, // Collision radius
-  GRIP: 0.15,
-  DRIFT_GRIP: 0.03,
+  ACCELERATION: 0.15,      // 基础加速度
+  BRAKE: 0.3,              // 基础刹车制动
+  FRICTION: 0.03,          // 自然地面摩擦阻力（无操作时的减速基础）
+  MAX_SPEED: 9,            // 不考虑任何外力或改装情况下的最原始极速下限
+  STEER_SPEED: 0.025,      // 基础转向角速度
+  CAR_SIZE: 40,            // 每辆车的碰撞半径判定
+  GRIP: 0.15,              // 抓地力补偿（防止滑动的能力）
+  DRIFT_GRIP: 0.03,        // 漂移时的侧向滑移允许范围
 };
 
+/** AI 在各个难度梯度面板的基础速度等属性参数加成 */
 export const AI_CONFIG = {
   1: { maxSpeed: 5.0, steerAccuracy: 0.1, lookAhead: 120 }, // Easy
   2: { maxSpeed: 7.0, steerAccuracy: 0.05, lookAhead: 160 }, // Medium
@@ -306,10 +321,103 @@ export const AI_CONFIG = {
 
 export const AI_NAMES = ['影风', '雷霆', '闪电', '狂飙', '夜煞', '暗影', '破空', '逐风', '极光', '魅影', '战神', '飞火', '龙卷', '星火', '陨石', '白虎', '青龙', '朱雀', '玄武'];
 
+export const AI_TIER_COLORS = {
+  BASIC: ['#aaaaaa', '#888888', '#666666', '#a0522d', '#4682b4', '#556b2f', '#8fbc8f', '#bc8f8f'],
+  INTERMEDIATE: ['#ff4500', '#1e90ff', '#32cd32', '#ffd700', '#ff8c00', '#da70d6'],
+  ADVANCED: ['#ff0055', '#00ffcc', '#bf00ff', '#ff00ea', '#00f2ff', '#ffea00', '#ff0033'],
+  ELITE: ['#ff00ff', '#00ffff', '#ffff00', '#ff00aa', '#00aa00', '#ff3300', '#ccff00', '#7fff00']
+};
+
 export const BASIC_COLORS = ['#00f2ff', '#ff00ea', '#f4ff40', '#00ff00', '#ff2222'];
+
+export const AI_STYLE_CONFIG: Record<string, { apexFactor: number, lookaheadBonus: number, brakingAngle: number, driftAngle: number, driftSpeedRate: number, steerGrip: number }> = {
+  AGGRESSIVE: { apexFactor: 0.35, lookaheadBonus: 0.8, brakingAngle: 0.8, driftAngle: 0.7, driftSpeedRate: 0.5, steerGrip: 1.0 },
+  CAUTIOUS: { apexFactor: 0.05, lookaheadBonus: 0.0, brakingAngle: 0.4, driftAngle: 1.2, driftSpeedRate: 0.8, steerGrip: 0.7 },
+  DRIFTER: { apexFactor: 0.25, lookaheadBonus: 0.0, brakingAngle: 0.75, driftAngle: 0.6, driftSpeedRate: 0.45, steerGrip: 1.2 },
+  OPTIMAL: { apexFactor: 0.25, lookaheadBonus: 0.4, brakingAngle: 0.65, driftAngle: 0.8, driftSpeedRate: 0.55, steerGrip: 0.8 }
+};
+
+/**
+ * 共有游戏规则业务配置
+ * 作为前后端 SSOT 共同依据的一些数值
+ */
+export const SYS_CONFIG = {
+  RENTAL_DURATION_DAYS: 30,                 // 车辆租赁时长 (天)
+  RENTAL_DURATION_MS: 30 * 24 * 60 * 60 * 1000, 
+  PART_DEPRECIATION_RATE: 0.2,             // 卸下部件折损手续费比率
+  MAX_UPGRADE_LEVEL: 5,                    // 最大可强化等级
+  MAX_DURABILITY: 100,                     // 赛车最大耐久度的上限
+  DURABILITY_DEBUFF_THRESHOLD: 30          // 耐久度降低性能处罚触发的阈值
+};
+
+/**
+ * 游戏数值产出、门票、排位扣费等关键常量
+ */
+export const GAME_CONSTANTS = {
+  MAX_LEADERBOARD_RECORDS: 10,
+  CUP_ENTRY_FEE_PER_TRACK: 10,
+  POINTS_SYSTEM: [25, 18, 15, 12, 10, 8, 6, 4],
+  TEAM_RACE_POINTS: {
+    2: [10, 8],
+    3: [10, 8, 6],
+    4: [10, 8, 6, 5],
+    5: [10, 8, 6, 5, 4],
+    6: [10, 8, 6, 5, 4, 3],
+    7: [10, 8, 6, 5, 4, 3, 2],
+    8: [10, 8, 6, 5, 4, 3, 2, 1]
+  } as Record<number, number[]>,
+  DEFAULT_TEAM_POINTS: [10, 8, 6, 4, 2, 1, 0, 0],
+  BONUS: {
+    FLAWLESS_TEAM_VICTORY: 10,
+    CUP_WINNER_MULTIPLIER: 25,
+    CUP_FINISH_MULTIPLIER: 15,
+    CUP_P1_FIRST_PLACE: 40,
+    CUP_P1_PODIUM: 15,
+  },
+  AI_VEHICLE_PRICE: {
+    ELITE_MIN: 3000,
+    EASY_MAX: 1200,
+    MED_MIN: 800,
+    MED_MAX: 1500,
+    HARD_MIN: 1500,
+    HARD_MAX: 3000,
+    EXPERT_MIN: 2000,
+  },
+  DIFFICULTY_MULTIPLIER: {
+    1: 0.8,
+    2: 1.0,
+    3: 1.2,
+    4: 1.5,
+    5: 1.8
+  } as Record<number, number>
+};
+
+/** 
+ * 强化与进阶系统不同层级所需的材料、消耗量、保护概率等配置 
+ */
+export interface UpgradeTierConfig {
+  material: string;
+  materialName: string;
+  cost: number;
+  rate: { [tier: number]: number };
+  protection: string | null;
+  protectionName: string | null;
+  protectionCost: number;
+  failDrop: number;
+}
+
+export const UPGRADE_CONFIG: Record<number, UpgradeTierConfig> = {
+  0: { material: 'core_primary', materialName: '初级强化核心', cost: 1, rate: { 0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0 }, protection: null, protectionName: null, protectionCost: 0, failDrop: 0 },
+  1: { material: 'core_primary', materialName: '初级强化核心', cost: 3, rate: { 0: 0.8, 1: 0.8, 2: 0.7, 3: 0.6 }, protection: null, protectionName: null, protectionCost: 0, failDrop: 0 },
+  2: { material: 'core_advanced', materialName: '高级强化核心', cost: 2, rate: { 0: 0.6, 1: 0.6, 2: 0.45, 3: 0.3 }, protection: null, protectionName: null, protectionCost: 0, failDrop: 0 },
+  3: { material: 'core_advanced', materialName: '高级强化核心', cost: 4, rate: { 0: 0.4, 1: 0.4, 2: 0.25, 3: 0.15 }, protection: 'card_silver', protectionName: '白银保护卡', protectionCost: 1500, failDrop: 1 },
+  4: { material: 'core_legendary', materialName: '传说强化核心', cost: 3, rate: { 0: 0.2, 1: 0.2, 2: 0.1, 3: 0.05 }, protection: 'card_gold', protectionName: '黄金保护卡', protectionCost: 8000, failDrop: 4 }
+};
+// ------------------------------------------
 
 import { Vehicle, Item, VehicleTier } from './types';
 
+/** 游戏车辆资料库大全 */
 export const VEHICLES_DB: Vehicle[] = [
   { id: 'car_basic', name: '新星-V1', type: 'standard', tier: 'T0', price: 0, rent: 0, maintenanceFee: 0, baseSpeed: 7.0, baseGrip: 0.12, baseLaunch: 1.5, baseDriftSpeed: 5.0, baseAcceleration: 0.10 },
   { id: 'car_speed', name: '极速先锋', type: 'f1', tier: 'T1', price: 2000, rent: 600, maintenanceFee: 30, baseSpeed: 8.0, baseGrip: 0.10, baseLaunch: 2.0, baseDriftSpeed: 4.8, baseAcceleration: 0.12 },
@@ -321,6 +429,7 @@ export const VEHICLES_DB: Vehicle[] = [
   { id: 'car_legend', name: '不朽传说', type: 'legend', tier: 'T3', price: 80000, rent: 24000, maintenanceFee: 1200, baseSpeed: 10.8, baseGrip: 0.19, baseLaunch: 3.0, baseDriftSpeed: 8.0, baseAcceleration: 0.22 }
 ];
 
+/** 游戏零部件与技能改装配件大全 */
 export const ITEMS_DB = [
   { id: 'rename_card', name: '改名卡', type: 'special' as const, price: 100000, boostValue: 0, description: '极其珍贵的权限卡，用于在个人信息界面修改一次车手昵称。' },
   { id: 'eng_v1', name: 'V1 涡轮增压', type: 'engine' as const, price: 300, boostValue: 0.2, speedBoost: 0.2 },
@@ -342,6 +451,7 @@ export const ITEMS_DB = [
 
 export type LiveryTier = 'BASIC' | 'INTERMEDIATE' | 'ADVANCED' | 'ELITE';
 
+/** 游戏喷漆皮肤大全 */
 export const LIVERIES_DB: { id: string, name: string, price: number, isGradient: boolean, colors: string[], tier: LiveryTier }[] = [
   { id: 'liv_silver', name: '液态白银', price: 500, isGradient: true, colors: ['#ffffff', '#888888'], tier: 'INTERMEDIATE' },
   { id: 'liv_orange', name: '风暴赛道橙', price: 500, isGradient: false, colors: ['#ff4500'], tier: 'INTERMEDIATE' },

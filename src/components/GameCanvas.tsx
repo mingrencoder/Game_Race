@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { GameSettings, CarState, Point, Track, AIDifficulty, PlayerData } from '../types';
-import { TRACKS, PHYSICS, AI_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
+import { TRACKS, PHYSICS, AI_CONFIG, AI_STYLE_CONFIG, BASIC_COLORS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from '../services/audioService';
 import { socketService } from '../services/socketService';
@@ -15,6 +15,11 @@ interface GameCanvasProps {
   onExit: () => void;
 }
 
+/**
+ * 游戏核心物理与渲染引擎组件 (Canvas 2D)
+ * 包含了所有的前端本地模拟预测、玩家输入控制、碰撞检测、漂移计算与联机插值平滑逻辑。
+ * 此模块负责赛道与赛车的高频率绘制（依靠 requestAnimationFrame）。
+ */
 const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, scores, onFinish, onExit }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [matchId, setMatchId] = useState(0);
@@ -744,11 +749,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
               cornerDirY /= cornerLen;
           }
 
-          let apexFactor = 0;
-          if (car.aiStyle === 'AGGRESSIVE') apexFactor = 0.35; // Hug inside wall closely
-          else if (car.aiStyle === 'OPTIMAL') apexFactor = 0.25;
-          else if (car.aiStyle === 'DRIFTER') apexFactor = 0.25;
-          else if (car.aiStyle === 'CAUTIOUS') apexFactor = 0.05; // Stay mostly near center
+          let styleCfg = AI_STYLE_CONFIG[car.aiStyle || 'OPTIMAL'] || AI_STYLE_CONFIG['OPTIMAL'];
+          let apexFactor = styleCfg.apexFactor;
 
           // The target point is the apex offset from the waypoint
           let tX = p1.x + cornerDirX * track.width * apexFactor;
@@ -757,9 +759,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           // Look ahead to smooth out turns
           const distToNext = Math.hypot(p1.x - x, p1.y - y);
           
-          let lookaheadMultiplier = aiCfg.lookAhead / 40; // Balanced anticipation (was 35, too twitchy)
-          if (car.aiStyle === 'AGGRESSIVE') lookaheadMultiplier += 0.8;
-          else if (car.aiStyle === 'OPTIMAL') lookaheadMultiplier += 0.4;
+          let lookaheadMultiplier = (aiCfg.lookAhead / 40) + styleCfg.lookaheadBonus;
           
           // Speed proportionality: faster speed = look further ahead
           const speedRatio = Math.max(0.3, speed / car.maxSpeed);
@@ -824,36 +824,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ settings, garage, cupState, sco
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
           while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-          let steerThreshold = aiCfg.steerAccuracy;
-          if (car.aiStyle === 'OPTIMAL') steerThreshold *= 0.8; 
-          else if (car.aiStyle === 'DRIFTER') steerThreshold *= 1.2;
+          let steerThreshold = aiCfg.steerAccuracy * styleCfg.steerGrip;
 
           if (Math.abs(angleDiff) > steerThreshold) {
             if (angleDiff > 0) right = true;
             else left = true;
           }
 
-          let brakingAngle = 0.6; 
-          let driftAngle = 0.8; 
-          let driftSpeedRate = 0.6;
-             
-             if (car.aiStyle === 'AGGRESSIVE') {
-                brakingAngle = 0.8;
-                driftAngle = 0.7;
-                driftSpeedRate = 0.5;
-             } else if (car.aiStyle === 'CAUTIOUS') {
-                brakingAngle = 0.4;
-                driftAngle = 1.2;
-                driftSpeedRate = 0.8;
-             } else if (car.aiStyle === 'DRIFTER') {
-                brakingAngle = 0.75;
-                driftAngle = 0.6;
-                driftSpeedRate = 0.45;
-             } else if (car.aiStyle === 'OPTIMAL') {
-                brakingAngle = 0.65;
-                driftAngle = 0.8;
-                driftSpeedRate = 0.55;
-             }
+          let brakingAngle = styleCfg.brakingAngle; 
+          let driftAngle = styleCfg.driftAngle; 
+          let driftSpeedRate = styleCfg.driftSpeedRate;
 
              // AI drifting based on style & difficulty
              const canDrift = effDiff >= 3 || car.aiStyle === 'DRIFTER';

@@ -89,7 +89,7 @@ async function startServer() {
   app.get('/api/player/profile', requireAuth, PlayerController.getProfile);
   app.post('/api/player/nickname', requireAuth, PlayerController.updateNickname);
   app.post('/api/player/password', requireAuth, PlayerController.updatePassword);
-  app.post('/api/player/activeCar', requireAuth, PlayerController.setActiveCar);
+  app.post('/api/player/setActiveCar', requireAuth, PlayerController.setActiveCar);
 
   // 4. 挂载带 JWT 和角色验证的 GM API 专线
   app.post('/api/gm/queryPlayer', requireAuth, requireAdmin, GMController.queryPlayer);
@@ -462,6 +462,8 @@ async function startServer() {
         playersCount: r.players.length,
         status: r.status,
         hasPassword: r.settings.passwordEnabled && !!r.settings.password,
+        trackId: r.settings.trackId,
+        aiDifficulty: r.settings.aiDifficulty
       }));
       callback({ success: true, rooms: roomList });
     });

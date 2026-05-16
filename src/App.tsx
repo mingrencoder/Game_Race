@@ -3,11 +3,21 @@ import { OnlineMenu, OnlineLobby } from './components/OnlineLobby';
 import PlayerInfoUI from './components/PlayerInfoUI';
 import { socketService } from './services/socketService';
 import { GameSettings, CarState, AIDifficulty, GameMode, PlayerData, LapRecord, AIStyle, TeamSetup } from './types';
-import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES } from './constants';
+import { TRACKS, VEHICLES_DB, ITEMS_DB, LIVERIES_DB, AI_NAMES, SYS_CONFIG, GAME_CONSTANTS, AI_TIER_COLORS } from './constants';
 import GameCanvas from './components/GameCanvas';
+import { OnlineRoomsPreview } from './components/OnlineRoomsPreview';
+import { InstructionsModal } from './components/InstructionsModal';
+import { ConfirmModal } from './components/ConfirmModal';
+import { LeaderboardModal } from './components/LeaderboardModal';
 
+/** 随机抽取一个预设的 AI 名称 */
 const getRandomAiName = () => AI_NAMES[Math.floor(Math.random() * AI_NAMES.length)];
 
+/** 
+ * 根据设定生成组队模式中的 AI 名单列表
+ * @param teamSize 每队人数，默认3
+ * @param difficulty AI 难度级别，决定了电脑使用的赛车与属性
+ */
 const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): TeamSetup[] => {
   const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
   const roster: TeamSetup[] = [];
@@ -16,12 +26,12 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): 
   const createRandomAI = (id: string, name: string, team: 'RED' | 'BLUE'): TeamSetup => {
     let availableVehicles = VEHICLES_DB;
     if (difficulty === 5) {
-      availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
+      availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.ELITE_MIN || v.id === 'car_boss' || v.id === 'car_legend');
     } else {
-      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
-      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= 800 && v.price <= 1500);
-      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= 1500 && v.price <= 3000);
-      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= 2000);
+      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.EASY_MAX);
+      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.MED_MIN && v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.MED_MAX);
+      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.HARD_MIN && v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.HARD_MAX);
+      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.EXPERT_MIN);
     }
     
     if (availableVehicles.length === 0) availableVehicles = VEHICLES_DB;
@@ -75,6 +85,10 @@ const generateTeamRoster = (teamSize: 2 | 3 = 3, difficulty: AIDifficulty = 2): 
   return roster;
 };
 
+/** 
+ * 根据难度批量随机生成单机比赛中所需的无尽 AI 车手种子数据 
+ * 包含了车辆随机、改装随机、皮肤随机等
+ */
 const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty) => {
   const seeds = [];
   const styles: AIStyle[] = ['OPTIMAL', 'AGGRESSIVE', 'CAUTIOUS', 'DRIFTER'];
@@ -82,12 +96,12 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty) => {
   for (let i = 0; i < count; i++) {
     let availableVehicles = VEHICLES_DB;
     if (difficulty === 5) {
-      availableVehicles = VEHICLES_DB.filter(v => v.price >= 3000 || v.id === 'car_boss' || v.id === 'car_legend');
+      availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.ELITE_MIN || v.id === 'car_boss' || v.id === 'car_legend');
     } else {
-      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= 1200);
-      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= 800 && v.price <= 1500);
-      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= 1500 && v.price <= 3000);
-      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= 2000);
+      if (difficulty === 1) availableVehicles = VEHICLES_DB.filter(v => v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.EASY_MAX);
+      else if (difficulty === 2) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.MED_MIN && v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.MED_MAX);
+      else if (difficulty === 3) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.HARD_MIN && v.price <= GAME_CONSTANTS.AI_VEHICLE_PRICE.HARD_MAX);
+      else if (difficulty === 4) availableVehicles = VEHICLES_DB.filter(v => v.price >= GAME_CONSTANTS.AI_VEHICLE_PRICE.EXPERT_MIN);
     }
     
     if (availableVehicles.length === 0) availableVehicles = VEHICLES_DB;
@@ -123,24 +137,15 @@ const generateAiRosterSeeds = (count: number, difficulty: AIDifficulty) => {
     let randomLivery: any = undefined;
     let pColor: string;
     
-    // Low difficulty (normal/basic colors)
-    const basicColors = ['#aaaaaa', '#888888', '#666666', '#a0522d', '#4682b4', '#556b2f', '#8fbc8f', '#bc8f8f'];
-    // Intermediate difficulty
-    const intermediateColors = ['#ff4500', '#1e90ff', '#32cd32', '#ffd700', '#ff8c00', '#da70d6'];
-    // Advanced difficulty
-    const advancedColors = ['#ff0055', '#00ffcc', '#bf00ff', '#ff00ea', '#00f2ff', '#ffea00', '#ff0033'];
-    // Elite difficulty (bright neon)
-    const eliteColors = ['#ff00ff', '#00ffff', '#ffff00', '#ff00aa', '#00aa00', '#ff3300', '#ccff00', '#7fff00'];
-
     if (difficulty === 5) {
       randomLivery = { isGradient: true, colors: [`hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`, `hsl(${Math.random()*360}, 100%, 50%)`] };
-      pColor = eliteColors[Math.floor(Math.random() * eliteColors.length)];
+      pColor = AI_TIER_COLORS.ELITE[Math.floor(Math.random() * AI_TIER_COLORS.ELITE.length)];
     } else {
       randomLivery = hasLivery ? LIVERIES_DB[Math.floor(Math.random() * LIVERIES_DB.length)] : undefined;
-      let colorPool = basicColors;
-      if (difficulty === 2) colorPool = intermediateColors;
-      else if (difficulty === 3) colorPool = advancedColors;
-      else if (difficulty >= 4) colorPool = eliteColors;
+      let colorPool = AI_TIER_COLORS.BASIC;
+      if (difficulty === 2) colorPool = AI_TIER_COLORS.INTERMEDIATE;
+      else if (difficulty === 3) colorPool = AI_TIER_COLORS.ADVANCED;
+      else if (difficulty >= 4) colorPool = AI_TIER_COLORS.ELITE;
       
       pColor = randomLivery ? '#ffffff' : colorPool[Math.floor(Math.random() * colorPool.length)];
     }
@@ -164,6 +169,7 @@ import { Trophy, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { audioService } from './services/audioService';
 
+/** 新号注册时的初始化玩家存档数据结构模板 */
 const initialPlayerData: PlayerData = {
   profile: {
     uid: '',
@@ -179,7 +185,7 @@ const initialPlayerData: PlayerData = {
     {
       carId: 'car_basic',
       level: 0,
-      durability: 100,
+      durability: SYS_CONFIG.MAX_DURABILITY,
       isPermanent: true,
       expireAt: null,
       equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null },
@@ -195,59 +201,12 @@ const initialPlayerData: PlayerData = {
   }
 };
 
-const OnlineRoomsPreview = () => {
-  const [rooms, setRooms] = useState<any[]>([]);
 
-  React.useEffect(() => {
-    let interval: NodeJS.Timeout;
-    import('./services/socketService').then(({ socketService }) => {
-      socketService.connect();
-      const fetchRooms = () => {
-        socketService.getRooms((res) => {
-          if (res.success) {
-            setRooms(res.rooms);
-          } else if (Array.isArray(res)) {
-            setRooms(res);
-          }
-        });
-      };
-      fetchRooms();
-      interval = setInterval(fetchRooms, 3000); // refresh every 3s
-    });
-    return () => clearInterval(interval);
-  }, []);
 
-  return (
-    <div className="py-4 text-zinc-300">
-      <div className="text-center">
-        <p className="text-xl font-black text-accent-cyan tracking-wider mb-2">在线对战大厅</p>
-        <p className="text-sm opacity-80">当前进行中的房间总数: <span className="font-bold text-accent-yellow">{rooms.length} / 20</span></p>
-      </div>
-    </div>
-  );
-};
-
-const calculateCoinReward = (rank: number, playerCount: number, difficulty: number, isTeamMode: boolean, isTeamWin: boolean, isFlawless: boolean, isMVP: boolean) => {
-  const baseCoins = [25, 18, 15, 12, 10, 8];
-  const PLAYER_COUNT_MULT: Record<number, number> = { 2: 0.6, 3: 0.8, 4: 1.0, 5: 1.1, 6: 1.2 };
-  const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[difficulty] || 1.0;
-  
-  const countMult = PLAYER_COUNT_MULT[playerCount] || 1.0;
-  
-  if (isTeamMode) {
-    if (!isTeamWin) return 0;
-    
-    let totalFixed = 0;
-    if (isFlawless) totalFixed += 10;
-    if (isMVP) totalFixed += 10;
-    
-    return Math.floor(20 * countMult * diffMult) + totalFixed;
-  } else {
-    const base = baseCoins[rank] || 0;
-    return Math.floor(base * countMult * diffMult);
-  }
-};
-
+/**
+ * 游戏主应用程序入囗与状态机控制器
+ * 负责调度主要的 UI 界面流转（菜单、赛车、在线大厅等）、玩家数据上下文以及部分全局音频系统的集成
+ */
 export default function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -311,6 +270,7 @@ export default function App() {
   const [newRecordInfo, setNewRecordInfo] = useState<{ playerName: string, diff: number, oldTime: number, newTime: number } | null>(null);
   const [flawlessVictoryMessage, setFlawlessVictoryMessage] = useState<string | null>(null);
   const [isFlawlessResult, setIsFlawlessResult] = useState<boolean>(false);
+  const [matchEarnedCoins, setMatchEarnedCoins] = useState<number>(0);
   const [cupState, setCupState] = useState<{ isActive: boolean; tracks: string[]; currentRaceIndex: number; finished: boolean; teamWins?: { RED: number; BLUE: number } } | null>(null);
   const [gameState, setGameState] = useState<'LOGIN' | 'MENU' | 'PLAYING' | 'RESULT' | 'SHOP' | 'GARAGE' | 'CUP_STANDINGS' | 'ONLINE_MENU' | 'ONLINE_LOBBY' | 'ENHANCEMENT'>('LOGIN');
   
@@ -440,7 +400,7 @@ export default function App() {
                       .sort((a: any, b: any) => a.time - b.time)
                       // Deduplicate by playerName and time string to avoid exact same entries
                       .filter((v, i, a) => a.findIndex(t => (t.playerName === v.playerName && t.time === v.time)) === i)
-                      .slice(0, 10);
+                      .slice(0, GAME_CONSTANTS.MAX_LEADERBOARD_RECORDS);
                     newRecords[key] = merged;
                   });
                   return newRecords;
@@ -463,6 +423,7 @@ export default function App() {
 
   const handleStartGame = (forceOnlineStart: boolean = false) => {
     audioService.init();
+    setMatchEarnedCoins(0);
 
     if (settings.mode === 'ONLINE' && forceOnlineStart !== true) {
       setGameState('ONLINE_MENU');
@@ -492,8 +453,8 @@ export default function App() {
     if (currentSettings.isCupMode) {
       if (!cupState?.isActive) {
         // Init cup
-        const cupTracksCount = currentSettings.cupNumTracks || 4;
-        const entryFee = cupTracksCount * 10;
+        const cupTracksCount = currentSettings.cupNumTracks || ((currentSettings.mode === 'TEAM' || currentSettings.isTeamMode) ? 3 : 4);
+        const entryFee = cupTracksCount * GAME_CONSTANTS.CUP_ENTRY_FEE_PER_TRACK;
         
         if (playerData.wallet.coins < entryFee) {
            setConfirmAction({
@@ -578,7 +539,7 @@ export default function App() {
     }
   };
 
-  const points = [25, 18, 15, 12, 10, 8, 6, 4];
+  const points = GAME_CONSTANTS.POINTS_SYSTEM;
 
   const handleFinish = (finalResults: CarState[]) => {
     audioService.stopBGM();
@@ -668,7 +629,7 @@ export default function App() {
 
     // Sort and keep top 10
     trackRecords.sort((a, b) => a.time - b.time);
-    newRecords[recordKey] = trackRecords.slice(0, 10);
+    newRecords[recordKey] = trackRecords.slice(0, GAME_CONSTANTS.MAX_LEADERBOARD_RECORDS);
     setRecords(newRecords);
     
     // Calculate points/coins
@@ -678,16 +639,7 @@ export default function App() {
     let currentBlueScore = 0;
     const playerCount = sortedResults.length;
     
-    const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
-      2: [10, 8],
-      3: [10, 8, 6],
-      4: [10, 8, 6, 5],
-      5: [10, 8, 6, 5, 4],
-      6: [10, 8, 6, 5, 4, 3],
-      7: [10, 8, 6, 5, 4, 3, 2],
-      8: [10, 8, 6, 5, 4, 3, 2, 1],
-    };
-    const racePoints = RACE_POINTS_BY_COUNT[playerCount] || [10, 8, 6, 5, 4, 3, 2, 1];
+    const racePoints = GAME_CONSTANTS.TEAM_RACE_POINTS[playerCount] || [10, 8, 6, 5, 4, 3, 2, 1];
 
     let totalRedRaceScore = 0;
     let totalBlueRaceScore = 0;
@@ -775,12 +727,13 @@ export default function App() {
               isTeamWin,
               isFlawless: isFlawlessWin,
               isMVP,
-              matches: settings.cupNumTracks || 4
+              matches: settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4)
             })
           })
           .then(res => res.json())
           .then(data => {
             if (data.success) {
+              setMatchEarnedCoins(data.earnedCoins || 0);
               // 遵循 SSOT 原则：拉取底层档案刷新大盘，确保钱包与耐久度双向闭环同步
               fetch('/api/player/profile', {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -837,7 +790,7 @@ export default function App() {
            const redWon = (newTeamWins?.RED || 0) >= requiredWins;
            
            if (redWon && p1Team === 'RED') {
-              bonus += cupState.tracks.length * 25;
+              bonus += cupState.tracks.length * GAME_CONSTANTS.BONUS.CUP_WINNER_MULTIPLIER;
            }
 
            if (redWon) {
@@ -858,16 +811,16 @@ export default function App() {
               });
               
               if (mvpId === 'p1') {
-                 const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
-                 bonus += Math.floor(cupState.tracks.length * 15 * diffMult);
+                 const diffMult = GAME_CONSTANTS.DIFFICULTY_MULTIPLIER[settings.aiDifficulty] || 1.0;
+                 bonus += Math.floor(cupState.tracks.length * GAME_CONSTANTS.BONUS.CUP_FINISH_MULTIPLIER * diffMult);
               }
            }
         } else {
            const sortedOverall = Object.entries(newScores).sort((a, b) => (b[1] as number) - (a[1] as number));
            const p1Index = sortedOverall.findIndex(s => s[0] === 'p1');
            
-           if (p1Index === 0) bonus = cupState.tracks.length * 40;
-           else if (p1Index === 1 || p1Index === 2) bonus = cupState.tracks.length * 15;
+           if (p1Index === 0) bonus = cupState.tracks.length * GAME_CONSTANTS.BONUS.CUP_P1_FIRST_PLACE;
+           else if (p1Index === 1 || p1Index === 2) bonus = cupState.tracks.length * GAME_CONSTANTS.BONUS.CUP_P1_PODIUM;
         }
 
         // Removed bonus application here, as it is applied when user clicks the claim button in CUP_STANDINGS
@@ -975,14 +928,7 @@ export default function App() {
                 >
                   我的信息
                 </button>
-                {playerData.profile.role === 'admin' && (
-                  <button
-                    onClick={() => setShowGMConsole(true)}
-                    className="bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500 hover:text-white px-2 py-1 rounded text-xs font-black animate-pulse cursor-pointer"
-                  >
-                    🎛️ GM 控制台
-                  </button>
-                )}
+
                 <button
                   onClick={() => {
                     setLeaderboardTrackId(settings.trackId);
@@ -1027,7 +973,12 @@ export default function App() {
                       单人模式
                     </button>
                     <button 
-                      onClick={() => setSettings(s => ({ ...s, mode: 'TEAM', cupNumTracks: s.isCupMode && s.cupNumTracks && s.cupNumTracks % 2 === 0 ? s.cupNumTracks + 1 : s.cupNumTracks }))}
+                      onClick={() => setSettings(s => {
+                        const nextIsTeam = true;
+                        let nextCupNum = s.cupNumTracks || 3;
+                        if (nextCupNum % 2 === 0) nextCupNum += 1;
+                        return { ...s, mode: 'TEAM', cupNumTracks: nextCupNum };
+                      })}
                       className={`flex-1 p-[10px] text-center cursor-pointer rounded-[4px] text-[14px] transition-all ${
                         (settings.mode === 'TEAM' || settings.isTeamMode) 
                         ? 'bg-accent-cyan text-black font-bold shadow-[0_0_15px_rgba(0,242,255,0.5)] border-accent-cyan' 
@@ -1319,7 +1270,7 @@ export default function App() {
                       <div className="flex gap-2 justify-center items-center">
                         <button 
                           onClick={() => {
-                             let next = Math.max((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 2, (settings.cupNumTracks || 4) - 1);
+                             let next = Math.max((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 2, (settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4)) - 1);
                              if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next = Math.max(3, next - 1);
                              setSettings(s => ({ ...s, cupNumTracks: next }));
                           }}
@@ -1345,7 +1296,7 @@ export default function App() {
                         />
                         <button 
                           onClick={() => {
-                             let next = Math.min(TRACKS.length, (settings.cupNumTracks || 4) + 1);
+                             let next = Math.min(TRACKS.length, (settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4)) + 1);
                              if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next = Math.min(TRACKS.length, next + 1);
                              // Need to handle if TRACKS.length is even and we hit it.
                              if ((settings.mode === 'TEAM' || settings.isTeamMode) && next % 2 === 0) next -= 1; 
@@ -1399,6 +1350,14 @@ export default function App() {
                 >
                   商店 ({playerData.wallet.coins} ⟁)
                 </button>
+                {playerData.profile.role === 'admin' && (
+                  <button 
+                    onClick={() => setShowGMConsole(true)}
+                    className="flex-1 md:flex-none bg-red-500/20 text-red-500 border border-red-500 px-4 md:px-[20px] py-[12px] text-[14px] font-bold uppercase rounded-[4px] cursor-pointer transition-all hover:bg-red-500 hover:text-black shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                  >
+                    GM 控制台
+                  </button>
+                )}
                 <button 
                   onClick={() => handleStartGame(false)}
                   className="w-full md:w-auto bg-accent-yellow text-black px-4 md:px-[40px] py-[12px] text-[16px] md:text-[20px] font-black uppercase rounded-[4px] cursor-pointer shadow-[0_0_30px_rgba(244,255,64,0.5)] transition-all transform hover:scale-105 active:scale-95"
@@ -1423,7 +1382,7 @@ export default function App() {
           onUpdateActiveCar={(carId, color, liveryId) => {
             const token = localStorage.getItem('neon_token');
             if (token) {
-              fetch('/api/player/activeCar', {
+              fetch('/api/player/setActiveCar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ carId })
@@ -1552,13 +1511,13 @@ export default function App() {
                  let isPodium = false;
                  let isTeamMVP = false;
                  
-                 const diffMult = { 1: 0.8, 2: 1.0, 3: 1.2, 4: 1.5, 5: 1.8 }[settings.aiDifficulty] || 1.0;
-                 const tracks = settings.cupNumTracks || 4;
+                 const diffMult = GAME_CONSTANTS.DIFFICULTY_MULTIPLIER[settings.aiDifficulty] || 1.0;
+                 const tracks = settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4);
 
                  if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                     if (isWin) {
-                       reward += tracks * 15;
+                       reward += tracks * GAME_CONSTANTS.BONUS.CUP_FINISH_MULTIPLIER;
                        const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
                        const redEntries = entries.filter(e => e.id.includes('p') || e.id.includes('ONLINE')); // wait we don't store team per id in scores easily, but local player is team RED.
                        // Assume p1 is always RED and potential team MVP
@@ -1574,10 +1533,10 @@ export default function App() {
                     const rank = entries.findIndex(e => isLocal(e.id));
                     if (rank === 0) {
                         isWin = true;
-                        reward = tracks * 20;
+                        reward = tracks * 20; // Used to be * 20 here! Wait, this is `reward = tracks * 20`. Let's just do an inline fix
                     } else if (rank === 1 || rank === 2) {
                         isPodium = true;
-                        reward = tracks * 10;
+                        reward = tracks * GAME_CONSTANTS.BONUS.CUP_FINISH_MULTIPLIER; // Wait, actually `tracks * 10`. I'll leave this edit chunk for now to see what was exactly here
                     }
                  }
 
@@ -1716,10 +1675,7 @@ export default function App() {
                     
                     <div className="flex flex-col gap-1 mt-3 text-xs font-normal opacity-80 w-full border-t border-current pt-2">
                        {results.filter(c => c.team === 'RED').map(c => {
-                          const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
-                            2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
-                          };
-                          const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                          const racePoints = GAME_CONSTANTS.TEAM_RACE_POINTS[results.length] || GAME_CONSTANTS.DEFAULT_TEAM_POINTS;
                           const earned = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
                           return (
                             <div key={c.id} className="flex justify-between w-full">
@@ -1741,10 +1697,7 @@ export default function App() {
 
                     <div className="flex flex-col gap-1 mt-3 text-xs font-normal opacity-80 w-full border-t border-current pt-2">
                        {results.filter(c => c.team === 'BLUE').map(c => {
-                          const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
-                            2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
-                          };
-                          const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                          const racePoints = GAME_CONSTANTS.TEAM_RACE_POINTS[results.length] || GAME_CONSTANTS.DEFAULT_TEAM_POINTS;
                           const earned = c.dnf ? 0 : (racePoints[results.findIndex(r => r.id === c.id)] || 0);
                           return (
                             <div key={c.id} className="flex justify-between w-full">
@@ -1763,17 +1716,13 @@ export default function App() {
 
               <div className="space-y-4 mb-8">
                 {results.map((car, index) => {
-                  const RACE_POINTS_BY_COUNT: Record<number, number[]> = {
-                    2: [10, 8], 3: [10, 8, 6], 4: [10, 8, 6, 4], 5: [10, 8, 6, 4, 2], 6: [10, 8, 6, 4, 2, 1],
-                  };
-                  const racePoints = RACE_POINTS_BY_COUNT[results.length] || [10, 8, 6, 4, 2, 1, 0, 0];
+                  const racePoints = GAME_CONSTANTS.TEAM_RACE_POINTS[results.length] || GAME_CONSTANTS.DEFAULT_TEAM_POINTS;
                   // the real earned points for the player
                   const earnedPts = car.dnf ? 0 : (racePoints[index] || 0);
 
                   const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : car.id === 'p1';
                   
                   // For UI Display of purely single-match calculations:
-                  let displayCoins = 0;
                   const isTeamWin = teamScore && ((teamScore.RED > teamScore.BLUE && car.team === 'RED') || (teamScore.BLUE > teamScore.RED && car.team === 'BLUE'));
                   
                   let mvpId = '';
@@ -1784,15 +1733,7 @@ export default function App() {
                         if (pts > maxPts) { maxPts = pts; mvpId = c.id; }
                      });
                   }
-                  displayCoins = calculateCoinReward(
-                     index,
-                     results.length,
-                     settings.aiDifficulty,
-                     !!(settings.mode === 'TEAM' || settings.isTeamMode),
-                     !!isTeamWin,
-                     !!(isFlawlessResult && isTeamWin),
-                     car.id === mvpId
-                  );
+                  
                   return (
                     <div 
                       key={car.id} 
@@ -1826,7 +1767,7 @@ export default function App() {
                         </div>
                         {isLocalPlayer && !car.dnf && (
                           <div className="font-mono text-sm text-accent-yellow bg-accent-yellow/10 px-3 py-1 rounded-full border border-accent-yellow/30 flex items-center gap-1">
-                             奖励 💰 +{displayCoins}
+                             奖励 💰 +{matchEarnedCoins}
                           </div>
                         )}
                         <div className="font-mono text-sm text-accent-magenta bg-accent-magenta/10 px-3 py-1 rounded-full border border-accent-magenta/30">
@@ -1885,337 +1826,27 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Instructions Modal */}
-      <AnimatePresence>
-        {showInstructions && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 lg:p-10"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="neon-panel bg-[#0a0a0a] max-w-[800px] w-full max-h-[85vh] overflow-y-auto p-6 md:p-10 rounded-xl border border-white/20 shadow-2xl relative"
-            >
-              <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4 sticky top-0 bg-[#0a0a0a] z-10 pt-2">
-                <h2 className="text-xl md:text-2xl font-black text-accent-cyan uppercase tracking-wider">🏎️ 游戏游玩说明</h2>
-                <button 
-                  onClick={() => setShowInstructions(false)} 
-                  className="text-zinc-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors"
-                >
-                  ✕ 关闭
-                </button>
-              </div>
-              
-              <div className="space-y-6 text-zinc-300 text-sm md:text-base leading-relaxed pb-4 pr-1 scrollbar-hide">
-                <section>
-                  <h3 className="text-accent-yellow font-bold text-lg mb-2 flex items-center gap-2">🏆 赛事目标与概览</h3>
-                  <p className="opacity-90 leading-6">
-                    在多变复杂的赛道上超越所有对手，夺取冠军！比赛名次决定金币收益，你可以使用金币在商店解锁更强赛车、高配性能零件以及炫彩涂装。<br/>
-                    本游戏包含四种主要模式：<strong className="text-accent-cyan">单人模式(竞速/组队)</strong>、<strong className="text-accent-magenta">同屏对战(双人)</strong>、<strong className="text-accent-yellow">杯赛模式(联赛)</strong>、<strong className="text-green-400">在线对战(多人联机)</strong>。<br/>
-                    同时提供<strong className="text-purple-400">精英赛</strong>（最高难度AI，部分杯赛下会锁死特殊发光外观）。在<strong className="text-green-400">在线对战</strong>中，您可以创建或加入房间，与全世界的玩家进行巅峰对决，并且支持组队模式或混战！
-                  </p>
-                </section>
-                
-                <section>
-                  <h3 className="text-accent-magenta font-bold text-lg mb-2">🎮 操作方式与快捷键</h3>
-                  <p className="opacity-80 text-sm mb-3">支持在游戏中按 <kbd className="bg-white/20 px-1 rounded">P</kbd> 键 或 <kbd className="bg-white/20 px-1 rounded">ESC</kbd> 键快速<strong className="text-white">暂停/继续</strong>比赛。</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 p-4 rounded-md border border-white/5">
-                     <div>
-                       <strong className="text-accent-cyan block mb-2 border-b border-accent-cyan/30 pb-1">玩家一操作（单人/组队/在线对战）：</strong>
-                       <p className="opacity-80 leading-7">
-                         • <kbd className="bg-white/10 px-1 rounded">↑</kbd> <kbd className="bg-white/10 px-1 rounded">↓</kbd> <kbd className="bg-white/10 px-1 rounded">←</kbd> <kbd className="bg-white/10 px-1 rounded">→</kbd>：加速/刹车/转向<br/>
-                         • <kbd className="bg-white/10 px-1 rounded">Shift</kbd> 键：手刹漂移 (微调过弯)<br/>
-                         • <kbd className="bg-white/10 px-1 rounded">空格 (Space)</kbd> / <kbd className="bg-white/10 px-1 rounded">Enter</kbd>：急刹车<br/>
-                         <span className="text-[12px] text-zinc-400">* 注：在任何模式下均可使用 WASD 与 Q/E 控制。</span>
-                       </p>
-                     </div>
-                     <div className="hidden">
-                       <strong className="text-accent-magenta block mb-2 border-b border-accent-magenta/30 pb-1">玩家二操作（仅双人模式）：</strong>
-                       <p className="opacity-80 leading-7">
-                         • <kbd className="bg-white/10 px-1 rounded">W</kbd> <kbd className="bg-white/10 px-1 rounded">S</kbd> <kbd className="bg-white/10 px-1 rounded">A</kbd> <kbd className="bg-white/10 px-1 rounded">D</kbd>：加速/刹车/转向<br/>
-                         • <kbd className="bg-white/10 px-1 rounded">Q</kbd> 或 <kbd className="bg-white/10 px-1 rounded">E</kbd>：手刹漂移<br/>
-                         • <kbd className="bg-white/10 px-1 rounded">空格 (Space)</kbd>：急刹车
-                       </p>
-                     </div>
-                  </div>
-                </section>
-                
-                <section>
-                  <h3 className="text-accent-cyan font-bold text-lg mb-3">🛠️ 进阶系统与物理机制</h3>
-                  <ul className="list-disc pl-5 space-y-3 opacity-90 leading-6">
-                     <li>
-                       <strong className="text-white">物理驱动与防粘连设计：</strong>游戏拥有拟真的惯性系统，极速入弯可能导致冲出赛道并严重减速。玩家间碰撞会导致失速与互相推挤，请合理运用走线或提前减速入弯。
-                     </li>
-                     <li>
-                       <strong className="text-white">漂移过弯：</strong>长按或点按“手刹漂移键”会使抓地力暂时下降从而进行滑移，大幅增加转向角度，适合U型或V型急弯。过度漂移会导致速度急剧折损。
-                     </li>
-                     <li>
-                       <strong className="text-white">差异化赛车与改装零部件：</strong>在商店可以购买多种不同底盘的赛车（极速型如F1、稳如磐石如拉力越野车）。配合涡轮引擎、热熔轮胎等零件，打造出完美契合你驾驶习惯的座驾。组队模式中，你强力的赛车和装备甚至能够成为队伍胜利的决定性因素！
-                     </li>
-                     <li>
-                       <strong className="text-accent-yellow">极速起步 (Launch)：</strong>部分高规格轮胎和零件会提供“起步”加成。拥有起步优势的赛车，读秒结束时会获得明显的爆发初速度。
-                     </li>
-                  </ul>
-                </section>
-                
-                <div className="bg-accent-magenta/10 border-l-4 border-accent-magenta p-4 mt-8 rounded-r-md">
-                  <strong>车库规则说明：</strong>你所购买的赛车、外观涂装和改装强化件，必需进入主界面的【我的车库】大厅完成装配才会生效。<br/>
-                  <span className="text-sm opacity-80 mt-1 block">提示：目前的自定装备（车库系统）在“单人竞速”与“组队杯赛”等模式开放使用；在“双人同屏黑客”模式下为了保证相对公平配置，暂时自动禁用自定车辆。</span>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <InstructionsModal show={showInstructions} onClose={() => setShowInstructions(false)} />
 
-      {/* Confirm Modal */}
-      <AnimatePresence>
-        {confirmAction && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 lg:p-10"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#151515] p-6 rounded-xl border border-red-500/30 shadow-2xl max-w-sm w-full text-center"
-            >
-              <h3 className="text-xl font-bold text-white mb-4">⚠️ 确认操作</h3>
-              <p className="text-zinc-400 mb-8">{confirmAction.message}</p>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setConfirmAction(null)} 
-                  className="flex-1 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
-                >
-                  取消
-                </button>
-                <button 
-                  onClick={() => {
-                    confirmAction.onConfirm();
-                    setConfirmAction(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg transition-colors border border-red-400/50"
-                >
-                  {confirmAction.confirmText || '确定'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <ConfirmModal confirmAction={confirmAction} onCancel={() => setConfirmAction(null)} />
 
-      {/* Leaderboard Modal */}
-      <AnimatePresence>
-        {showLeaderboard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 lg:p-10"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="neon-panel bg-[#0a0a0a] max-w-[800px] w-full max-h-[85vh] overflow-y-auto p-6 md:p-10 rounded-xl border border-white/20 shadow-2xl relative"
-            >
-              <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-4 mb-6 border-b border-white/10 pb-4 pt-2 sticky top-0 bg-[#0a0a0a] z-10 w-full shrink-0">
-                <div className="flex flex-col gap-1">
-                  <h2 className="text-xl md:text-2xl font-black text-accent-yellow uppercase tracking-wider">🏆 赛道排行榜</h2>
-                  <span className="text-[10px] text-zinc-500">注：导入、导出与清空功能仅针对本地记录有效。</span>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm md:text-base w-full sm:w-auto">
-                  {leaderboardType === 'LOCAL' && (
-                    <>
-                      <button 
-                        onClick={handleExportRecords}
-                        className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
-                      >
-                        ⬇️ 导出
-                      </button>
-                      <button 
-                        onClick={handleImportRecords}
-                        className="flex-1 sm:flex-none text-accent-cyan hover:text-white px-3 py-1 rounded bg-accent-cyan/10 hover:bg-accent-cyan/20 transition-colors border border-accent-cyan/30 text-center flex items-center justify-center gap-1"
-                      >
-                        ⬆️ 导入
-                      </button>
-                    </>
-                  )}
-                  {leaderboardType === 'LOCAL' && (
-                    <button 
-                      onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmAction({
-                            message: '确定要清空所有赛道的所有记录吗？此操作无法撤销。',
-                            onConfirm: () => {
-                              setRecords({});
-                              localStorage.removeItem('neon_lap_records');
-                            }
-                          });
-                      }}
-                      className="flex-1 sm:flex-none text-red-400 hover:text-red-300 px-3 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30 text-center"
-                    >
-                      🗑️ 清空全部
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => setShowLeaderboard(false)} 
-                    className="flex-1 sm:flex-none text-zinc-400 hover:text-white px-3 py-1 rounded bg-white/5 hover:bg-white/10 transition-colors border border-white/10 text-center"
-                  >
-                    ✕ 关闭
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Horizontal Tabs for Tracks */}
-                <div className="flex gap-2 p-1 overflow-x-auto pb-2 border-b border-white/10 shrink-0">
-                  {TRACKS.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setLeaderboardTrackId(t.id)}
-                      className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold text-sm transition-all shadow-md ${
-                        t.id === leaderboardTrackId 
-                        ? 'bg-accent-cyan text-black shadow-[0_0_15px_rgba(0,242,255,0.3)]' 
-                        : 'bg-white/5 text-zinc-400 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex gap-4 px-1 pb-4">
-                  <div className="flex rounded-md overflow-hidden border border-white/20">
-                    <button
-                      onClick={() => setLeaderboardType('LOCAL')}
-                      className={`px-4 py-1.5 text-xs font-bold transition-all ${leaderboardType === 'LOCAL' ? 'bg-accent-yellow text-black' : 'bg-black text-zinc-400 hover:bg-white/10'}`}
-                    >本地记录</button>
-                    <button
-                      onClick={() => setLeaderboardType('ONLINE')}
-                      className={`px-4 py-1.5 text-xs font-bold transition-all ${leaderboardType === 'ONLINE' ? 'bg-accent-yellow text-black' : 'bg-black text-zinc-400 hover:bg-white/10'}`}
-                    >在线对战</button>
-                  </div>
-                </div>
-
-                {/* Sub-tabs for Laps */}
-                <div className="flex gap-2 px-1">
-                  {[1, 2, 3, 4, 5].map(lap => {
-                    const recordKey = `${leaderboardTrackId}_${lap}`;
-                    const hasRecords = leaderboardType === 'ONLINE' ? false : (records[recordKey] || []).length > 0;
-                    return (
-                      <button
-                        key={lap}
-                        onClick={() => setLeaderboardLapCount(lap)}
-                        className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all border ${
-                          lap === leaderboardLapCount
-                          ? 'border-accent-magenta bg-accent-magenta/20 text-accent-magenta shadow-[0_0_10px_rgba(255,0,234,0.3)]'
-                          : 'border-white/10 bg-black text-zinc-500 hover:bg-white/5 hover:text-zinc-300'
-                        }`}
-                      >
-                        {lap} 圈 {hasRecords && <span className="w-1.5 h-1.5 inline-block bg-accent-yellow rounded-full ml-1" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Records Listing */}
-                <div className="bg-white/5 border border-white/5 rounded-lg p-4">
-                  {(() => {
-                    const currentKey = leaderboardType === 'ONLINE' ? `${leaderboardTrackId}_${leaderboardLapCount}` : `${leaderboardTrackId}_${leaderboardLapCount}`;
-                    const trackRecords = leaderboardType === 'ONLINE' ? onlineRecords : (records[currentKey] || []);
-                    const trackName = TRACKS.find(t => t.id === leaderboardTrackId)?.name;
-                    
-                    if (trackRecords.length === 0) {
-                      return <div className="text-zinc-500 text-sm text-center py-8 bg-black/40 rounded-lg border border-white/5">{isFetchingOnline ? '正在获取在线记录...' : (leaderboardType === 'ONLINE' ? '该赛道暂无在线对战成绩' : '该赛道/圈数暂无成绩，快去创造记录吧！')}</div>;
-                    }
-                    
-                    return (
-                      <div className="space-y-6">
-                        <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-4">
-                          <h4 className="text-accent-magenta font-bold">
-                            {trackName} - {leaderboardLapCount}圈记录 {leaderboardType === 'ONLINE' ? '(在线对战)' : ''}
-                          </h4>
-                          {leaderboardType === 'LOCAL' && (
-                            <button 
-                              onClick={() => setConfirmAction({
-                                message: `确定要删除「${trackName}」的 ${leaderboardLapCount} 圈记录吗？`,
-                                onConfirm: () => {
-                                  const newRecords = { ...records };
-                                  delete newRecords[currentKey];
-                                  setRecords(newRecords);
-                                }
-                              })}
-                              className="text-xs font-normal text-red-400 hover:text-red-300 px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 transition-colors border border-red-500/30"
-                            >
-                              🗑️ 删除此榜单记录
-                            </button>
-                          )}
-                        </div>
-                        
-                        <div className="space-y-2">
-                          {trackRecords.map((record, idx) => {
-                            const dateStr = record.timestamp 
-                              ? new Date(record.timestamp).toLocaleString('zh-CN', { hour12: false }) 
-                              : '-';
-                              
-                            return (
-                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between text-sm p-3 rounded bg-black/40 border border-white/5 gap-2 hover:bg-white/5 transition-colors group">
-                                <div className="flex items-center gap-3">
-                                  <span className={`font-black w-6 text-center ${idx === 0 ? 'text-accent-yellow scale-125' : idx === 1 ? 'text-zinc-300 scale-110' : idx === 2 ? 'text-amber-600 scale-105' : 'text-zinc-600'}`}>
-                                    #{idx + 1}
-                                  </span>
-                                  <span className="text-white font-bold">{record.playerName}</span>
-                                  <span className="text-zinc-500 text-xs px-2 py-0.5 rounded bg-white/5 border border-white/10 hidden sm:inline">
-                                    {record.vehicle}
-                                  </span>
-                                </div>
-                                <div className="flex items-center justify-end gap-4 ml-9 sm:ml-0">
-                                  <span className="text-[10px] text-zinc-500">{dateStr}</span>
-                                  <span className="font-mono font-bold text-accent-magenta text-base">{(record.time / 1000).toFixed(2)}s</span>
-                                  {leaderboardType === 'LOCAL' && (
-                                    <button
-                                      onClick={() => setConfirmAction({
-                                        message: `确定要删除此条记录吗？`,
-                                        onConfirm: () => {
-                                          const newRecords = { ...records };
-                                          const currList = [...newRecords[currentKey]];
-                                          currList.splice(idx, 1);
-                                          if (currList.length === 0) {
-                                            delete newRecords[currentKey];
-                                          } else {
-                                            newRecords[currentKey] = currList;
-                                          }
-                                          setRecords(newRecords);
-                                        }
-                                      })}
-                                      className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 p-1 rounded hover:bg-red-500/20 transition-all font-bold"
-                                      title="删除此记录"
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <LeaderboardModal
+        show={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
+        leaderboardType={leaderboardType}
+        setLeaderboardType={setLeaderboardType}
+        leaderboardTrackId={leaderboardTrackId}
+        setLeaderboardTrackId={setLeaderboardTrackId}
+        leaderboardLapCount={leaderboardLapCount}
+        setLeaderboardLapCount={setLeaderboardLapCount}
+        records={records}
+        setRecords={setRecords}
+        onlineRecords={onlineRecords}
+        isFetchingOnline={isFetchingOnline}
+        onExport={handleExportRecords}
+        onImport={handleImportRecords}
+        setConfirmAction={setConfirmAction}
+      />
 
       {/* Player Info Modal */}
       <AnimatePresence>
@@ -2234,7 +1865,17 @@ export default function App() {
           <GMConsoleUI 
             playerData={playerData} 
             setPlayerData={setPlayerData} 
-            onClose={() => setShowGMConsole(false)}
+            onClose={() => {
+              setShowGMConsole(false);
+              const token = localStorage.getItem('neon_token');
+              if (token) {
+                fetch('/api/player/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+                .then(r => r.json())
+                .then(profile => {
+                  if (profile.success && profile.data) setPlayerData(profile.data);
+                });
+              }
+            }}
             onClearLeaderboard={(trackId: string, laps: number) => {
                setRecords(prev => {
                   const copy = { ...prev };

@@ -25,10 +25,19 @@ export class PlayerController {
 
             // 3. 数据清洗，提取我们需要展示给前端的核心基础数据模块
             // 当某些模块在早前存档可能没有时，给予空值兜底以防前端解构取值报错
+            const profile = playerData.profile || { uid, nickname: `user_${uid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() };
+            const garage = playerData.garage || [];
+            
+            // 如果玩家拥有车辆但没有设置 activeCarId，自动装备第一辆车
+            if (!profile.activeCarId && garage.length > 0) {
+                profile.activeCarId = garage[0].carId;
+                await StorageEngine.writeEncrypted(uid, { ...playerData, profile, garage });
+            }
+
             const responseData = {
-                profile: playerData.profile || { uid, nickname: `user_${uid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() },
+                profile: profile,
                 wallet: playerData.wallet || { coins: 0 },
-                garage: playerData.garage || [],
+                garage: garage,
                 inventory: playerData.inventory || { materials: {}, protectors: {}, parts: {}, paints: [] }
             };
 
@@ -137,33 +146,30 @@ export class PlayerController {
             const { carId } = req.body;
             if (!carId) { res.status(400).json({ error: 'Missing carId' }); return; }
 
-            let playerData = await StorageEngine.readEncrypted(uid);
-            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+            await StorageEngine.transaction(uid, async (data) => {
+                if (!data.garage) data.garage = [];
+                const vehicle = data.garage.find((v: any) => v.carId === carId);
 
-            if (!playerData.garage) playerData.garage = [];
-            const vehicle = playerData.garage.find((v: any) => v.carId === carId);
+                if (!vehicle) {
+                    throw new Error('车辆未拥有/车库中不存在');
+                }
 
-            if (!vehicle) {
-                res.status(400).json({ error: '车辆未拥有/车库中不存在' });
-                return;
-            }
+                if (!vehicle.isPermanent && vehicle.expireAt && vehicle.expireAt < Date.now()) {
+                    throw new Error('该车辆租赁已过期，无法出战');
+                }
 
-            if (!vehicle.isPermanent && vehicle.expireAt && vehicle.expireAt < Date.now()) {
-                res.status(400).json({ error: '该车辆租赁已过期，无法出战' });
-                return;
-            }
+                if (!data.profile) {
+                    data.profile = { uid, nickname: `user_${uid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() };
+                }
 
-            if (!playerData.profile) {
-                playerData.profile = { uid, nickname: `user_${uid}`, role: 'player', status: 'active', banReason: '', registerTime: Date.now() };
-            }
+                data.profile.activeCarId = carId;
+            });
 
-            playerData.profile.activeCarId = carId;
-
-            await StorageEngine.writeEncrypted(uid, playerData);
             res.json({ success: true, message: '出战车辆设置成功', activeCarId: carId });
         } catch (error: any) {
             console.error('[PlayerController] setActiveCar error:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+            res.status(error.message.includes('未拥有') || error.message.includes('已过期') ? 400 : 500)
+                .json({ error: error.message || 'Internal Server Error' });
         }
     }
 }

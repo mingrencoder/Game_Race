@@ -2,6 +2,7 @@ import React from 'react';
 import { TRACKS } from '../constants';
 import { motion, AnimatePresence } from 'motion/react';
 
+/** 赛道地图按难度和主题的分类配置目录 */
 export const TRACK_CATEGORIES = [
   {
     theme: '基础训练',
@@ -25,6 +26,10 @@ export const TRACK_CATEGORIES = [
   }
 ];
 
+/** 
+ * 赛道选择缩略图弹窗面板 
+ * 包含按主题划分的赛道小地图与选择逻辑，附带该赛道的排行榜快捷入口
+ */
 export const TrackSelector = ({ selectedTrackId, onSelect, onViewLeaderboard, onClose }: { selectedTrackId: string, onSelect: (id: string) => void, onViewLeaderboard?: (id: string) => void, onClose?: () => void }) => {
   return (
     <div className="flex flex-col gap-6 w-full max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">

@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
-import { VEHICLES_DB, ITEMS_DB } from '../src/constants';
+import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, SYS_CONFIG } from '../src/constants';
 
 export class ShopController {
     
@@ -48,15 +48,15 @@ export class ShopController {
                     existingCar.isPermanent = true;
                     existingCar.expireAt = null;
                 } else {
-                    existingCar.expireAt = Math.max(Date.now(), existingCar.expireAt || Date.now()) + 3 * 24 * 60 * 60 * 1000;
+                    existingCar.expireAt = Math.max(Date.now(), existingCar.expireAt || Date.now()) + SYS_CONFIG.RENTAL_DURATION_MS;
                 }
             } else {
                 playerData.garage.push({
                     carId,
                     level: 0,
-                    durability: 100,
+                    durability: SYS_CONFIG.MAX_DURABILITY,
                     isPermanent,
-                    expireAt: isPermanent ? null : Date.now() + 3 * 24 * 60 * 60 * 1000,
+                    expireAt: isPermanent ? null : Date.now() + SYS_CONFIG.RENTAL_DURATION_MS,
                     equippedParts: { engine: null, tires: null, launch: null, drift: null, acceleration: null }
                 });
             }
@@ -74,13 +74,13 @@ export class ShopController {
             const uid = req.user?.uid;
             if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
-            const { partId } = req.body;
+            const { partId, amount = 1 } = req.body;
             if (!partId) { res.status(400).json({ error: 'Missing parameters' }); return; }
 
             const partConfig = ITEMS_DB.find(p => p.id === partId);
             if (!partConfig) { res.status(400).json({ error: 'Invalid partId' }); return; }
 
-            const cost = partConfig.price;
+            const cost = partConfig.price * amount;
 
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
@@ -93,10 +93,10 @@ export class ShopController {
             if (!playerData.inventory) playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
             if (!playerData.inventory.parts) playerData.inventory.parts = {};
 
-            playerData.inventory.parts[partId] = (playerData.inventory.parts[partId] || 0) + 1;
+            playerData.inventory.parts[partId] = (playerData.inventory.parts[partId] || 0) + amount;
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '储备入库成功 (Added to inventory)', partId, currentCoins: playerData.wallet.coins, partsInventory: playerData.inventory.parts, playerData });
+            res.json({ success: true, message: `储备入库成功 (数量: ${amount})`, partId, currentCoins: playerData.wallet.coins, partsInventory: playerData.inventory.parts, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyPart error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -131,12 +131,11 @@ export class ShopController {
             const oldPartId = vehicle.equippedParts[slotId];
             let unequipCost = 0;
 
-            // 卸下旧零件 (20% 折损费规则) 
-            // - PRD 指定：替换旧零件，或仅拆除旧零件，均需向系统支付旧零件原售价 20%
+            // 卸下旧零件折损费规则
             if (oldPartId) {
                 const oldPartConfig = ITEMS_DB.find(p => p.id === oldPartId);
                 if (oldPartConfig) {
-                    unequipCost = Math.floor(oldPartConfig.price * 0.2);
+                    unequipCost = Math.floor(oldPartConfig.price * SYS_CONFIG.PART_DEPRECIATION_RATE);
                 }
             }
 
@@ -207,10 +206,10 @@ export class ShopController {
             if (!vehicle) { res.status(400).json({ error: 'Vehicle not found in garage' }); return; }
 
             playerData.wallet.coins -= repairCost;
-            vehicle.durability = 100;
+            vehicle.durability = SYS_CONFIG.MAX_DURABILITY;
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: 'Vehicle repaired successfully', currentDurability: 100, currentCoins: playerData.wallet.coins, playerData });
+            res.json({ success: true, message: 'Vehicle repaired successfully', currentDurability: SYS_CONFIG.MAX_DURABILITY, currentCoins: playerData.wallet.coins, playerData });
         } catch (error: any) {
             console.error('[ShopController] repairCar error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -222,10 +221,21 @@ export class ShopController {
             const uid = req.user?.uid;
             if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
-            const { itemId, quantity = 1, cost } = req.body;
-            if (!itemId || cost === undefined) { res.status(400).json({ error: 'Missing parameters' }); return; }
+            const { itemId, amount = 1 } = req.body;
+            if (!itemId) { res.status(400).json({ error: 'Missing parameters' }); return; }
 
-            const totalCost = cost * quantity;
+            let unitPrice = 0;
+            const itemConfig = ITEMS_DB.find(i => i.id === itemId);
+            if (itemConfig) {
+                unitPrice = itemConfig.price;
+            } else if (itemId === 'core_primary') unitPrice = 100;
+            else if (itemId === 'core_advanced') unitPrice = 500;
+            else if (itemId === 'core_legendary') unitPrice = 2000;
+            else if (itemId === 'card_silver') unitPrice = 1500;
+            else if (itemId === 'card_gold') unitPrice = 8000;
+            else { res.status(400).json({ error: 'Invalid item' }); return; }
+
+            const totalCost = unitPrice * amount;
 
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
@@ -242,17 +252,17 @@ export class ShopController {
             if (!playerData.inventory.specialItems) playerData.inventory.specialItems = { rename_card: 0 };
             
             if (itemId.includes('core_') || itemId.includes('coreT')) {
-                playerData.inventory.materials[itemId] = (playerData.inventory.materials[itemId] || 0) + quantity;
+                playerData.inventory.materials[itemId] = (playerData.inventory.materials[itemId] || 0) + amount;
             } else if (itemId.includes('Card') || itemId.includes('card_')) {
-                playerData.inventory.protectors[itemId] = (playerData.inventory.protectors[itemId] || 0) + quantity;
+                playerData.inventory.protectors[itemId] = (playerData.inventory.protectors[itemId] || 0) + amount;
             } else if (itemId === 'rename_card') {
-                playerData.inventory.specialItems.rename_card = (playerData.inventory.specialItems.rename_card || 0) + quantity;
+                playerData.inventory.specialItems.rename_card = (playerData.inventory.specialItems.rename_card || 0) + amount;
             } else {
-                playerData.inventory.parts[itemId] = (playerData.inventory.parts[itemId] || 0) + quantity;
+                playerData.inventory.parts[itemId] = (playerData.inventory.parts[itemId] || 0) + amount;
             }
 
             await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '购买成功', itemId, quantity, currentCoins: playerData.wallet.coins, inventory: playerData.inventory, playerData });
+            res.json({ success: true, message: '购买成功', itemId, quantity: amount, currentCoins: playerData.wallet.coins, inventory: playerData.inventory, playerData });
         } catch (error: any) {
             console.error('[ShopController] buyItem error:', error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -264,8 +274,12 @@ export class ShopController {
             const uid = req.user?.uid;
             if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
-            const { liveryId, cost } = req.body;
-            if (!liveryId || cost === undefined) { res.status(400).json({ error: 'Missing parameters' }); return; }
+            const { liveryId } = req.body;
+            if (!liveryId) { res.status(400).json({ error: 'Missing parameters' }); return; }
+
+            const liveryConfig = LIVERIES_DB.find(l => l.id === liveryId);
+            if (!liveryConfig) { res.status(400).json({ error: 'Invalid livery' }); return; }
+            const cost = liveryConfig.price;
 
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
@@ -303,31 +317,35 @@ export class ShopController {
             const { carId, liveryId } = req.body;
             if (!carId || !liveryId) { res.status(400).json({ error: 'Missing parameters' }); return; }
 
-            let playerData = await StorageEngine.readEncrypted(uid);
-            if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
+            let finalPlayerData: any = null;
+            let equippedPaint = null;
 
-            if (!playerData.inventory) playerData.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
-            if (!playerData.inventory.paints) playerData.inventory.paints = [];
+            await StorageEngine.transaction(uid, async (data) => {
+                if (!data.inventory) data.inventory = { materials: {}, protectors: {}, parts: {}, paints: [] };
+                if (!data.inventory.paints) data.inventory.paints = [];
 
-            // If it's not a basic color/hex and not 'default', check if owned
-            if (liveryId !== 'default' && !liveryId.startsWith('#')) {
-                if (!playerData.inventory.paints.includes(liveryId)) {
-                    res.status(400).json({ error: '您未拥有该涂装' });
-                    return;
+                if (liveryId !== 'default' && !liveryId.startsWith('#')) {
+                    if (!data.inventory.paints.includes(liveryId)) {
+                        throw new Error('您未拥有该涂装');
+                    }
                 }
-            }
 
-            if (!playerData.garage) playerData.garage = [];
-            const vehicle = playerData.garage.find((c: any) => c.carId === carId);
-            if (!vehicle) { res.status(400).json({ error: 'Vehicle not found in garage' }); return; }
+                if (!data.garage) data.garage = [];
+                const vehicle = data.garage.find((c: any) => c.carId === carId);
+                if (!vehicle) {
+                    throw new Error('Vehicle not found in garage');
+                }
 
-            vehicle.equippedPaint = liveryId === 'default' ? null : liveryId;
+                vehicle.equippedPaint = liveryId === 'default' ? null : liveryId;
+                equippedPaint = vehicle.equippedPaint;
+                finalPlayerData = data;
+            });
 
-            await StorageEngine.writeEncrypted(uid, playerData);
-            res.json({ success: true, message: '涂装装备成功', carId, equippedPaint: vehicle.equippedPaint, playerData });
+            res.json({ success: true, message: '涂装装备成功', carId, equippedPaint, playerData: finalPlayerData });
         } catch (error: any) {
             console.error('[ShopController] equipLivery error:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+            res.status(error.message.includes('未拥有') || error.message.includes('not found') ? 400 : 500)
+                .json({ error: error.message || 'Internal Server Error' });
         }
     }
 }

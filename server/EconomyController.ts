@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
 
 import { getVehicleTier } from './utils/vehicleUtils';
+import { SYS_CONFIG } from '../src/constants';
 
 const ECONOMY_CONFIG = {
     playersMult: { 1: 1.0, 2: 0.6, 3: 0.8, 4: 1.0, 5: 1.1, 6: 1.2 } as Record<number, number>,
@@ -45,16 +46,8 @@ export class EconomyController {
 
             if (!playerData.wallet) playerData.wallet = { coins: 0 };
             
-            // 杯赛前置扣除报名费
+            // 注：杯赛报名费已在 payCupEntryFee 接口前置扣除，此处无需再次扣费。
             let fee = 0;
-            if (mode === 'cup_single' || mode === 'cup_team') {
-                fee = matches * 10;
-                if (playerData.wallet.coins < fee) {
-                    res.status(400).json({ error: '金币不足，无法支付杯赛报名费' });
-                    return;
-                }
-                playerData.wallet.coins -= fee;
-            }
 
             let coinDelta = 0;
             const pMult = ECONOMY_CONFIG.playersMult[players] || 1.0;
@@ -91,7 +84,7 @@ export class EconomyController {
             const tier = getVehicleTier(carId);
             const loss = ECONOMY_CONFIG.durabilityLoss[tier];
             
-            let currentDurability = 100;
+            let currentDurability = SYS_CONFIG.MAX_DURABILITY;
             if (playerData.garage && Array.isArray(playerData.garage)) {
                 const vehicle = playerData.garage.find((v: any) => v.carId === carId);
                 if (vehicle) {

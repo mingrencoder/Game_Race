@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import bcrypt from 'bcrypt';
 import { StorageEngine } from './StorageEngine';
+import { SYS_CONFIG } from '../src/constants';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const ACCOUNTS_INDEX_FILE = path.join(DATA_DIR, 'accounts_index.json');
@@ -151,7 +152,7 @@ export class AuthService {
                     {
                         carId: 'car_basic',
                         level: 0,
-                        durability: 100,
+                        durability: SYS_CONFIG.MAX_DURABILITY,
                         isPermanent: true,
                         expireAt: null,
                         equippedParts: {
@@ -270,6 +271,30 @@ export class AuthService {
             // 落盘
             await fs.writeFile(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf8');
         }
+    }
+
+    /**
+     * 将输入的 identifier (UID 或昵称) 解析为实际 UID
+     */
+    static async resolveUid(identifier: string): Promise<string | null> {
+        if (!isInitialized) await this.bootstrap();
+        
+        // 1. 作为 UID 查找
+        if (/^\d{8}$/.test(identifier) || identifier === 'admin') {
+            for (const info of Object.values(accountsCache)) {
+                if (info.uid === identifier) {
+                    return identifier;
+                }
+            }
+        }
+
+        // 2. 作为 username (nickname) 查找
+        if (accountsCache[identifier]) {
+            return accountsCache[identifier].uid;
+        }
+
+        // 如果找不到，返回原值尝试
+        return identifier;
     }
 
     /**

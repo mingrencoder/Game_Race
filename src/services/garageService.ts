@@ -1,8 +1,13 @@
 import { Vehicle, GarageCar } from '../types';
 import { VEHICLES_DB, ITEMS_DB } from '../constants';
 
+/**
+ * 赛车数值与乘区成长映射字典
+ * 每一级强化提升的基础属性乘区
+ */
 export const LEVEL_MULTI = [0, 0.1, 0.25, 0.45, 0.65, 1.0];
 
+/** 每辆车最高级专属的满级额外属性参数补偿 */
 export const MAX_BONUS: Record<string, { speed: number, accel: number, grip?: number, launch?: number, drift?: number }> = {
   car_basic: { speed: 0.6, accel: 0.03, grip: 0.02 },
   car_speed: { speed: 1.6, accel: 0.05, launch: 0.5 },
@@ -14,6 +19,11 @@ export const MAX_BONUS: Record<string, { speed: number, accel: number, grip?: nu
   car_legend: { speed: 2.6, accel: 0.15, drift: 1.5 },
 };
 
+/**
+ * 实时计算战车的局内最终动态战斗力模型
+ * 公式：基于车辆原始白值 + (满级成长上限补偿 * 当前被动强化阶等) + 当前挂载部件装备加成 
+ * 计算最终还要受到当前战车受损耐久度 DEBUFF 的乘区缩减处理
+ */
 export function getVehicleStats(vehicleData: Vehicle, state?: GarageCar) {
   const lv = state?.level || 0;
   const multi = LEVEL_MULTI[lv];

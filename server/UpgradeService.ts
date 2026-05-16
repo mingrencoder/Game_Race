@@ -2,14 +2,7 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from './GMMiddleware';
 import { StorageEngine } from './StorageEngine';
 import { getVehicleTier } from './utils/vehicleUtils';
-
-const UPGRADE_CONFIG: Record<number, any> = {
-    0: { material: 'core_primary', cost: 1, rate: { 0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0 }, protection: null, failDrop: 0 },
-    1: { material: 'core_primary', cost: 3, rate: { 0: 0.8, 1: 0.8, 2: 0.7, 3: 0.6 }, protection: null, failDrop: 0 },
-    2: { material: 'core_advanced', cost: 2, rate: { 0: 0.6, 1: 0.6, 2: 0.45, 3: 0.3 }, protection: null, failDrop: 0 },
-    3: { material: 'core_advanced', cost: 4, rate: { 0: 0.4, 1: 0.4, 2: 0.25, 3: 0.15 }, protection: 'card_silver', failDrop: 1 },
-    4: { material: 'core_legendary', cost: 3, rate: { 0: 0.2, 1: 0.2, 2: 0.1, 3: 0.05 }, protection: 'card_gold', failDrop: 4 } // drop 4 from +4 means downgrade to 0
-};
+import { UPGRADE_CONFIG, SYS_CONFIG } from '../src/constants';
 
 export class UpgradeService {
     static async upgradeCar(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -28,7 +21,7 @@ export class UpgradeService {
             if (!vehicle) { res.status(404).json({ error: 'Vehicle not found' }); return; }
 
             const currentLevel = vehicle.level || 0;
-            if (currentLevel >= 5) { res.status(400).json({ error: 'Vehicle is already at max level' }); return; }
+            if (currentLevel >= SYS_CONFIG.MAX_UPGRADE_LEVEL) { res.status(400).json({ error: 'Vehicle is already at max level' }); return; }
 
             const config = UPGRADE_CONFIG[currentLevel];
             if (!config) { res.status(500).json({ error: 'Upgrade configuration missing for this level' }); return; }

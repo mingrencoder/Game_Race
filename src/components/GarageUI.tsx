@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PlayerData } from '../types';
-import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, BASIC_COLORS } from '../constants';
+import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, BASIC_COLORS, SYS_CONFIG } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Cpu, Wind, Zap, Gauge, CircleDot, ShieldAlert } from 'lucide-react';
 
@@ -13,11 +13,28 @@ interface GarageProps {
 
 import { getVehicleStats } from '../services/garageService';
 
+/**
+ * 个人车库前端 UI 组件
+ * 用于装备/卸下改装配件、切换车辆涂装、维护赛车耐久度。
+ * 同样，为了防刷，所有改变状态的动作皆在服务端落地，前端负责发送请求。
+ */
 export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES'>('VEHICLES');
   const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
 
-  const equipVehicle = (id: string) => setGarage(p => ({ ...p, profile: { ...p.profile, activeCarId: id } }));
+  const equipVehicle = (id: string) => {
+    // 表现层先行响应
+    setGarage(p => ({ ...p, profile: { ...p.profile, activeCarId: id } }));
+
+    const token = localStorage.getItem('neon_token');
+    if (!token) return;
+
+    fetch('/api/player/setActiveCar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ carId: id })
+    }).catch(err => console.error('出战设置异常:', err));
+  };
   
   const [pendingEquip, setPendingEquip] = useState<{ id: string | null, typeKey: string, oldId: string | null, fee: number } | null>(null);
   const [equipError, setEquipError] = useState<string | null>(null);
@@ -41,7 +58,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
 
     if (currentEquippedId) {
         const oldItem = ITEMS_DB.find(i => i.id === currentEquippedId);
-        const fee = oldItem ? Math.floor(oldItem.price * 0.2) : 0;
+        const fee = oldItem ? Math.floor(oldItem.price * SYS_CONFIG.PART_DEPRECIATION_RATE) : 0;
         setPendingEquip({ id: currentEquippedId === id ? null : id, typeKey, oldId: currentEquippedId, fee });
     } else {
         commitEquip(id, typeKey, null, 0);
@@ -55,7 +72,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
       fetch('/api/shop/equipPart', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ carId: garage.profile.activeCarId, partId: newId, targetSlot: typeKey })
+          body: JSON.stringify({ carId: garage.profile.activeCarId, partId: newId, slotId: typeKey })
       })
       .then(res => res.json())
       .then(data => {
@@ -147,7 +164,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
   const accelBoost = stats.accelBoost;
 
   const handleMaintenance = () => {
-    if (!vState || vState.durability >= 100) return;
+    if (!vState || vState.durability >= SYS_CONFIG.MAX_DURABILITY) return;
     
     const token = localStorage.getItem('neon_token');
     if (!token) return;
@@ -272,17 +289,17 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                <div className="flex flex-col gap-2">
                  <div className="flex justify-between items-center text-xs">
                     <span className="text-zinc-400">耐久度</span>
-                    <span className={`font-mono font-bold ${vState.durability < 30 ? 'text-red-500' : 'text-green-400'}`}>
-                      {vState.durability} / 100
+                    <span className={`font-mono font-bold ${vState.durability < SYS_CONFIG.DURABILITY_DEBUFF_THRESHOLD ? 'text-red-500' : 'text-green-400'}`}>
+                      {vState.durability} / {SYS_CONFIG.MAX_DURABILITY}
                     </span>
                  </div>
                  <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden">
                     <div 
-                      className={`h-full ${vState.durability < 30 ? 'bg-red-500' : 'bg-green-400'}`} 
-                      style={{ width: `${vState.durability}%` }}
+                      className={`h-full ${vState.durability < SYS_CONFIG.DURABILITY_DEBUFF_THRESHOLD ? 'bg-red-500' : 'bg-green-400'}`} 
+                      style={{ width: `${(vState.durability / SYS_CONFIG.MAX_DURABILITY) * 100}%` }}
                     />
                  </div>
-                 {vState.durability < 100 && (
+                 {vState.durability < SYS_CONFIG.MAX_DURABILITY && (
                    <button 
                      onClick={() => setShowMaintenanceConfirm(true)}
                      className="mt-2 text-xs py-1.5 px-3 rounded border border-white/20 hover:bg-white/10 text-white flex justify-center items-center gap-2 transition-colors"
@@ -431,8 +448,69 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
               );
             })}
             {Object.keys(garage.inventory.parts).length === 0 && (
-              <div className="text-zinc-500 italic">尚未拥有任何道具，请前往商店购买。</div>
+              <div className="text-zinc-500 italic">尚未拥有任何车辆配件，请前往商店购买。</div>
             )}
+
+            {/* ========== 强化材料与道具展示 ========== */}
+            <div className="w-full">
+              <h2 className="text-xl font-bold border-b border-accent-cyan/30 pb-2 mb-4 text-white">材料与特殊道具</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {/* Materials */}
+                {Object.entries(garage.inventory?.materials || {}).map(([matId, qty]) => {
+                   if (qty <= 0) return null;
+                   const name = matId === 'core_primary' ? '初级强化核心' : matId === 'core_advanced' ? '高级强化核心' : '传说强化核心';
+                   return (
+                     <div key={matId} className="neon-panel p-3 flex flex-col items-center gap-2">
+                       <div className="text-3xl">💎</div>
+                       <div className="text-center">
+                         <div className="text-xs font-bold text-white">{name}</div>
+                         <div className="text-[10px] text-accent-yellow">消耗品</div>
+                       </div>
+                       <div className="w-full py-1 text-center bg-black/40 text-white text-xs rounded border border-white/10 font-mono">
+                         持有: {qty}
+                       </div>
+                     </div>
+                   );
+                })}
+
+                {/* Protectors */}
+                {Object.entries(garage.inventory?.protectors || {}).map(([protId, qty]) => {
+                   if (qty <= 0) return null;
+                   const name = protId === 'card_silver' ? '白银保护卡' : '黄金保护卡';
+                   return (
+                     <div key={protId} className="neon-panel p-3 flex flex-col items-center gap-2">
+                       <div className="text-3xl">🛡️</div>
+                       <div className="text-center">
+                         <div className="text-xs font-bold text-white">{name}</div>
+                         <div className="text-[10px] text-accent-yellow">防爆消耗品</div>
+                       </div>
+                       <div className="w-full py-1 text-center bg-black/40 text-white text-xs rounded border border-white/10 font-mono">
+                         持有: {qty}
+                       </div>
+                     </div>
+                   );
+                })}
+
+                {/* Special Items */}
+                {Object.entries(garage.inventory?.specialItems || {}).map(([itemId, qty]) => {
+                   if (qty <= 0) return null;
+                   const name = itemId === 'rename_card' ? '改名卡' : itemId;
+                   return (
+                     <div key={itemId} className="neon-panel p-3 flex flex-col items-center gap-2">
+                       <div className="text-3xl">🎫</div>
+                       <div className="text-center">
+                         <div className="text-xs font-bold text-white">{name}</div>
+                         <div className="text-[10px] text-accent-yellow">特殊权限卡</div>
+                       </div>
+                       <div className="w-full py-1 text-center bg-black/40 text-white text-xs rounded border border-white/10 font-mono">
+                         持有: {qty}
+                       </div>
+                     </div>
+                   );
+                })}
+              </div>
+            </div>
+
           </div>
         )}
 

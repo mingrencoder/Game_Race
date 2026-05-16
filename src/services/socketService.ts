@@ -1,6 +1,10 @@
 import io, { Socket } from 'socket.io-client';
 import { RoomState, OnlinePlayer } from '../types';
 
+/**
+ * websocket 通信服务，负责联机大厅全生命周期的状态维护和后端通信转发
+ * 这里不包含具体的时效渲染逻辑，只进行简单的事件注册
+ */
 class SocketService {
   public socket: any = null;
   public room: RoomState | null = null;

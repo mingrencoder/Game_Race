@@ -4,6 +4,10 @@ import { socketService } from '../services/socketService';
 import { VEHICLES_DB, LIVERIES_DB, ITEMS_DB, TRACKS, BASIC_COLORS } from '../constants';
 import VehiclePreview from './VehiclePreview';
 
+/**
+ * 在线对战模式的大厅入口系统
+ * 负责建立 Socket 连接、输入名字、创建/搜索/加入指定的联机房间
+ */
 export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?: string, onBack: () => void, onStartLobby: () => void }) => {
   const [playerName, setPlayerName] = useState(initialName || '车手_' + Math.floor(Math.random() * 1000));
   const [roomIdInput, setRoomIdInput] = useState('');
@@ -346,6 +350,10 @@ export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?
 
 import { TrackSelector } from './TrackSelector';
 
+/**
+ * 房间内部等候大厅界面
+ * 负责组织玩家队伍、配置赛道圈数、更换出战车辆及属性同步，并在所有人准备就绪后由房主开始局域对决
+ */
 export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, onViewLeaderboard, onUpdateActiveCar }: { activeCarId: string, coins: number, garage: any[], onBack: () => void, onStartGame: () => void, onViewLeaderboard?: (trackId: string) => void, onUpdateActiveCar?: (carId: string, color: string, liveryId: string | null) => void }) => {
   const [room, setRoom] = useState(socketService.room);
   const [showTrackSelector, setShowTrackSelector] = useState(false);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PlayerData, GarageCar } from '../types';
-import { VEHICLES_DB, ITEMS_DB } from '../constants';
+import { VEHICLES_DB, ITEMS_DB, UPGRADE_CONFIG, SYS_CONFIG } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Wrench, Zap, Shield, ArrowUpCircle } from 'lucide-react';
 
@@ -13,30 +13,28 @@ interface EnhancementUIProps {
 
 import { getVehicleStats, LEVEL_MULTI } from '../services/garageService';
 
+/**
+ * 赛车深度强化工坊界面
+ * 处理赛车升星/强化进阶（+1 到 +5）等消耗大量材料的操作
+ * 注意：只有服务器能够决定暴击/升级失败等最终随机状态，前端仅负责发送 payload。
+ */
 export default function EnhancementUI({ garage, setGarage, onClose }: EnhancementUIProps) {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(garage.profile.activeCarId || garage.garage[0]?.carId);
   const vehicleState = garage.garage.find(c => c.carId === selectedVehicleId);
   const vehicleDef = VEHICLES_DB.find(v => v.id === selectedVehicleId);
 
-  const PROBABILITY = {
-    t0_t1: [1.0, 0.8, 0.60, 0.40, 0.20],
-    t2: [1.0, 0.70, 0.45, 0.25, 0.10],
-    t3: [1.0, 0.60, 0.30, 0.15, 0.05],
-  };
-
-  const getTier = (tier: string) => {
-    if (tier === 'T0' || tier === 'T1') return 't0_t1';
-    if (tier === 'T2') return 't2';
-    return 't3';
+  const getTierInt = (tier: string) => {
+    const match = tier.match(/\d+/);
+    return match ? parseInt(match[0], 10) : 0;
   };
 
   const getCurrentStats = (level: number) => {
     if (!vehicleDef) return { speed: 0, accel: 0, grip: 0, launch: 0, drift: 0 };
     
-    // Simulate state with the target level, ignoring durability debuff for enhancement preview display by spoofing durability to 100
+    // Simulate state with the target level, ignoring durability debuff for enhancement preview display by spoofing durability to SYS_CONFIG.MAX_DURABILITY
     const mockState = {
       ...vehicleState,
-      durability: 100,
+      durability: SYS_CONFIG.MAX_DURABILITY,
       level: level
     } as GarageCar;
 
@@ -52,34 +50,20 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
   };
 
   const currentStats = getCurrentStats(vehicleState?.level || 0);
-  const nextStats = vehicleState && vehicleState.level < 5 ? getCurrentStats(vehicleState.level + 1) : null;
+  const nextStats = vehicleState && vehicleState.level < SYS_CONFIG.MAX_UPGRADE_LEVEL ? getCurrentStats(vehicleState.level + 1) : null;
 
   const [useShield, setUseShield] = useState(false);
   const [resultMsg, setResultMsg] = useState<{msg: string, success: boolean} | null>(null);
 
-  const getUpgradeReqs = (level: number) => {
-    if (level === 0) return { coreType: 'core_primary' as const, amount: 1, name: '初级强化核心' };
-    if (level === 1) return { coreType: 'core_primary' as const, amount: 3, name: '初级强化核心' };
-    if (level === 2) return { coreType: 'core_advanced' as const, amount: 2, name: '高级强化核心' };
-    if (level === 3) return { coreType: 'core_advanced' as const, amount: 4, name: '高级强化核心' };
-    return { coreType: 'core_legendary' as const, amount: 3, name: '传说强化核心' };
-  };
-
-  const getShieldReq = (level: number) => {
-    if (level === 3) return { shieldType: 'card_silver' as const, cost: 1500, name: '白银保护卡' };
-    if (level === 4) return { shieldType: 'card_gold' as const, cost: 8000, name: '黄金保护卡' };
-    return null;
-  };
-
   if (!vehicleState || !vehicleDef) return null;
 
-  const req = getUpgradeReqs(vehicleState.level);
-  const shield = getShieldReq(vehicleState.level);
-  const probabilities = PROBABILITY[getTier(vehicleDef.tier) as keyof typeof PROBABILITY];
-  const successRate = vehicleState.level < 5 ? probabilities[vehicleState.level] : 0;
+  const config = UPGRADE_CONFIG[vehicleState.level];
+  const req = config ? { coreType: config.material, amount: config.cost, name: config.materialName } : null;
+  const shield = config && config.protection ? { shieldType: config.protection, cost: config.protectionCost, name: config.protectionName } : null;
+  const successRate = vehicleState.level < SYS_CONFIG.MAX_UPGRADE_LEVEL && config ? config.rate[getTierInt(vehicleDef.tier)] || 0 : 0;
 
   const handleUpgrade = () => {
-    if (vehicleState.level >= 5) return;
+    if (vehicleState.level >= SYS_CONFIG.MAX_UPGRADE_LEVEL) return;
     
     const token = localStorage.getItem('neon_token');
     if (!token) return;
@@ -151,7 +135,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
 
            <div className="relative w-full aspect-video md:aspect-auto md:h-64 flex justify-center items-center bg-black/30 rounded-xl mb-6 neon-panel">
              <VehiclePreview vehicleType={vehicleDef.type} width={180} height={180} color="#00f2ff" />
-             {vehicleState.level >= 5 && (
+             {vehicleState.level >= SYS_CONFIG.MAX_UPGRADE_LEVEL && (
                 <div className="absolute top-4 right-4 bg-accent-yellow text-black font-black px-3 py-1 rounded shadow-[0_0_15px_rgba(255,223,0,0.6)]">
                   MAX LEVEL
                 </div>
@@ -206,7 +190,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
              </div>
            )}
 
-           {vehicleState.level < 5 ? (
+           {vehicleState.level < SYS_CONFIG.MAX_UPGRADE_LEVEL && req ? (
              <div className="w-full bg-black/60 p-4 rounded-xl border border-white/10 flex flex-col gap-4">
                 <div className="flex justify-between items-center text-sm border-b border-white/10 pb-3">
                   <span className="text-zinc-400">成功率</span>
@@ -249,7 +233,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
              </div>
            ) : (
              <div className="w-full text-center text-zinc-500 italic mt-8 p-4 bg-white/5 rounded border border-white/5">
-                此车辆已达到最高强化等级 (+5)
+                此车辆已达到最高强化等级 (+{SYS_CONFIG.MAX_UPGRADE_LEVEL})
              </div>
            )}
 

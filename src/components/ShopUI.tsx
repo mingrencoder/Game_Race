@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { PlayerData } from '../types';
-import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB } from '../constants';
+import { VEHICLES_DB, ITEMS_DB, LIVERIES_DB, SYS_CONFIG } from '../constants';
 import VehiclePreview from './VehiclePreview';
 import { Cpu, Wind, Zap, Gauge, CircleDot } from 'lucide-react';
+
 
 interface ShopProps {
   garage: PlayerData;
@@ -11,89 +12,155 @@ interface ShopProps {
   onClose: () => void;
 }
 
+/**
+ * 商城系统前端 UI 组件
+ * 提供车辆购买/租赁、零部件购买、喷漆购买及材料兑换的交互界面
+ * 所有的购买操作都将调用后端的 REST API，由后端完成鉴权和扣费
+ */
 export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
   const [tab, setTab] = useState<'VEHICLES' | 'ITEMS' | 'LIVERIES' | 'MATERIALS' | 'SPECIAL'>('VEHICLES');
+  const [purchaseDialog, setPurchaseDialog] = useState<{
+    title: string;
+    description: string;
+    price: number;
+    allowQuantity: boolean;
+    onConfirm: (amount: number) => void;
+  } | null>(null);
+  const [purchaseQuantity, setPurchaseQuantity] = useState(1);
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const showNotif = (type: 'success' | 'error', text: string) => {
+    setNotification({ type, text });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   const handlePurchaseVehicle = (id: string, price: number, isLease: boolean) => {
-    const token = localStorage.getItem('neon_token');
-    if (!token) return;
-    fetch('/api/shop/buyCar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ carId: id, isPermanent: !isLease })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.playerData) setGarage(data.playerData);
-      else console.error(data.message || '购买失败');
-    })
-    .catch(err => console.error('网络请求异常:', err));
-  };
-
-  const buyItem = (id: string, price: number) => {
-    const token = localStorage.getItem('neon_token');
-    if (!token) return;
+    const existingVehicle = garage.garage.find(c => c.carId === id);
+    const isAlreadyLeased = existingVehicle && !existingVehicle.isPermanent;
     
-    if (id === 'rename_card') {
-       if (confirm(`⚠️ 警告：该道具价值极其昂贵，确定要消耗 ${price} ⟁ 购买吗？`)) {
-          fetch('/api/shop/buyItem', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ itemId: 'rename_card', amount: 1 })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success && data.playerData) setGarage(data.playerData);
-            else console.error(data.message || '购买失败');
-          })
-          .catch(err => console.error('网络请求异常:', err));
-       }
-       return;
+    let descriptionStr = `确定花费 ${price} ⟁ 购买该车辆永久所有权吗？`;
+    if (isLease) {
+      if (isAlreadyLeased) {
+        descriptionStr = `确定花费 ${price} ⟁ 续租该车辆 30 天吗？`;
+      } else {
+        descriptionStr = `确定花费 ${price} ⟁ 租赁该车辆 30 天吗？`;
+      }
     }
 
-    fetch('/api/shop/buyPart', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ partId: id })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.playerData) setGarage(data.playerData);
-      else console.error(data.message || '购买失败');
-    })
-    .catch(err => console.error('网络请求异常:', err));
+    setPurchaseDialog({
+      title: isLease ? (isAlreadyLeased ? '续约确认' : '租赁确认') : '购买确认',
+      description: descriptionStr,
+      price: price,
+      allowQuantity: false,
+      onConfirm: () => {
+        const token = localStorage.getItem('neon_token');
+        if (!token) return;
+        fetch('/api/shop/buyCar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ carId: id, isPermanent: !isLease })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            showNotif('success', `车辆购买成功！`);
+          } else {
+            showNotif('error', data.message || '购买失败');
+          }
+        })
+        .catch(err => showNotif('error', '网络请求异常'));
+      }
+    });
   };
 
-  const buyMaterial = (id: string, price: number) => {
-    const token = localStorage.getItem('neon_token');
-    if (!token) return;
-    fetch('/api/shop/buyItem', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ itemId: id, amount: 1 })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.playerData) setGarage(data.playerData);
-      else console.error(data.message || '购买失败');
-    })
-    .catch(err => console.error('网络请求异常:', err));
+  const buyItem = (id: string, price: number, name: string) => {
+    const isRenameCard = id === 'rename_card';
+    setPurchaseDialog({
+      title: '零件购买',
+      description: isRenameCard ? `⚠️ 警告：改名卡价值极其昂贵，确定购买吗？` : `请选择购买数量: ${name}`,
+      price: price,
+      allowQuantity: true,
+      onConfirm: (amount) => {
+        const token = localStorage.getItem('neon_token');
+        if (!token) return;
+        
+        const endpoint = isRenameCard ? '/api/shop/buyItem' : '/api/shop/buyPart';
+        const bodyKey = isRenameCard ? 'itemId' : 'partId';
+
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ [bodyKey]: id, amount })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            showNotif('success', `购买成功！(获得数量: ${amount})`);
+          } else {
+            showNotif('error', data.message || '购买失败');
+          }
+        })
+        .catch(err => showNotif('error', '网络请求异常'));
+      }
+    });
   };
 
-  const buyLivery = (id: string, price: number) => {
-    const token = localStorage.getItem('neon_token');
-    if (!token) return;
-    fetch('/api/shop/buyLivery', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ liveryId: id })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.playerData) setGarage(data.playerData);
-      else console.error(data.message || '购买失败');
-    })
-    .catch(err => console.error('网络请求异常:', err));
+  const buyMaterial = (id: string, price: number, name: string) => {
+    setPurchaseDialog({
+      title: '素材兑换',
+      description: `请选择购买数量: ${name}`,
+      price: price,
+      allowQuantity: true,
+      onConfirm: (amount) => {
+        const token = localStorage.getItem('neon_token');
+        if (!token) return;
+        fetch('/api/shop/buyItem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ itemId: id, amount })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            showNotif('success', `购买成功！`);
+          } else {
+            showNotif('error', data.message || '购买失败');
+          }
+        })
+        .catch(err => showNotif('error', '网络请求异常'));
+      }
+    });
+  };
+
+  const buyLivery = (id: string, price: number, name: string) => {
+    setPurchaseDialog({
+      title: '涂装购买',
+      description: `确定花费 ${price} ⟁ 购买涂装 ${name} 吗？`,
+      price: price,
+      allowQuantity: false,
+      onConfirm: () => {
+        const token = localStorage.getItem('neon_token');
+        if (!token) return;
+        fetch('/api/shop/buyLivery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ liveryId: id })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.playerData) {
+            setGarage(data.playerData);
+            showNotif('success', `涂装购买成功！`);
+          } else {
+            showNotif('error', data.message || '购买失败');
+          }
+        })
+        .catch(err => showNotif('error', '网络请求异常'));
+      }
+    });
   };
 
   const getItemIcon = (type: string) => {
@@ -182,7 +249,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                            disabled={!canAffordRent}
                            className="flex-1 py-1.5 bg-accent-cyan text-black font-bold rounded text-xs disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
                          >
-                           {isLeased ? '续费 (累计时长)' : '租赁 3 天'}<br/>{rentPrice} ⟁
+                           {isLeased ? '续费 (累计时长)' : `租赁 ${SYS_CONFIG.RENTAL_DURATION_DAYS} 天`}<br/>{rentPrice} ⟁
                          </button>
                          <button 
                            onClick={() => handlePurchaseVehicle(v.id, v.price, false)}
@@ -242,7 +309,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                             <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded border border-accent-cyan/20">已拥有 <span className="opacity-50">({item.price} ⟁)</span></span>
                           ) : (
                             <button 
-                              onClick={() => buyItem(item.id, item.price)}
+                              onClick={() => buyItem(item.id, item.price, item.name)}
                               disabled={!canAfford}
                               className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
                             >
@@ -302,7 +369,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                             <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded border border-accent-cyan/20">已拥有 <span className="opacity-50">({l.price} ⟁)</span></span>
                           ) : (
                             <button 
-                              onClick={() => buyLivery(l.id, l.price)}
+                              onClick={() => buyLivery(l.id, l.price, l.name)}
                               disabled={!canAfford}
                               className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 whitespace-nowrap transition-all hover:brightness-110 active:scale-95"
                             >
@@ -321,18 +388,15 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
         {tab === 'MATERIALS' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { id: 'coreT1', name: '初级强化核心', price: 100, desc: '用于车辆 +1 和 +2 强化', icon: '⚡' },
-              { id: 'coreT2', name: '高级强化核心', price: 500, desc: '用于车辆 +3 和 +4 强化', icon: '🔋' },
-              { id: 'coreT3', name: '传说强化核心', price: 2000, desc: '用于车辆满级 +5 强化', icon: '🔮' },
-              { id: 'silverCard', name: '白银保护卡', price: 1500, desc: '冲击 +4 失败时保护不掉级', icon: '🛡️' },
-              { id: 'goldenCard', name: '黄金保护卡', price: 8000, desc: '冲击 +5 失败时保护不归零', icon: '🌟' }
+              { id: 'core_primary', name: '初级强化核心', price: 100, desc: '用于车辆 +1 和 +2 强化', icon: '⚡' },
+              { id: 'core_advanced', name: '高级强化核心', price: 500, desc: '用于车辆 +3 和 +4 强化', icon: '🔋' },
+              { id: 'core_legendary', name: '传说强化核心', price: 2000, desc: '用于车辆满级 +5 强化', icon: '🔮' },
+              { id: 'card_silver', name: '白银保护卡', price: 1500, desc: `冲击 +${SYS_CONFIG.MAX_UPGRADE_LEVEL - 1} 失败时保护不掉级`, icon: '🛡️' },
+              { id: 'card_gold', name: '黄金保护卡', price: 8000, desc: `冲击 +${SYS_CONFIG.MAX_UPGRADE_LEVEL} 失败时保护不归零`, icon: '🌟' }
             ].map(mat => {
               const getCount = (id: string) => {
-                  if (id === 'coreT1') return garage.inventory.materials.core_primary;
-                  if (id === 'coreT2') return garage.inventory.materials.core_advanced;
-                  if (id === 'coreT3') return garage.inventory.materials.core_legendary;
-                  if (id === 'silverCard') return garage.inventory.protectors.card_silver;
-                  if (id === 'goldenCard') return garage.inventory.protectors.card_gold;
+                  if (id.includes('core_')) return garage.inventory.materials[id] || 0;
+                  if (id.includes('card_')) return garage.inventory.protectors[id] || 0;
                   return 0;
               };
               const count = getCount(mat.id);
@@ -349,7 +413,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   </div>
                   <div className="mt-2 text-right">
                     <button
-                      onClick={() => buyMaterial(mat.id, mat.price)}
+                      onClick={() => buyMaterial(mat.id, mat.price, mat.name)}
                       disabled={!canAfford}
                       className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 whitespace-nowrap transition-all hover:brightness-110 active:scale-95"
                     >
@@ -380,7 +444,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   </div>
                   <div className="mt-2">
                     <button
-                      onClick={() => buyItem(item.id, item.price)}
+                      onClick={() => buyItem(item.id, item.price, item.name)}
                       disabled={!canAfford}
                       className="w-full py-3 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase text-lg rounded shadow-[0_0_15px_rgba(234,179,8,0.4)] disabled:opacity-30 transition-all active:scale-95 flex flex-col items-center leading-tight"
                     >
@@ -394,6 +458,55 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
           </div>
         )}
       </div>
+
+
+      {/* notification toast */}
+      {notification && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[2000]">
+          <div className={`px-6 py-3 rounded-lg border shadow-xl flex items-center justify-center font-bold animate-in fade-in slide-in-from-top-4 ${notification.type === 'success' ? 'bg-green-900 border-green-500 text-green-300' : 'bg-red-900 border-red-500 text-red-300'}`}>
+            {notification.type === 'success' ? '✅ ' : '❌ '} {notification.text}
+          </div>
+        </div>
+      )}
+
+      {/* purchase modal */}
+      {purchaseDialog && (
+        <div className="fixed inset-0 z-[2000] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 lg:p-10">
+          <div className="bg-[#151515] p-6 rounded-xl border border-accent-yellow/30 shadow-2xl max-w-sm w-full text-center flex flex-col gap-4">
+             <h3 className="text-xl font-bold text-accent-yellow">{purchaseDialog.title}</h3>
+             <p className="text-zinc-300 font-bold">{purchaseDialog.description}</p>
+             {purchaseDialog.allowQuantity && (
+               <div className="flex items-center justify-center gap-4 my-2">
+                 <button onClick={() => setPurchaseQuantity(Math.max(1, purchaseQuantity - 1))} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20">-</button>
+                 <span className="text-2xl font-mono text-white w-12">{purchaseQuantity}</span>
+                 <button onClick={() => setPurchaseQuantity(purchaseQuantity + 1)} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20">+</button>
+               </div>
+             )}
+             <div className="flex justify-between items-center bg-black/50 p-3 rounded font-mono text-xl border border-white/5">
+                <span className="text-zinc-500">总价</span>
+                <span className={garage.wallet.coins >= purchaseDialog.price * purchaseQuantity ? "text-accent-yellow" : "text-red-500"}>{purchaseDialog.price * purchaseQuantity} ⟁</span>
+             </div>
+             <div className="flex gap-4 mt-2">
+                <button 
+                  onClick={() => {
+                    setPurchaseDialog(null);
+                    setPurchaseQuantity(1);
+                  }} 
+                  className="flex-1 px-4 py-3 bg-zinc-800 text-white font-bold rounded"
+                >取消</button>
+                <button 
+                  disabled={garage.wallet.coins < purchaseDialog.price * purchaseQuantity}
+                  onClick={() => {
+                    purchaseDialog.onConfirm(purchaseQuantity);
+                    setPurchaseDialog(null);
+                    setPurchaseQuantity(1);
+                  }} 
+                  className="flex-1 px-4 py-3 bg-accent-yellow text-black font-black disabled:opacity-30 rounded"
+                >确认购买</button>
+             </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }

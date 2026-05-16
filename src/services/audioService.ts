@@ -1,3 +1,7 @@
+/**
+ * 全局音频合成与播放服务 (Web Audio API)
+ * 使用原生的振荡器播放电子赛博朋克风格的背景音乐和提示音效
+ */
 class AudioService {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;

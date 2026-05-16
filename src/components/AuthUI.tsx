@@ -8,6 +8,10 @@ interface AuthUIProps {
   onLoginSuccess: () => void;
 }
 
+/**
+ * 玩家登录与注册统一认证入口界面
+ * 使用 JWT 保存在 localStorage 中，实现无状态的会话持久化
+ */
 export default function AuthUI({ setGarage, onLoginSuccess }: AuthUIProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');

@@ -9,6 +9,10 @@ interface VehiclePreviewProps {
   scale?: number;
 }
 
+/**
+ * 渲染单辆赛车涂装与外观配置的 Canvas 预览组件
+ * 封装了复用的原生 2D 绘图逻辑
+ */
 export default function VehiclePreview({ 
   vehicleType, 
   color = '#ffffff', 
