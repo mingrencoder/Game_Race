@@ -79,7 +79,7 @@ export default function EnhancementUI({ garage, setGarage, onClose }: Enhancemen
             setGarage(data.playerData);
             setResultMsg({ msg: data.message || '操作成功', success: data.isSuccess !== false });
         } else {
-            setResultMsg({ msg: data.message || '强化失败！', success: false });
+            setResultMsg({ msg: data.error || data.message || '强化失败！', success: false });
         }
     })
     .catch(err => {

@@ -164,12 +164,12 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
   };
 
   const getItemIcon = (type: string) => {
-    if (type === 'engine') return <Cpu size={32} className="text-[#00f2ff]" />;
-    if (type === 'tires') return <CircleDot size={32} className="text-[#ff00ea]" />;
-    if (type === 'acceleration') return <Zap size={32} className="text-[#f4ff40]" />;
-    if (type === 'launch') return <Gauge size={32} className="text-[#00ff00]" />;
-    if (type === 'drift') return <Wind size={32} className="text-[#ff2222]" />;
-    return <Cpu size={32} />;
+    if (type === 'engine') return <Cpu size={24} className="text-[#00f2ff]" />;
+    if (type === 'tires') return <CircleDot size={24} className="text-[#ff00ea]" />;
+    if (type === 'acceleration') return <Zap size={24} className="text-[#f4ff40]" />;
+    if (type === 'launch') return <Gauge size={24} className="text-[#00ff00]" />;
+    if (type === 'drift') return <Wind size={24} className="text-[#ff2222]" />;
+    return <Cpu size={24} />;
   };
 
   return (
@@ -219,13 +219,13 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
               }
 
               return (
-                <div key={v.id} className="neon-panel p-4 flex flex-col justify-between gap-3">
-                  <div className="flex justify-center items-center bg-black/40 rounded-lg py-4 border border-white/5 shadow-inner min-h-[120px]">
-                    <VehiclePreview vehicleType={v.type} width={120} height={120} color="#00f2ff" />
+                <div key={v.id} className="neon-panel p-3 flex flex-col justify-between gap-3">
+                  <div className="flex justify-center items-center bg-black/40 rounded-lg py-2 border border-white/5 shadow-inner min-h-[90px]">
+                    <VehiclePreview vehicleType={v.type} width={90} height={90} color="#00f2ff" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-2">{v.name}</h3>
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 text-[10px] text-zinc-400">
+                    <h3 className="text-lg font-bold text-white mb-1">{v.name}</h3>
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-1 text-[9px] text-zinc-400">
                       <span>极速: {v.baseSpeed}</span>
                       <span>抓地: {v.baseGrip}</span>
                       <span>起步: {v.baseLaunch || 0}</span>
@@ -234,27 +234,27 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                     </div>
                   </div>
                   {isPermanent ? (
-                    <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded border border-accent-cyan/20">永久拥有 <span className="opacity-50">({v.price} ⟁)</span></span>
+                    <span className="text-accent-cyan font-bold text-xs w-full text-center py-1.5 bg-accent-cyan/10 rounded border border-accent-cyan/20">永久拥有 <span className="opacity-50">({v.price} ⟁)</span></span>
                   ) : v.price === 0 ? (
                     <button 
                       onClick={() => handlePurchaseVehicle(v.id, 0, false)}
-                      className="w-full py-2 bg-accent-yellow text-black font-bold rounded transition-all hover:brightness-110 active:scale-95"
+                      className="w-full py-1.5 bg-accent-yellow text-black font-bold rounded transition-all hover:brightness-110 active:scale-95 text-xs"
                     >免费获取 (永久)</button>
                   ) : (
-                    <div className="flex flex-col gap-2">
-                       {isLeased && <div className="text-xs text-accent-cyan text-center">已租赁，剩余 {daysLeft} 天</div>}
+                    <div className="flex flex-col gap-1.5">
+                       {isLeased && <div className="text-[10px] text-accent-cyan text-center">已租赁，剩余 {daysLeft} 天</div>}
                        <div className="flex gap-2">
                          <button 
                            onClick={() => handlePurchaseVehicle(v.id, rentPrice, true)}
                            disabled={!canAffordRent}
-                           className="flex-1 py-1.5 bg-accent-cyan text-black font-bold rounded text-xs disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
+                           className="flex-1 py-1 bg-accent-cyan text-black font-bold rounded text-[10px] disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
                          >
-                           {isLeased ? '续费 (累计时长)' : `租赁 ${SYS_CONFIG.RENTAL_DURATION_DAYS} 天`}<br/>{rentPrice} ⟁
+                           {isLeased ? '续费 (累计)' : `租赁 ${SYS_CONFIG.RENTAL_DURATION_DAYS}天`}<br/>{rentPrice} ⟁
                          </button>
                          <button 
                            onClick={() => handlePurchaseVehicle(v.id, v.price, false)}
                            disabled={!canAffordPerm}
-                           className="flex-1 py-1.5 bg-accent-yellow text-black font-bold rounded text-xs disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
+                           className="flex-1 py-1 bg-accent-yellow text-black font-bold rounded text-[10px] disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
                          >
                            买断永久<br/>{v.price} ⟁
                          </button>
@@ -286,7 +286,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   <h2 className="text-xl font-bold border-b border-white/10 pb-2 mb-4 text-accent-cyan shrink-0">{categoryNames[category]}</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                     {categoryItems.map(item => {
-                      const owned = !!garage.inventory.parts[item.id];
+                      const ownedCount = garage.inventory.parts[item.id] || 0;
                       const canAfford = garage.wallet.coins >= item.price;
                       
                       let boostDesc = '';
@@ -297,25 +297,24 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                       if (item.accelerationBoost) boostDesc = `加速能力 +${item.accelerationBoost * 100}%`;
 
                       return (
-                        <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 min-w-[200px]">
-                          <div className="flex justify-center items-center h-20 bg-black/40 rounded-lg border border-white/5 shadow-inner">
-                            {getItemIcon(item.type)}
+                        <div key={item.id} className="neon-panel p-3 flex flex-col justify-between gap-2 min-w-[160px]">
+                          <div className="flex justify-between items-start w-full">
+                            <div className="flex justify-center items-center h-12 w-12 bg-black/40 rounded-lg border border-white/5 shadow-inner">
+                              {getItemIcon(item.type)}
+                            </div>
+                            <div className="text-[10px] font-mono font-bold text-accent-cyan bg-accent-cyan/10 px-2 py-1 rounded">拥有: {ownedCount}</div>
                           </div>
                           <div>
-                            <h3 className="text-lg font-bold text-white mb-1">{item.name}</h3>
-                            <p className="text-xs text-accent-yellow">{boostDesc}</p>
+                            <h3 className="text-base font-bold text-white mb-1 leading-tight">{item.name}</h3>
+                            <p className="text-[10px] text-accent-yellow leading-tight">{boostDesc}</p>
                           </div>
-                          {owned ? (
-                            <span className="text-accent-cyan font-bold text-sm w-full text-center py-2 bg-accent-cyan/10 rounded border border-accent-cyan/20">已拥有 <span className="opacity-50">({item.price} ⟁)</span></span>
-                          ) : (
-                            <button 
-                              onClick={() => buyItem(item.id, item.price, item.name)}
-                              disabled={!canAfford}
-                              className="w-full py-2 bg-accent-yellow text-black font-bold rounded disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
-                            >
-                              购买: {item.price} ⟁
-                            </button>
-                          )}
+                          <button 
+                            onClick={() => buyItem(item.id, item.price, item.name)}
+                            disabled={!canAfford}
+                            className="w-full py-1.5 mt-1 bg-accent-yellow text-black font-bold text-xs rounded disabled:opacity-30 transition-all hover:brightness-110 active:scale-95"
+                          >
+                            购买: {item.price} ⟁
+                          </button>
                         </div>
                       );
                     })}
@@ -404,7 +403,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
               return (
                 <div key={mat.id} className="neon-panel p-4 flex flex-col justify-between gap-3 bg-zinc-900 border border-white/10 rounded-xl relative overflow-hidden">
                   <div className="flex justify-between items-start">
-                    <div className="text-4xl">{mat.icon}</div>
+                    <div className="text-3xl">{mat.icon}</div>
                     <div className="text-xs font-mono font-bold text-accent-cyan bg-accent-cyan/10 px-2 py-1 rounded">拥有: {count}</div>
                   </div>
                   <div>
@@ -435,7 +434,7 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                 <div key={item.id} className="neon-panel p-4 flex flex-col justify-between gap-3 bg-zinc-900 border border-yellow-500/50 rounded-xl relative overflow-hidden shadow-[0_0_15px_rgba(234,179,8,0.2)]">
                   <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500" />
                   <div className="flex justify-between items-start mt-2">
-                    <div className="text-4xl text-yellow-500">🎫</div>
+                    <div className="text-3xl text-yellow-500">🎫</div>
                     <div className="text-xs font-mono font-bold text-accent-yellow bg-accent-yellow/10 px-2 py-1 rounded border border-accent-yellow/30">拥有: {count}</div>
                   </div>
                   <div>
@@ -477,9 +476,26 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
              <p className="text-zinc-300 font-bold">{purchaseDialog.description}</p>
              {purchaseDialog.allowQuantity && (
                <div className="flex items-center justify-center gap-4 my-2">
-                 <button onClick={() => setPurchaseQuantity(Math.max(1, purchaseQuantity - 1))} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20">-</button>
-                 <span className="text-2xl font-mono text-white w-12">{purchaseQuantity}</span>
-                 <button onClick={() => setPurchaseQuantity(purchaseQuantity + 1)} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20">+</button>
+                 <button onClick={() => setPurchaseQuantity(Math.max(1, purchaseQuantity - 1))} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20 shrink-0">-</button>
+                 <input
+                   type="text"
+                   value={purchaseQuantity || ''}
+                   onChange={(e) => {
+                     const val = e.target.value.replace(/\D/g, '');
+                     if (val === '') {
+                       setPurchaseQuantity(0);
+                     } else {
+                       setPurchaseQuantity(parseInt(val, 10));
+                     }
+                   }}
+                   onBlur={() => {
+                     if (!purchaseQuantity || purchaseQuantity < 1) {
+                       setPurchaseQuantity(1);
+                     }
+                   }}
+                   className="text-xl font-mono text-center text-white bg-black/40 border border-white/20 rounded w-20 focus:border-accent-yellow outline-none h-10 py-1"
+                 />
+                 <button onClick={() => setPurchaseQuantity(purchaseQuantity + 1)} className="w-10 h-10 bg-white/10 text-white rounded font-bold hover:bg-white/20 shrink-0">+</button>
                </div>
              )}
              <div className="flex justify-between items-center bg-black/50 p-3 rounded font-mono text-xl border border-white/5">
@@ -495,13 +511,14 @@ export default function ShopUI({ garage, setGarage, onClose }: ShopProps) {
                   className="flex-1 px-4 py-3 bg-zinc-800 text-white font-bold rounded"
                 >取消</button>
                 <button 
-                  disabled={garage.wallet.coins < purchaseDialog.price * purchaseQuantity}
+                  disabled={garage.wallet.coins < purchaseDialog.price * purchaseQuantity || purchaseQuantity < 1}
                   onClick={() => {
-                    purchaseDialog.onConfirm(purchaseQuantity);
+                    const finalQuantity = Math.max(1, purchaseQuantity);
+                    purchaseDialog.onConfirm(finalQuantity);
                     setPurchaseDialog(null);
                     setPurchaseQuantity(1);
                   }} 
-                  className="flex-1 px-4 py-3 bg-accent-yellow text-black font-black disabled:opacity-30 rounded"
+                  className="flex-1 px-4 py-3 bg-accent-yellow text-black font-black disabled:opacity-30 rounded transition-all active:scale-95 hover:brightness-110"
                 >确认购买</button>
              </div>
           </div>

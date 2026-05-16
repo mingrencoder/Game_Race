@@ -18,7 +18,38 @@ interface GMConsoleUIProps {
  */
 export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClearLeaderboard }: GMConsoleUIProps) {
   const [targetIdentifier, setTargetIdentifier] = useState('');
-  const [activeTab, setActiveTab] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [activeTab, setActiveTab] = useState<'A' | 'B' | 'C' | 'D' | 'E'>('E');
+
+  const [allPlayersList, setAllPlayersList] = useState<any[]>([]);
+  const [allPlayersTotal, setAllPlayersTotal] = useState<number>(0);
+  const [allPlayersPage, setAllPlayersPage] = useState<number>(1);
+  const [sortBy, setSortBy] = useState<string>('uid');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const fetchAllPlayers = (page: number, currentSortBy: string = sortBy, currentSortOrder: string = sortOrder) => {
+      const token = localStorage.getItem('neon_token');
+      fetch(`/api/gm/getAllPlayers?page=${page}&pageSize=15&sortBy=${currentSortBy}&sortOrder=${currentSortOrder}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+          if (data.success) {
+              setAllPlayersList(data.data.users || []);
+              setAllPlayersTotal(data.data.total || 0);
+              setAllPlayersPage(data.data.page || 1);
+          } else {
+              showModal('error', data.error || '获取全服玩家列表失败');
+          }
+      })
+      .catch(err => showModal('error', '网络连接异常'));
+  };
+
+  useEffect(() => {
+    if (activeTab === 'E') {
+        fetchAllPlayers(1, sortBy, sortOrder);
+    }
+  }, [activeTab]);
 
   const [modalInfo, setModalInfo] = useState<{ visible: boolean; type: 'error' | 'success'; message: string }>({
     visible: false,
@@ -400,6 +431,12 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
           {/* Sidebar Tabs */}
           <div className="w-48 overflow-y-auto border-r border-green-500/20 bg-black/40 flex flex-col p-2 gap-2 shrink-0">
             <button 
+              onClick={() => setActiveTab('E')}
+              className={`flex items-center gap-2 p-2 px-3 rounded-sm transition-all text-left ${activeTab === 'E' ? 'bg-blue-900/40 border-l-2 border-blue-400 text-blue-300 shadow-[inset_2px_0_10px_rgba(59,130,246,0.1)]' : 'hover:bg-blue-900/20 text-blue-700'}`}
+            >
+              <Search className="w-4 h-4 shrink-0" /> 全服玩家列表
+            </button>
+            <button 
               onClick={() => setActiveTab('A')}
               className={`flex items-center gap-2 p-2 px-3 rounded-sm transition-all text-left ${activeTab === 'A' ? 'bg-green-900/40 border-l-2 border-green-400 text-green-300 shadow-[inset_2px_0_10px_rgba(74,222,128,0.1)]' : 'hover:bg-green-900/20 text-green-700'}`}
             >
@@ -757,6 +794,106 @@ export default function GMConsoleUI({ onClose, playerData, setPlayerData, onClea
                     </div>
                   </div>
 
+                </motion.div>
+              )}
+              {/* ACTION E: All Players List */}
+              {activeTab === 'E' && (
+                <motion.div key="E" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="flex flex-col gap-4">
+                  <div className="border border-blue-500/30 p-4 bg-blue-950/20 relative overflow-hidden h-full flex flex-col">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500/0 via-blue-500 to-blue-500/0 opacity-50"></div>
+                    <div className="flex justify-between items-center mb-4 border-b border-blue-500/20 pb-2">
+                      <h3 className="text-md font-bold text-blue-400 flex items-center gap-2 drop-shadow-[0_0_5px_rgba(59,130,246,0.8)]">
+                        <Search className="w-5 h-5" /> [模块 E] 全局服务器玩家列表 监控中心
+                      </h3>
+                      <div className="text-blue-300 text-xs flex items-center gap-2">
+                        <span className="font-bold">Total: {allPlayersTotal} UID(s)</span>
+                        <button onClick={() => fetchAllPlayers(allPlayersPage, sortBy, sortOrder)} className="bg-blue-900 border border-blue-500 hover:bg-blue-500 hover:text-black px-2 py-1 transition-colors">刷新</button>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto custom-scrollbar pr-2 mb-4">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-blue-500/50 text-blue-400 sticky top-0 bg-blue-950/90 z-10">
+                            {[
+                                { key: 'uid', label: 'UID' },
+                                { key: 'nickname', label: '角色昵称' },
+                                { key: 'role', label: '身份 (Role)' },
+                                { key: 'status', label: '状态' },
+                                { key: 'registerTime', label: '注册时间' },
+                                { key: 'vehicleCount', label: '车辆数', align: 'center' },
+                                { key: 'coins', label: '资产 (⟁)', align: 'right' }
+                            ].map(col => (
+                                <th 
+                                    key={col.key}
+                                    className={`py-2 px-2 font-bold uppercase tracking-wider cursor-pointer hover:text-white transition-colors select-none ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : ''}`}
+                                    onClick={() => {
+                                        const newOrder = sortBy === col.key && sortOrder === 'asc' ? 'desc' : 'asc';
+                                        setSortBy(col.key);
+                                        setSortOrder(newOrder);
+                                        fetchAllPlayers(allPlayersPage, col.key, newOrder);
+                                    }}
+                                >
+                                    {col.label}
+                                    {sortBy === col.key && (
+                                        <span className="ml-1 text-blue-300">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                                    )}
+                                </th>
+                            ))}
+                            <th className="py-2 px-2 font-bold uppercase tracking-wider text-center">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allPlayersList.map((usr: any) => {
+                             const isBanned = usr.status === 'banned';
+                             return (
+                               <tr key={usr.uid} className={`border-b border-blue-500/20 hover:bg-blue-500/10 transition-colors ${isBanned ? 'opacity-60 bg-red-900/10' : ''}`}>
+                                  <td className="py-2 px-2 font-mono text-blue-300">{usr.uid}</td>
+                                  <td className="py-2 px-2 text-blue-100">{usr.nickname}</td>
+                                  <td className={`py-2 px-2 font-bold ${usr.role === 'admin' ? 'text-purple-400 text-shadow-glow' : 'text-blue-500'}`}>{usr.role}</td>
+                                  <td className="py-2 px-2 flex items-center">
+                                      {isBanned ? <span className="px-1 bg-red-900/50 text-red-400 border border-red-500 tracking-wider">BANNED</span> : <span className="text-green-500 tracking-wider">ACTIVE</span>}
+                                  </td>
+                                  <td className="py-2 px-2 text-blue-400/80 font-mono tracking-tighter">
+                                    {usr.registerTime ? new Date(usr.registerTime).toLocaleString() : 'N/A'}
+                                  </td>
+                                  <td className="py-2 px-2 font-bold text-blue-300 font-mono text-center">{usr.vehicleCount}</td>
+                                  <td className="py-2 px-2 font-bold text-yellow-400 font-mono text-right">{usr.coins?.toLocaleString()}</td>
+                                  <td className="py-2 px-2 text-center">
+                                     <button onClick={() => {
+                                         setTargetIdentifier(usr.uid);
+                                         setActiveTab('A');
+                                         setTimeout(() => {
+                                            // As a workaround just set the text so user can click Query
+                                         }, 100);
+                                     }} className="px-2 py-1 bg-blue-900/50 border border-blue-500/50 text-blue-300 hover:bg-blue-600 hover:text-white transition-colors text-[10px] uppercase">
+                                        加载配置
+                                     </button>
+                                  </td>
+                               </tr>
+                             )
+                          })}
+                          {allPlayersList.length === 0 && (
+                            <tr>
+                               <td colSpan={8} className="text-center py-6 text-blue-500/50 font-mono">未抓取到任何玩家数据数据快照记录</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-between items-center border-t border-blue-500/20 pt-4">
+                        <button disabled={allPlayersPage <= 1} onClick={() => fetchAllPlayers(allPlayersPage - 1, sortBy, sortOrder)} className={`px-4 py-1 border border-blue-500/50 ${allPlayersPage <= 1 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-500 hover:text-black hover:border-blue-500 text-blue-300'} transition-all`}>
+                          ← 上一页
+                        </button>
+                        <div className="text-blue-300 text-xs font-mono">
+                           [ Page <span className="font-bold text-white">{allPlayersPage}</span> / {Math.ceil(allPlayersTotal / 15) || 1} ]
+                        </div>
+                        <button disabled={allPlayersPage >= Math.ceil(allPlayersTotal / 15)} onClick={() => fetchAllPlayers(allPlayersPage + 1, sortBy, sortOrder)} className={`px-4 py-1 border border-blue-500/50 ${allPlayersPage >= Math.ceil(allPlayersTotal / 15) ? 'opacity-30 cursor-not-allowed' : 'hover:bg-blue-500 hover:text-black hover:border-blue-500 text-blue-300'} transition-all`}>
+                          下一页 →
+                        </button>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

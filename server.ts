@@ -98,6 +98,7 @@ async function startServer() {
   app.post('/api/gm/modifyInventory', requireAuth, requireAdmin, GMController.modifyInventory);
   app.post('/api/gm/resetPassword', requireAuth, requireAdmin, GMController.resetUserPassword);
   app.post('/api/gm/clearLeaderboard', requireAuth, requireAdmin, GMController.clearLeaderboard);
+  app.get('/api/gm/getAllPlayers', requireAuth, requireAdmin, GMController.getAllPlayers);
 
   // 4. 经济与比赛结算
   app.post('/api/economy/calculate', requireAuth, EconomyController.calculateRaceReward);

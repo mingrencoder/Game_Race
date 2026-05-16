@@ -307,4 +307,22 @@ export class GMController {
             res.status(500).json({ error: '清空在线记录失败', details: error.message });
         }
     }
+
+    /**
+     * GM接口：获取所有玩家分页列表
+     */
+    static async getAllPlayers(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const page = parseInt(req.query.page as string) || 1;
+            const pageSize = parseInt(req.query.pageSize as string) || 20;
+            const sortBy = (req.query.sortBy as string) || 'uid';
+            const sortOrder = (req.query.sortOrder as 'asc' | 'desc') || 'asc';
+
+            const data = await AuthService.getAllPlayers(page, pageSize, sortBy, sortOrder);
+            res.status(200).json({ success: true, data });
+        } catch (error: any) {
+            console.error('[GMController] getAllPlayers execution failed:', error.message);
+            res.status(500).json({ error: '获取全服玩家列表失败', details: error.message });
+        }
+    }
 }

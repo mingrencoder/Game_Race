@@ -244,6 +244,75 @@ export class AuthService {
     }
 
     /**
+     * 获取全服所有玩家（带分页）
+     */
+    static async getAllPlayers(page: number = 1, pageSize: number = 20, sortBy: string = 'uid', sortOrder: 'asc' | 'desc' = 'asc') {
+        if (!isInitialized) await this.bootstrap();
+        
+        const allUsers = Object.entries(accountsCache);
+
+        const allUserDetails = await Promise.all(allUsers.map(async ([uname, info]) => {
+            const uid = info.uid;
+            try {
+                const playerData = await StorageEngine.readEncrypted(uid);
+                return {
+                    uid: uid,
+                    nickname: playerData?.profile?.nickname || uname,
+                    role: playerData?.profile?.role || info.role,
+                    status: playerData?.profile?.status || 'active',
+                    registerTime: playerData?.profile?.registerTime || null,
+                    coins: playerData?.wallet?.coins || 0,
+                    vehicleCount: playerData?.garage?.length || 0
+                };
+            } catch (err) {
+                return {
+                    uid: uid,
+                    nickname: uname,
+                    role: info.role,
+                    status: 'error',
+                    registerTime: null,
+                    coins: 0,
+                    vehicleCount: 0
+                };
+            }
+        }));
+
+        allUserDetails.sort((a, b) => {
+            let valA: any = a[sortBy as keyof typeof a];
+            let valB: any = b[sortBy as keyof typeof b];
+
+            if (sortBy === 'uid') {
+                // If value is admin, maybe treat differently or just leave as string
+                // But wait, the instruction says "UID从小到大排序". If there's an 'admin' uid, string compare or number?
+                const numA = Number(valA);
+                const numB = Number(valB);
+                if (Number.isNaN(numA)) valA = valA.toString(); else valA = numA;
+                if (Number.isNaN(numB)) valB = valB.toString(); else valB = numB;
+            } else if (sortBy === 'registerTime') {
+                valA = valA ? new Date(valA).getTime() : 0;
+                valB = valB ? new Date(valB).getTime() : 0;
+            }
+
+            if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+            if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        const total = allUserDetails.length;
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        
+        const pagedUsers = allUserDetails.slice(startIndex, endIndex);
+        
+        return {
+            users: pagedUsers,
+            total,
+            page,
+            pageSize
+        };
+    }
+
+    /**
      * 同步更新全局账户索引中的昵称
      */
     static async updateNicknameInIndex(uid: string, newNickname: string) {

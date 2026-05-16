@@ -255,7 +255,7 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
           
           {/* 左侧：车辆总览与预览 */}
           <div className="hidden md:flex flex-col gap-4 w-64 shrink-0">
-             <div className="bg-black/40 rounded-xl border border-white/10 p-6 flex flex-col items-center justify-center shadow-inner relative overflow-hidden">
+             <div className="bg-black/40 rounded-xl border border-white/10 p-4 flex flex-col items-center justify-center shadow-inner relative overflow-hidden shrink-0 min-h-[220px]">
                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
                <VehiclePreview 
                  vehicleType={currentVehicleData.type} 
@@ -310,7 +310,30 @@ export default function GarageUI({ garage, setGarage, onClose }: GarageProps) {
                </div>
              )}
 
-             <div className="text-center text-sm text-zinc-400 border-t border-white/10 pt-4">
+             <div className="text-center text-xs text-zinc-400 border-t border-white/10 pt-3 mt-1 mb-1">
+               已装备零件
+             </div>
+             {vState && (
+                <div className="flex flex-col gap-1">
+                  {(['engine', 'tires', 'acceleration', 'launch', 'drift'] as const).map(category => {
+                     const equippedId = vState.equippedParts?.[category];
+                     const item = ITEMS_DB.find(x => x.id === equippedId);
+                     const categoryNames = {
+                        engine: '引擎', tires: '轮胎', acceleration: '动力', launch: '起步', drift: '悬挂'
+                     };
+                     return (
+                        <div key={category} className="flex items-center justify-between text-[10px] bg-white/5 p-1 rounded border border-white/5">
+                           <span className="text-zinc-500 w-8 shrink-0">{categoryNames[category]}</span>
+                           <span className={`flex-1 text-right truncate pl-1 ${item ? 'text-accent-cyan font-bold' : 'text-zinc-600'}`}>
+                              {item ? item.name : '未装备'}
+                           </span>
+                        </div>
+                     )
+                  })}
+                </div>
+             )}
+
+             <div className="text-center text-sm text-zinc-400 border-t border-white/10 pt-4 mt-2">
                我的出战赛车
              </div>
           </div>

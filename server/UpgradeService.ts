@@ -34,7 +34,7 @@ export class UpgradeService {
             const requiredCount = config.cost;
 
             if ((playerData.inventory.materials[materialKey] || 0) < requiredCount) {
-                res.status(400).json({ error: `材料 ${materialKey} 不足 (需要 ${requiredCount} 个)` });
+                res.status(400).json({ error: `材料 ${config.materialName || materialKey} 不足 (需要 ${requiredCount} 个)` });
                 return;
             }
 
@@ -45,7 +45,7 @@ export class UpgradeService {
                     protectionUsed = true;
                     protectionItem = config.protection;
                 } else {
-                    res.status(400).json({ error: `保护卡 ${config.protection} 不足` });
+                    res.status(400).json({ error: `保护卡 ${config.protectionName || config.protection} 不足` });
                     return;
                 }
             }
