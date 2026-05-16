@@ -142,9 +142,7 @@ export const OnlineMenu = ({ initialName, onBack, onStartLobby }: { initialName?
           
           {!isConnected && (
             <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded text-red-300 text-sm leading-relaxed">
-              <strong>⚠ 无法连接到对战服务器</strong><br/>
-              如果您的网站部署在 Netlify 等纯静态托管平台上，在线游戏功能将无法运行（它们不支持长期的 WebSocket 和 Node.js 环境）。<br/>
-              请考虑部署到 <strong>Render, Railway, Heroku,</strong> 等支持 Node.js 的平台。
+              <strong>⚠ 无法连接到对战服务器</strong>
             </div>
           )}
 
