@@ -52,9 +52,9 @@ export class LeaderboardController {
             
             console.log('[Leaderboard] Record to save:', recordData);
 
-            await StorageEngine.submitRecord(trackId, laps, recordData);
+            const result = await StorageEngine.submitRecord(trackId, laps, recordData);
 
-            res.json({ success: true, message: '成绩提交成功' });
+            res.json({ success: true, message: '成绩提交成功', isTopRecord: result.isTopRecord, previousTopTime: result.previousTopTime, topRecord: result.topRecord });
         } catch (error: any) {
             console.error('[LeaderboardController] submit error:', error);
             res.status(500).json({ error: 'Internal Server Error' });

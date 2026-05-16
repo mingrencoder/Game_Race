@@ -268,6 +268,7 @@ export default function App() {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [teamScore, setTeamScore] = useState<{ RED: number; BLUE: number } | null>(null);
   const [newRecordInfo, setNewRecordInfo] = useState<{ playerName: string, diff: number, oldTime: number, newTime: number } | null>(null);
+  const [currentOnlineTopRecord, setCurrentOnlineTopRecord] = useState<LapRecord | null>(null);
   const [flawlessVictoryMessage, setFlawlessVictoryMessage] = useState<string | null>(null);
   const [isFlawlessResult, setIsFlawlessResult] = useState<boolean>(false);
   const [matchEarnedCoins, setMatchEarnedCoins] = useState<number>(0);
@@ -573,64 +574,99 @@ export default function App() {
     setResults(sortedResults);
     
     // Save records
+    const isOnlineMode = settings.mode === 'ONLINE';
     const newRecords = { ...records };
-    const recordKey = settings.mode === 'ONLINE' ? `${settings.trackId}_${settings.laps}_online` : `${settings.trackId}_${settings.laps}`;
+    const recordKey = `${settings.trackId}_${settings.laps}`;
     let trackRecords = newRecords[recordKey] || [];
     let bestPreviousTime = trackRecords.length > 0 ? trackRecords[0].time : Infinity;
     let brokeRecord = false;
     
+    setNewRecordInfo(null);
+    setCurrentOnlineTopRecord(null);
+    
+    if (isOnlineMode) {
+        const token = localStorage.getItem('neon_token');
+        if (token) {
+            fetch(`/api/leaderboard/${settings.trackId}/${settings.laps}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.records && data.records.length > 0) {
+                    setCurrentOnlineTopRecord(data.records[0]);
+                }
+            })
+            .catch(() => {});
+        }
+    }
+    
     sortedResults.forEach((car) => {
       if (!car.dnf && car.finishTime && !car.isAI) {
         // Only save human player records for leaderboard
-        const playerName = settings.mode === 'ONLINE' ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
+        const playerName = isOnlineMode ? car.name : (car.id === 'p1' ? '玩家 1' : '玩家 2');
+        const isLocalPlayer = isOnlineMode ? car.id === socketService.playerId : (car.id === 'p1');
         
-        const isLocalPlayer = settings.mode === 'ONLINE' ? car.id === socketService.playerId : (car.id === 'p1');
-        
-        // 解析要求：无条件上报
-        const token = localStorage.getItem('neon_token');
-        if (token && isLocalPlayer) {
-          fetch('/api/leaderboard/submit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ 
-              trackId: settings.trackId, 
-              laps: settings.laps, 
-              time: car.finishTime, 
-              vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
-              isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode)
-            })
-          }).catch(() => {});
-        }
+        // 核心要求：在在线模式下跑的记录，只记录在在线记录；且通过在线服务器判断破纪录
+        if (isOnlineMode) {
+          const token = localStorage.getItem('neon_token');
+          if (token && isLocalPlayer) {
+            fetch('/api/leaderboard/submit', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ 
+                trackId: settings.trackId, 
+                laps: settings.laps, 
+                time: car.finishTime, 
+                vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
+                isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode)
+              })
+            }).then(res => res.json())
+              .then(data => {
+                  if (data.success) {
+                      if (data.topRecord) setCurrentOnlineTopRecord(data.topRecord);
+                      
+                      if (data.isTopRecord) {
+                         setNewRecordInfo({
+                            playerName,
+                            oldTime: data.previousTopTime || Infinity,
+                            newTime: car.finishTime!,
+                            diff: data.previousTopTime ? data.previousTopTime - car.finishTime! : 0
+                         });
+                      }
+                  }
+              })
+              .catch(() => {});
+          }
+        } else {
+            // 在单机模式下跑的记录，只记录在本地记录，比较纯本地记录
+            if (car.finishTime < bestPreviousTime) {
+                brokeRecord = true;
+                setNewRecordInfo({
+                    playerName,
+                    oldTime: bestPreviousTime,
+                    newTime: car.finishTime,
+                    diff: bestPreviousTime === Infinity ? 0 : bestPreviousTime - car.finishTime
+                });
+                bestPreviousTime = car.finishTime;
+            }
 
-        if (car.finishTime < bestPreviousTime) {
-          brokeRecord = true;
-          setNewRecordInfo({
-             playerName,
-             oldTime: bestPreviousTime,
-             newTime: car.finishTime,
-             diff: bestPreviousTime === Infinity ? 0 : bestPreviousTime - car.finishTime
-          });
-          bestPreviousTime = car.finishTime;
+            trackRecords.push({
+                playerName,
+                time: car.finishTime,
+                vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
+                isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode),
+                timestamp: Date.now()
+            });
         }
-
-        trackRecords.push({
-          playerName,
-          time: car.finishTime,
-          vehicle: VEHICLES_DB.find(v => v.type === car.vehicleType)?.name || car.vehicleType || 'Unknown',
-          isTeam: ((settings.mode === 'TEAM' || settings.isTeamMode) || settings.isTeamMode),
-          timestamp: Date.now()
-        });
       }
     });
 
-    if (!brokeRecord) {
-       setNewRecordInfo(null);
+    if (!isOnlineMode) {
+        // Sort and keep top 10
+        trackRecords.sort((a, b) => a.time - b.time);
+        newRecords[recordKey] = trackRecords.slice(0, GAME_CONSTANTS.MAX_LEADERBOARD_RECORDS);
+        setRecords(newRecords);
     }
-
-    // Sort and keep top 10
-    trackRecords.sort((a, b) => a.time - b.time);
-    newRecords[recordKey] = trackRecords.slice(0, GAME_CONSTANTS.MAX_LEADERBOARD_RECORDS);
-    setRecords(newRecords);
     
     // Calculate points/coins
     const newScores = { ...scores };
@@ -1779,19 +1815,36 @@ export default function App() {
                 })}
               </div>
 
-              {records[`${settings.trackId}_${settings.laps}`]?.[0] && (
-                <div className="mb-8 p-4 rounded-lg bg-black/40 border border-white/10 text-left flex justify-between items-center">
-                  <div>
-                    <div className="text-accent-cyan text-xs font-bold uppercase mb-1">本图最佳记录 ({settings.laps}圈)</div>
-                    <div className="text-white font-bold">{records[`${settings.trackId}_${settings.laps}`][0].playerName}</div>
-                    <div className="text-xs text-zinc-500 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                      {records[`${settings.trackId}_${settings.laps}`][0].vehicle}
+              {settings.mode === 'ONLINE' ? (
+                currentOnlineTopRecord && (
+                  <div className="mb-8 p-4 rounded-lg bg-black/40 border border-white/10 text-left flex justify-between items-center">
+                    <div>
+                      <div className="text-accent-cyan text-xs font-bold uppercase mb-1">在线本图最佳记录 ({settings.laps}圈)</div>
+                      <div className="text-white font-bold">{currentOnlineTopRecord.playerName}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
+                        {currentOnlineTopRecord.vehicle}
+                      </div>
+                    </div>
+                    <div className="text-2xl font-mono text-accent-yellow font-black">
+                      {(currentOnlineTopRecord.time / 1000).toFixed(2)}s
                     </div>
                   </div>
-                  <div className="text-2xl font-mono text-accent-yellow font-black">
-                    {(records[`${settings.trackId}_${settings.laps}`][0].time / 1000).toFixed(2)}s
+                )
+              ) : (
+                records[`${settings.trackId}_${settings.laps}`]?.[0] && (
+                  <div className="mb-8 p-4 rounded-lg bg-black/40 border border-white/10 text-left flex justify-between items-center">
+                    <div>
+                      <div className="text-accent-cyan text-xs font-bold uppercase mb-1">本机最佳记录 ({settings.laps}圈)</div>
+                      <div className="text-white font-bold">{records[`${settings.trackId}_${settings.laps}`][0].playerName}</div>
+                      <div className="text-xs text-zinc-500 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
+                        {records[`${settings.trackId}_${settings.laps}`][0].vehicle}
+                      </div>
+                    </div>
+                    <div className="text-2xl font-mono text-accent-yellow font-black">
+                      {(records[`${settings.trackId}_${settings.laps}`][0].time / 1000).toFixed(2)}s
+                    </div>
                   </div>
-                </div>
+                )
               )}
 
               <div className="flex gap-4">

@@ -430,6 +430,10 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
   const isHost = myPlayer?.isHost;
   const allReady = room.players.every(p => p.isReady || p.isAI);
   const allOthersReady = room.players.filter(p => p.id !== room.hostId).every(p => p.isReady || p.isAI);
+  const realPlayersCount = room.players.filter(p => !p.isAI).length;
+  const hasEnoughPlayers = realPlayersCount >= 2;
+  const isTeamModeValid = !(room.settings.isTeamMode && realPlayersCount < 4);
+  const canStart = allOthersReady && hasEnoughPlayers && isTeamModeValid;
 
   const handleVehicleChange = (dir: number) => {
     if (!myPlayer) return;
@@ -566,11 +570,11 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
                        // 3. 【核心修复】：彻底删除这里的 onStartGame() 调用！
                        // 房主必须和所有人一样，等待服务端统一广播 `gameStarted` 事件后，由 useEffect 触发跳转。
                      }}
-                     title={!allOthersReady ? '等待其他玩家准备...' : ''}
-                     disabled={!allOthersReady || (room.settings.isTeamMode && room.players.length < 4)}
-                     className={`w-full py-4 rounded font-black text-xl transition-all ${allOthersReady && !(room.settings.isTeamMode && room.players.length < 4) ? 'bg-accent-yellow text-black shadow-[0_0_20px_rgba(255,234,0,0.4)]' : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'}`}
+                     title={!allOthersReady ? '等待其他玩家准备...' : (!hasEnoughPlayers ? '需要至少两个真实玩家' : '')}
+                     disabled={!canStart}
+                     className={`w-full py-4 rounded font-black text-xl transition-all ${canStart ? 'bg-accent-yellow text-black shadow-[0_0_20px_rgba(255,234,0,0.4)]' : 'bg-zinc-700 text-zinc-400 cursor-not-allowed'}`}
                    >
-                     {!allOthersReady ? '等待其他玩家准备...' : '开始比赛'}
+                     {!hasEnoughPlayers ? '需要至少2个玩家' : (!allOthersReady ? '等待其他玩家准备...' : '开始比赛')}
                    </button>
                  </div>
                ) : (
@@ -922,7 +926,7 @@ export const OnlineLobby = ({ activeCarId, coins, garage, onBack, onStartGame, o
             )}
 
             <div className="text-center text-zinc-500 py-4 font-bold text-sm bg-black/40 rounded border border-white/5">
-              {isHost ? (allOthersReady ? '所有玩家已就绪，您可以开始比赛了' : '等待其他玩家准备...') : (allOthersReady && myPlayer?.isReady ? '等待房主开始比赛...' : '等待其他玩家准备...')}
+              {isHost ? (!hasEnoughPlayers ? '比赛需要至少2个玩家' : (allOthersReady ? '所有玩家已就绪，您可以开始比赛了' : '等待其他玩家准备...')) : (!hasEnoughPlayers ? '比赛需要至少2个玩家' : (allOthersReady && myPlayer?.isReady ? '等待房主开始比赛...' : '等待其他玩家准备...'))}
             </div>
          </div>
       </div>

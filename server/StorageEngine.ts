@@ -232,20 +232,32 @@ export class StorageEngine {
      * @param laps 圈数
      * @param recordData 成绩对象
      */
-    static async submitRecord(trackId: string, laps: number, recordData: { uid: string; playerName: string; time: number; vehicle: string; isTeam: boolean; timestamp: number }): Promise<void> {
+    static async submitRecord(trackId: string, laps: number, recordData: { uid: string; playerName: string; time: number; vehicle: string; isTeam: boolean; timestamp: number }): Promise<{ isTopRecord: boolean, previousTopTime: number | null, topRecord: any | null }> {
+        let isTopRecord = false;
+        let previousTopTime: number | null = null;
+        let topRecord: any = null;
         await this.leaderboardTransaction(async (board) => {
             const key = `${trackId}_${laps}`;
             if (!board[key]) board[key] = [];
+            
+            previousTopTime = board[key].length > 0 ? board[key][0].time : null;
             
             board[key].push(recordData);
             // 按时间从小到大（从快到慢）排序
             board[key].sort((a: any, b: any) => a.time - b.time);
             
+            if (previousTopTime === null || recordData.time < previousTopTime) {
+                isTopRecord = true;
+            }
+            
             // 只保留前 50 名
             if (board[key].length > 50) {
                 board[key] = board[key].slice(0, 50);
             }
+            
+            topRecord = board[key][0] || null;
         });
+        return { isTopRecord, previousTopTime, topRecord };
     }
 
     /**
