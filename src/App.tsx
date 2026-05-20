@@ -497,7 +497,7 @@ export default function App() {
                     tracks: selectedTracks,
                     currentRaceIndex: 0,
                     finished: false,
-                    teamWins: currentSettings.mode === 'TEAM' ? { RED: 0, BLUE: 0 } : undefined
+                    teamWins: (currentSettings.mode === 'TEAM' || currentSettings.isTeamMode) ? { RED: 0, BLUE: 0 } : undefined
                   });
                   setScores({});
                   setTeamScore(null);
