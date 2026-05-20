@@ -69,15 +69,6 @@ export class EconomyController {
                 }
             }
 
-            // 杯赛完赛大奖 (绝对固定的额外奖励，不吃人数难度乘数)
-            if (mode === 'cup_single') {
-                if (rank === 1) coinDelta += matches * 20;
-                else if (rank === 2 || rank === 3) coinDelta += matches * 10;
-            } else if (mode === 'cup_team') {
-                if (isTeamWin) coinDelta += matches * 15;
-                if (isMVP) coinDelta += matches * 10;
-            }
-
             playerData.wallet.coins += coinDelta;
 
             // 扣除车辆耐久度
@@ -165,13 +156,22 @@ export class EconomyController {
             const uid = req.user?.uid;
             if (!uid) { res.status(401).json({ error: 'Unauthorized' }); return; }
 
+            const { mode, rank, isTeamWin, isTeamMVP, matches } = req.body;
+
             let playerData = await StorageEngine.readEncrypted(uid);
             if (!playerData) { res.status(404).json({ error: 'Player data not found' }); return; }
 
             if (!playerData.wallet) playerData.wallet = { coins: 0 };
             
-            // Basic simplistic reward, you can extend this
-            const reward = 50; 
+            let reward = 0;
+            if (mode === 'cup_single') {
+                if (rank === 1) reward = matches * 20;
+                else if (rank === 2 || rank === 3) reward = matches * 10;
+            } else if (mode === 'cup_team') {
+                if (isTeamWin) reward += matches * 15;
+                if (isTeamMVP) reward += matches * 10;
+            }
+            
             playerData.wallet.coins += reward;
 
             await StorageEngine.writeEncrypted(uid, playerData);
@@ -179,6 +179,7 @@ export class EconomyController {
             res.json({
                 success: true,
                 coins: playerData.wallet.coins,
+                reward,
                 playerData
             });
         } catch (error: any) {

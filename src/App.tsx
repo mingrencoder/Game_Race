@@ -1565,83 +1565,91 @@ export default function App() {
                 })()}
               </div>
 
-              {cupState.finished && (() => {
+              {(() => {
+                 if (!cupState.finished) return null;
                  let isWin = false;
                  let reward = 0;
                  let isPodium = false;
                  let isTeamMVP = false;
+                 let isTeamMode = settings.mode === 'TEAM' || settings.isTeamMode;
                  
                  const diffMult = GAME_CONSTANTS.DIFFICULTY_MULTIPLIER[settings.aiDifficulty] || 1.0;
-                 const tracks = settings.cupNumTracks || ((settings.mode === 'TEAM' || settings.isTeamMode) ? 3 : 4);
+                 const tracks = settings.cupNumTracks || (isTeamMode ? 3 : 4);
+                 
+                 const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
+                 const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                 const rank = entries.findIndex(e => isLocal(e.id)) + 1; // 1-based rank
 
-                 if ((settings.mode === 'TEAM' || settings.isTeamMode)) {
+                 if (isTeamMode) {
                     isWin = (cupState.teamWins?.RED || 0) > (cupState.teamWins?.BLUE || 0);
                     if (isWin) {
-                       reward += tracks * GAME_CONSTANTS.BONUS.CUP_FINISH_MULTIPLIER;
-                       const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                       const redEntries = entries.filter(e => e.id.includes('p') || e.id.includes('ONLINE')); // wait we don't store team per id in scores easily, but local player is team RED.
-                       // Assume p1 is always RED and potential team MVP
-                       const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
+                       reward += tracks * 15;
                        if (entries.length > 0 && isLocal(entries[0].id)) {
                           isTeamMVP = true;
                           reward += tracks * 10;
                        }
                     }
                  } else {
-                    const entries = Object.keys(scores).map(id => ({ id, score: scores[id] })).sort((a,b) => b.score - a.score);
-                    const isLocal = (id: string) => settings.mode === 'ONLINE' ? id === socketService.playerId : (id === 'p1');
-                    const rank = entries.findIndex(e => isLocal(e.id));
-                    if (rank === 0) {
+                    if (rank === 1) {
                         isWin = true;
-                        reward = tracks * 20; // Used to be * 20 here! Wait, this is `reward = tracks * 20`. Let's just do an inline fix
-                    } else if (rank === 1 || rank === 2) {
+                        reward = tracks * 20; 
+                    } else if (rank === 2 || rank === 3) {
                         isPodium = true;
-                        reward = tracks * GAME_CONSTANTS.BONUS.CUP_FINISH_MULTIPLIER; // Wait, actually `tracks * 10`. I'll leave this edit chunk for now to see what was exactly here
+                        reward = tracks * 10;
                     }
                  }
 
                  return (
-                   <div className={`border p-4 rounded-lg mb-6 animate-pulse ${isWin ? 'bg-accent-yellow/10 border-accent-yellow/50 shadow-[0_0_20px_rgba(244,255,64,0.3)]' : 'bg-white/5 border-white/20'}`}>
-                      <p className={`font-black text-xl mb-2 ${isWin ? 'text-accent-yellow' : 'text-zinc-400'}`}>
-                         {isWin ? '🏆 恭喜获得杯赛冠军！ 🏆' : isPodium ? '🥈 恭喜登上领奖台！' : '😔 遗憾错失前列 😔'}
-                      </p>
-                      <p className={`font-bold text-lg ${isWin || isPodium ? 'text-accent-yellow' : 'text-zinc-500'}`}>
-                         获得杯赛结算金币 {Math.floor(reward)} ⟁ {isTeamMVP && '(含MVP奖励)'}
-                      </p>
-                   </div>
+                   <>
+                     <div className={`border p-4 rounded-lg mb-6 animate-pulse ${isWin ? 'bg-accent-yellow/10 border-accent-yellow/50 shadow-[0_0_20px_rgba(244,255,64,0.3)]' : 'bg-white/5 border-white/20'}`}>
+                        <p className={`font-black text-xl mb-2 ${isWin ? 'text-accent-yellow' : 'text-zinc-400'}`}>
+                           {isWin ? '🏆 恭喜获得杯赛冠军！ 🏆' : isPodium ? '🥈 恭喜登上领奖台！' : '😔 遗憾错失前列 😔'}
+                        </p>
+                        <p className={`font-bold text-lg ${isWin || isPodium ? 'text-accent-yellow' : 'text-zinc-500'}`}>
+                           获得杯赛结算金币 {Math.floor(reward)} ⟁ {isTeamMVP && '(含MVP奖励)'}
+                        </p>
+                     </div>
+                     <div className="flex gap-4 shrink-0">
+                       <button 
+                         onClick={() => {
+                           const token = localStorage.getItem('neon_token');
+                           if (token) {
+                             fetch('/api/economy/settleCup', {
+                               method: 'POST',
+                               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                               body: JSON.stringify({
+                                 mode: isTeamMode ? 'cup_team' : 'cup_single',
+                                 rank,
+                                 isTeamWin: isWin,
+                                 isTeamMVP,
+                                 matches: tracks
+                               })
+                             })
+                             .then(res => res.json())
+                             .then(data => {
+                               if (data.success && data.coins !== undefined) {
+                                 setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: data.coins } }));
+                               }
+                             })
+                             .catch(() => {});
+                           }
+                           
+                           setCupState(null);
+                           setScores({});
+                           setTeamScore(null);
+                           setGameState('MENU');
+                         }}
+                         className="flex-1 px-8 py-4 bg-accent-yellow text-black font-black uppercase rounded-lg shadow-[0_0_30px_rgba(244,255,64,0.5)] transform hover:scale-105 transition-all text-xl"
+                       >
+                         领取奖励并返回首页
+                       </button>
+                     </div>
+                   </>
                  );
               })()}
 
-              <div className="flex gap-4 shrink-0">
-                {cupState.finished ? (
-                   <button 
-                     onClick={() => {
-                       const token = localStorage.getItem('neon_token');
-                       if (token) {
-                         fetch('/api/economy/settleCup', {
-                           method: 'POST',
-                           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
-                         })
-                         .then(res => res.json())
-                         .then(data => {
-                           if (data.success && data.coins !== undefined) {
-                             setPlayerData(p => ({ ...p, wallet: { ...p.wallet, coins: data.coins } }));
-                           }
-                         })
-                         .catch(() => {});
-                       }
-                       
-                       setCupState(null);
-                       setScores({});
-                       setTeamScore(null);
-                       setGameState('MENU');
-                     }}
-                     className="flex-1 px-8 py-4 bg-accent-yellow text-black font-black uppercase rounded-lg shadow-[0_0_30px_rgba(244,255,64,0.5)] transform hover:scale-105 transition-all text-xl"
-                   >
-                     领取奖励并返回首页
-                   </button>
-                ) : (
-                   <>
+              {!cupState.finished && (
+                 <div className="flex gap-4 shrink-0">
                      <button 
                        onClick={() => {
                          setCupState(null);
@@ -1659,9 +1667,8 @@ export default function App() {
                        <span className="text-xs opacity-70 mb-1">下一场: {TRACKS.find(t => t.id === cupState.tracks[cupState.currentRaceIndex])?.name}</span>
                        <span className="text-lg">进入比赛</span>
                      </button>
-                   </>
-                )}
-              </div>
+                 </div>
+              )}
             </div>
           </motion.div>
         )}
